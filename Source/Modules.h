@@ -82,7 +82,7 @@ protected:
 };
 
 //==============================================================================
-/** Channel strip: high-pass, ten-band EQ560 and a stereo-linked bus-style compressor. */
+/** Pure ten-band EQ560. Retired console dynamics controls remain registered for host compatibility. */
 class ConsoleModule : public Module
 {
 public:
@@ -96,16 +96,15 @@ public:
     void prepare (double sr, int mb) override
     {
         Module::prepare (sr, mb);
-        for (auto& filter : hpf) filter = {};
-        updateFilters();
+        updateBands();
         eq.prepare (sr);
-        env = 0.0f;
+        grDb.store (0.0f);
     }
 
 protected:
     void process (juce::AudioBuffer<float>& buf) override
     {
-        updateFilters();
+        updateBands();
         const int n = buf.getNumSamples();
         const int nch = std::min (2, buf.getNumChannels());
 
@@ -113,65 +112,21 @@ protected:
         {
             eq.beginSample();
             for (int ch = 0; ch < nch; ++ch)
-                buf.setSample (ch, i, (float) eq.processSample (ch, hpf[(size_t) ch].tick (buf.getSample (ch, i))));
+                buf.setSample (ch, i, (float) eq.processSample (ch, buf.getSample (ch, i)));
         }
-
-        // Compressor
-        const float thresh = get ("thresh"), ratio = get ("ratio");
-        const float aC = timeCoef (get ("attack"), sampleRate);
-        const float rC = timeCoef (get ("release"), sampleRate);
-        const float outG = dbToGain (get ("out"));
-        float maxGr = 0.0f;
-
-        for (int i = 0; i < n; ++i)
-        {
-            float pk = 0.0f;
-            for (int ch = 0; ch < buf.getNumChannels(); ++ch)
-                pk = std::max (pk, std::abs (buf.getSample (ch, i)));
-
-            env = smooth (env, gainReductionDb (gainToDb (pk), thresh, ratio, 4.0f), aC, rC);
-            maxGr = std::max (maxGr, env);
-            const float g = dbToGain (-env) * outG;
-
-            for (int ch = 0; ch < buf.getNumChannels(); ++ch)
-                buf.getWritePointer (ch)[i] = softClip (buf.getSample (ch, i) * g);
-        }
-        grDb.store (maxGr);
+        grDb.store (0.0f);
     }
 
 private:
-    // Same second-order Butterworth HPF as before, with stack-only coefficient updates.
-    struct HighPass
+    void updateBands()
     {
-        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
-        void configure (double sr, double hz)
-        {
-            const double k = std::tan (juce::MathConstants<double>::pi * hz / sr);
-            const double norm = 1.0 / (1.0 + k / 0.707 + k * k);
-            b0 = norm; b1 = -2.0 * norm; b2 = norm;
-            a1 = 2.0 * (k * k - 1.0) * norm;
-            a2 = (1.0 - k / 0.707 + k * k) * norm;
-        }
-        double tick (double x)
-        {
-            const double y = b0 * x + z1;
-            z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y;
-            return y;
-        }
-    };
-    void updateFilters()
-    {
-        const float frequency = get ("hpf");
-        for (auto& filter : hpf) filter.configure (sampleRate, frequency);
         std::array<float, 10> values;
         for (size_t i = 0; i < values.size(); ++i) values[i] = bandParameters[i]->load();
         eq.setBandGains (values);
     }
 
-    std::array<HighPass, 2> hpf;
     Eq560 eq;
     std::array<std::atomic<float>*, 10> bandParameters {};
-    float env = 0.0f;
 };
 
 //==============================================================================

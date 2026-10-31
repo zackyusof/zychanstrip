@@ -62,6 +62,31 @@ void drawZyLogo (Graphics& g, Rectangle<float> bounds)
         drawable->drawWithin (g, bounds, RectanglePlacement::centred | RectanglePlacement::onlyReduceInSize, 1.0f);
 }
 
+/** Authentic API twin op-amp chevron logo */
+void paintApiLogo (Graphics& g, Rectangle<float> area, Colour col)
+{
+    g.setColour (col);
+    const float x = area.getX(), y = area.getY(), w = area.getWidth(), h = area.getHeight();
+    // Top bar
+    g.fillRect (x, y + h * 0.22f, w * 0.90f, 1.8f);
+    // Bottom bar
+    g.fillRect (x, y + h * 0.74f, w * 0.90f, 1.8f);
+    // Left op-amp chevron
+    Path tri1;
+    tri1.startNewSubPath (x + w * 0.15f, y + h * 0.08f);
+    tri1.lineTo (x + w * 0.52f, y + h * 0.48f);
+    tri1.lineTo (x + w * 0.15f, y + h * 0.88f);
+    tri1.closeSubPath();
+    g.fillPath (tri1);
+    // Right op-amp chevron
+    Path tri2;
+    tri2.startNewSubPath (x + w * 0.42f, y + h * 0.08f);
+    tri2.lineTo (x + w * 0.79f, y + h * 0.48f);
+    tri2.lineTo (x + w * 0.42f, y + h * 0.88f);
+    tri2.closeSubPath();
+    g.fillPath (tri2);
+}
+
 /** Realistic brushed metal faceplate with anisotropic lighting and chamfered bevels. */
 void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom, float corner, int seed)
 {
@@ -620,12 +645,6 @@ public:
         g.setColour (Colour (0xff70847e).withAlpha (0.40f));
         g.drawLine (slot.getX() + 4.0f, slot.getBottom() + 0.5f, slot.getRight() - 4.0f, slot.getBottom() + 0.5f, 0.8f);
 
-        // Center detent alignment notch
-        const float midX = slot.getCentreX();
-        g.setColour (Colour (0xff36b8cf).withAlpha (0.75f));
-        g.drawLine (midX, slot.getY() - 3.0f, midX, slot.getY(), 1.0f);
-        g.drawLine (midX, slot.getBottom(), midX, slot.getBottom() + 3.0f, 1.0f);
-
         // 3D Slider Cap
         const auto cap = s.findColour (Slider::thumbColourId);
         const Rectangle<float> thumb (pos - 12.0f, cy - 6.5f, 24.0f, 13.0f);
@@ -838,6 +857,71 @@ public:
 };
 
 //==============================================================================
+//  Hardware API 560 "IN" Button Look & Feel (Square white button + IN + red jewel LED)
+//==============================================================================
+struct InButtonLookAndFeel : public LookAndFeel_V4
+{
+    void drawToggleButton (Graphics& g, ToggleButton& b, bool, bool) override
+    {
+        auto r = b.getLocalBounds().toFloat();
+        // con_bypass == false means EQ is IN (active in signal chain)
+        const bool active = ! b.getToggleState();
+
+        // Square white pushbutton on left
+        const Rectangle<float> sq (r.getX() + 4.0f, r.getCentreY() - 11.0f, 22.0f, 22.0f);
+        g.setColour (Colours::black.withAlpha (active ? 0.85f : 0.50f));
+        g.fillRoundedRectangle (sq.translated (0.0f, active ? 0.5f : 1.8f), 2.5f);
+
+        g.setGradientFill (ColourGradient (active ? Colour (0xffdce0e3) : Colour (0xffffffff), sq.getX(), sq.getY(),
+                                           active ? Colour (0xffb0b6bc) : Colour (0xffd8dee2), sq.getX(), sq.getBottom(), false));
+        g.fillRoundedRectangle (sq, 2.0f);
+        g.setColour (Colours::white.withAlpha (0.9f));
+        g.drawRoundedRectangle (sq.reduced (0.5f), 2.0f, 0.8f);
+        g.setColour (Colours::black.withAlpha (0.4f));
+        g.drawRoundedRectangle (sq, 2.0f, 1.0f);
+
+        // "IN" label in center
+        g.setFont (Font (FontOptions (15.0f, Font::bold)));
+        g.setColour (Colours::black.withAlpha (0.75f));
+        g.drawText ("IN", Rectangle<float> (sq.getRight() + 10.0f, r.getY() + 1.0f, 28.0f, r.getHeight()), Justification::centredLeft);
+        g.setColour (Colours::white);
+        g.drawText ("IN", Rectangle<float> (sq.getRight() + 10.0f, r.getY(), 28.0f, r.getHeight()), Justification::centredLeft);
+
+        // Red jewel LED indicator on right
+        const Point<float> ledC (sq.getRight() + 52.0f, r.getCentreY());
+        const float rad = 6.0f;
+
+        g.setColour (Colour (0xff08090a));
+        g.fillEllipse (Rectangle<float> ((rad + 2.5f) * 2.0f, (rad + 2.5f) * 2.0f).withCentre (ledC));
+        g.setColour (Colours::white.withAlpha (0.25f));
+        g.drawEllipse (Rectangle<float> ((rad + 2.5f) * 2.0f, (rad + 2.5f) * 2.0f).withCentre (ledC), 0.8f);
+
+        const Rectangle<float> ledRect (rad * 2.0f, rad * 2.0f);
+        if (active)
+        {
+            // Saturated optical red glow bloom
+            g.setGradientFill (ColourGradient (Colour (0x75ff2211), ledC.x, ledC.y,
+                                               Colours::transparentWhite, ledC.x + 15.0f, ledC.y + 15.0f, true));
+            g.fillEllipse (Rectangle<float> (30.0f, 30.0f).withCentre (ledC));
+
+            g.setGradientFill (ColourGradient (Colour (0xffff6a55), ledC.x - 1.5f, ledC.y - 1.5f,
+                                               Colour (0xffc4160e), ledC.x + 2.0f, ledC.y + 2.0f, false));
+            g.fillEllipse (ledRect.withCentre (ledC));
+            g.setColour (Colours::white.withAlpha (0.75f));
+            g.fillEllipse (Rectangle<float> (2.5f, 2.0f).withCentre (ledC.translated (-1.2f, -1.2f)));
+        }
+        else
+        {
+            g.setGradientFill (ColourGradient (Colour (0xff48100c), ledC.x - 1.0f, ledC.y - 1.0f,
+                                               Colour (0xff1a0402), ledC.x + 2.0f, ledC.y + 2.0f, false));
+            g.fillEllipse (ledRect.withCentre (ledC));
+            g.setColour (Colours::white.withAlpha (0.25f));
+            g.drawEllipse (ledRect.withCentre (ledC), 0.7f);
+        }
+    }
+};
+
+//==============================================================================
 //  Module plate base
 //==============================================================================
 class ModulePanel : public Component
@@ -878,7 +962,8 @@ public:
     void resized() override
     {
         content = contentBounds();
-        bypass.setBounds (content.getRight() - 84, plateBounds().getY() + 6, 80, 22);
+        if (moduleId != RackStripProcessor::Console)
+            bypass.setBounds (content.getRight() - 84, plateBounds().getY() + 6, 80, 22);
         layoutContent (content);
 
         if (getWidth() > 0 && getHeight() > 0)
@@ -1000,6 +1085,9 @@ private:
 
     void paintScrewsAndBadge (Graphics& g, Rectangle<float> plate)
     {
+        if (moduleId == RackStripProcessor::Console)
+            return; // Console panel has custom screws & holes matching the real API 560 unit
+
         const float inset = 13.0f, rad = 5.0f;
         const Point<float> pts[] {
             { plate.getX() + inset, plate.getY() + inset }, { plate.getRight() - inset, plate.getY() + inset },
@@ -1025,14 +1113,14 @@ private:
 };
 
 //==============================================================================
-//  Module 1 — ten-band 560 graphic EQ + console dynamics
+//  Module 1 — API 560 ten-band graphic EQ (authentic 500-series hardware layout)
 //==============================================================================
 class ConsolePanel : public ModulePanel
 {
 public:
     explicit ConsolePanel (RackStripProcessor& p)
         : ModulePanel (p, RackStripProcessor::Console, "con_",
-                       Colour (0xff283732), Colour (0xff121d19), pal::engrave)
+                       Colour (0xff141517), Colour (0xff08090a), pal::engrave)
     {
         const char* ids[] { "eq_16k", "eq_8k", "eq_4k", "eq_2k", "eq_1k", "eq_500", "eq_250", "eq_125", "eq_63", "eq_31" };
         for (size_t i = 0; i < bands.size(); ++i)
@@ -1041,104 +1129,115 @@ public:
             band.slider.setSliderStyle (Slider::LinearHorizontal);
             band.slider.setName (prefix + ids[i]);
             band.slider.getProperties().set ("eq560", true);
-            band.slider.setColour (Slider::thumbColourId, i == 5 ? Colour (0xffd82a2e) : Colour (0xffe4e8dc));
+            // In the API 560 photo: 1K (index 4) has the iconic red cap!
+            band.slider.setColour (Slider::thumbColourId, i == 4 ? Colour (0xffd8262a) : Colour (0xffe6e9e4));
             band.slider.setTextValueSuffix (" dB");
             band.slider.setPopupDisplayEnabled (true, true, nullptr);
             band.slider.setDoubleClickReturnValue (true, 0.0);
             band.att = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + ids[i], band.slider);
             addAndMakeVisible (band.slider);
         }
-        setupKnob (thr, "thresh", pal::blackCap);
-        setupKnob (rat, "ratio", pal::blackCap);
-        setupKnob (atk, "attack", pal::blackCap);
-        setupKnob (rel, "release", pal::blackCap);
-        setupKnob (out, "out", pal::blackCap);
-        setupKnob (hpf, "hpf", pal::blackCap);
 
-        for (auto* b : { &compLed, &gateLed })
-        {
-            b->setClickingTogglesState (true);
-            b->setRadioGroupId (9001);
-            b->setColour (ToggleButton::tickColourId, Colours::white);
-            b->setColour (ToggleButton::textColourId, labelColour);
-            b->getProperties().set ("ledFirst", false);
-            addAndMakeVisible (b);
-        }
-        compLed.setToggleState (true, dontSendNotification);
+        bypass.setLookAndFeel (&inLaf);
+    }
+
+    ~ConsolePanel() override
+    {
+        bypass.setLookAndFeel (nullptr);
     }
 
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        for (size_t i = 0; i < bands.size(); ++i)
-            bands[i].slider.setBounds (c.getX() + 36, c.getY() + 44 + (int) i * 29, c.getWidth() - 36, 22);
+        // Spanning the full height of the module
+        const int startY = c.getY() + 72;
+        const int totalH = c.getBottom() - 72 - startY;
+        const int rowSpacing = totalH / 9;
 
-        dynTitle = { c.getX(), c.getY() + 350, c.getWidth(), 20 };
-        const int ledY = dynTitle.getBottom() + 4;
-        compLed.setBounds (c.getCentreX() - 88, ledY, 66, 22);
-        gateLed.setBounds (c.getCentreX() + 22, ledY, 66, 22);
-        constexpr int knob = 54;
-        const int col = c.getWidth() / 3;
-        const int y = c.getY() + 400;
-        place (thr, { c.getX() + col / 2 - knob / 2, y, knob, knob });
-        place (rat, { c.getX() + col + col / 2 - knob / 2, y, knob, knob });
-        place (atk, { c.getX() + col * 2 + col / 2 - knob / 2, y, knob, knob });
-        place (rel, { c.getX() + col / 2 - knob / 2, y + 82, knob, knob });
-        place (out, { c.getX() + col + col / 2 - knob / 2, y + 82, knob, knob });
-        place (hpf, { c.getX() + col * 2 + col / 2 - knob / 2, y + 82, knob, knob });
-        badge = { c.getX() + 4, c.getBottom() - 32, 74, 28 };
+        for (size_t i = 0; i < bands.size(); ++i)
+            bands[i].slider.setBounds (c.getX() + 38, startY + (int) i * rowSpacing, c.getWidth() - 44, 24);
+
+        // Hardware IN switch at bottom
+        const int inY = c.getBottom() - 52;
+        bypass.setBounds (c.getCentreX() - 46, inY, 92, 26);
     }
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "GRAPHIC EQ", { content.getX(), content.getY(), content.getWidth(), 18 }, 13.0f);
+        // 1. Top center mounting screw hole cutout
+        const Point<float> topHole ((float) content.getCentreX(), (float) content.getY() - 1.0f);
+        g.setColour (Colour (0xff050607));
+        g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (topHole));
+        g.setColour (Colours::white.withAlpha (0.45f));
+        g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (topHole), 1.0f);
+        g.setColour (Colour (0xff202428));
+        g.drawEllipse (Rectangle<float> (13.6f, 13.6f).withCentre (topHole), 0.8f);
+
+        // 2. API emblem in top left (light blue)
+        paintApiLogo (g, Rectangle<float> ((float) content.getX() + 4.0f, (float) content.getY() - 4.0f, 32.0f, 24.0f), Colour (0xff8bb5eb));
+
+        // 3. "560" in top right (light blue)
+        g.setFont (fnt (26.0f, false));
+        g.setColour (Colour (0xff8bb5eb));
+        g.drawText ("560", Rectangle<float> ((float) content.getRight() - 56.0f, (float) content.getY() - 6.0f, 52.0f, 26.0f), Justification::centredRight);
+
+        // 4. Two black machine screws below top header
+        const float topScrewY = (float) content.getY() + 26.0f;
+        paintScrew (g, { (float) content.getX() + 6.0f, topScrewY }, 4.6f, 0.45f);
+        paintScrew (g, { (float) content.getRight() - 6.0f, topScrewY }, 4.6f, -0.65f);
+
+        // 5. Header scale: -12   0   +12
         auto& first = bands.front().slider;
         auto sliderBounds = first.getLookAndFeel().getSliderLayout (first).sliderBounds.translated (first.getX(), first.getY());
         const float x0 = (float) sliderBounds.getX();
         const float travel = (float) sliderBounds.getWidth();
-        const float y0 = (float) first.getBounds().getCentreY();
-        const float y1 = (float) bands.back().slider.getBounds().getCentreY();
+        const float scaleY = (float) content.getY() + 44.0f;
+
+        g.setFont (fnt (12.5f, true));
+        g.setColour (Colours::white);
+        g.drawText ("-12", Rectangle<float> (x0 - 18.0f, scaleY, 36.0f, 16.0f), Justification::centred);
+        g.drawText ("0", Rectangle<float> (x0 + travel * 0.5f - 18.0f, scaleY, 36.0f, 16.0f), Justification::centred);
+        g.drawText ("+12", Rectangle<float> (x0 + travel - 18.0f, scaleY, 36.0f, 16.0f), Justification::centred);
+
+        // 6. Five continuous light blue guide lines from top scale down through all 10 slots
+        const float yTop = scaleY + 18.0f;
+        const float yBtm = (float) bands.back().slider.getBounds().getBottom() + 1.0f;
         for (int i = 0; i <= 4; ++i)
         {
             const float x = x0 + travel * (float) i * 0.25f;
-            g.setColour (Colour (0xff36b8cf).withAlpha (i == 2 ? 0.9f : 0.55f));
-            g.drawLine (x, y0 - 3.0f, x, y1 + 3.0f, i == 2 ? 1.5f : 1.0f);
+            g.setColour (Colour (0xff8bb5eb).withAlpha (0.90f));
+            g.drawLine (x, yTop, x, yBtm, 1.2f);
         }
-        for (int i = 0; i < 3; ++i)
-        {
-            const char* scale[] { "-12", "0", "+12" };
-            caption (g, scale[i], { roundToInt (x0 + travel * (float) i * 0.5f) - 18,
-                                      content.getY() + 21, 36, 16 }, 12.0f);
-        }
-        const char* frequencies[] { "16K", "8K", "4K", "2K", "1K", "500", "250", "125", "63", "31" };
-        for (size_t i = 0; i < bands.size(); ++i)
-            caption (g, frequencies[i], { content.getX() - 5, bands[i].slider.getY() + 2, 34, 18 }, 12.0f, Justification::centredRight);
 
-        g.setColour (Colours::white.withAlpha (0.18f));
-        g.fillRect (content.getX(), dynTitle.getY() - 10, content.getWidth(), 1);
-        caption (g, "Dynamics", dynTitle, 15.0f);
-        caption (g, "Comp", { compLed.getX(), compLed.getY(), 40, 22 }, 12.0f);
-        caption (g, "Gate", { gateLed.getX(), gateLed.getY(), 40, 22 }, 12.0f);
-        knobCaption (g, thr, "Threshold");
-        knobCaption (g, rat, "Ratio");
-        knobCaption (g, atk, "Attack");
-        knobCaption (g, rel, "Release");
-        knobCaption (g, out, "Output");
-        knobCaption (g, hpf, "HPF");
-        paintBadge (g, badge.toFloat(), "560");
+        // 7. Frequency labels on left
+        const char* frequencies[] { "16K", "8K", "4K", "2K", "1K", "500", "250", "125", "63", "31" };
+        g.setFont (fnt (13.0f, true));
+        g.setColour (Colours::white);
+        for (size_t i = 0; i < bands.size(); ++i)
+        {
+            const auto sb = bands[i].slider.getBounds();
+            g.drawText (frequencies[i], Rectangle<float> ((float) content.getX() - 6.0f, (float) sb.getCentreY() - 9.0f, 38.0f, 18.0f),
+                        Justification::centredRight);
+        }
+
+        // 8. Two black machine screws at the bottom
+        const float btmScrewY = (float) content.getBottom() - 20.0f;
+        paintScrew (g, { (float) content.getX() + 6.0f, btmScrewY }, 4.6f, 0.85f);
+        paintScrew (g, { (float) content.getRight() - 6.0f, btmScrewY }, 4.6f, -0.35f);
+
+        // 9. Bottom center mounting screw hole cutout
+        const Point<float> btmHole ((float) content.getCentreX(), (float) content.getBottom() - 4.0f);
+        g.setColour (Colour (0xff050607));
+        g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (btmHole));
+        g.setColour (Colours::white.withAlpha (0.45f));
+        g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (btmHole), 1.0f);
+        g.setColour (Colour (0xff202428));
+        g.drawEllipse (Rectangle<float> (13.6f, 13.6f).withCentre (btmHole), 0.8f);
     }
 
 private:
-    void knobCaption (Graphics& g, const Knob& k, const String& text)
-    {
-        const auto b = k.slider.getBounds();
-        caption (g, text, { b.getX() - 10, b.getBottom() + 4, b.getWidth() + 20, 16 }, 10.0f);
-    }
-
     std::array<Knob, 10> bands;
-    Knob hpf, out, thr, rat, atk, rel;
-    ToggleButton compLed { "" }, gateLed { "" };
-    Rectangle<int> dynTitle, badge;
+    InButtonLookAndFeel inLaf;
 };
 
 //==============================================================================

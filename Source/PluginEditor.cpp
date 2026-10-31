@@ -245,8 +245,8 @@ void paintVuDial (Graphics& g, Rectangle<float> r, float angle, float a0, float 
         g.setFont (fnt (jmax (9.0f, labelSize * 1.05f), true));
         g.setColour (pal::needleInk.withAlpha (0.92f));
         // placed below the pivot so it never collides with the needle or the numerals
-        g.drawText (unitCaption, Rectangle<float> (pivot.x - radius, pivot.y + 4.0f,
-                                                   radius * 2.0f, 14.0f), Justification::centred);
+        g.drawText (unitCaption, Rectangle<float> (pivot.x - radius * 1.35f, pivot.y + 10.0f,
+                                                   radius * 2.7f, 14.0f), Justification::centred);
     }
     if (rightCaption.isNotEmpty())
     {
@@ -266,7 +266,7 @@ void paintVuDial (Graphics& g, Rectangle<float> r, float angle, float a0, float 
     g.setColour (Colours::black.withAlpha (0.18f));
     g.drawLine (Line<float> (pivot + Point<float> (1.5f, 1.5f), pivot + nd * (radius + 1.0f) + Point<float> (1.5f, 1.5f)), 2.2f);
     Path needle;
-    needle.addRoundedRectangle (-0.9f, -(radius + 1.0f), 1.8f, radius + 1.0f, 0.9f);
+    needle.addRoundedRectangle (-0.9f, -(radius + 1.0f), 1.8f, radius - 1.0f, 0.9f);
     g.setColour (pal::needleInk);
     g.fillPath (needle, AffineTransform::rotation (a).translated (pivot.x, pivot.y));
     g.setColour (Colour (0xff15100a));
@@ -970,13 +970,15 @@ public:
         setupKnob (gain, "gain", pal::blackCap);
         setupKnob (peak, "peak", pal::blackCap);
 
-        onBtn.setButtonText ("ON");
+        // ON engages the unit's limit position: the ratio switches from ~3:1 to ~12:1.
+        onBtn.setButtonText ("ON  (LIMIT)");
         onBtn.setClickingTogglesState (true);
-        onBtn.setToggleState (true, dontSendNotification);
         onBtn.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
         onBtn.setColour (ToggleButton::textColourId, labelColour);
+        onAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "opto_mode", onBtn);
         addAndMakeVisible (onBtn);
 
+        // METER is a faceplate lamp with no audio effect: this unit always displays reduction.
         meterBtn.setButtonText ("METER");
         meterBtn.setClickingTogglesState (true);
         meterBtn.setToggleState (true, dontSendNotification);
@@ -1015,7 +1017,6 @@ protected:
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "REDUCTION", { vu.getX(), vu.getBottom() - 34, vu.getWidth(), 18 }, 15.0f);
         caption (g, "INPUT",  { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 22, 120, 18 }, 14.0f);
         caption (g, "GAIN",   { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 8,  120, 16 }, 14.0f);
         caption (g, "PEAK",   { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 22, 120, 18 }, 14.0f);
@@ -1038,6 +1039,7 @@ protected:
 private:
     Knob gain, peak;
     ToggleButton onBtn { "ON" }, meterBtn { "METER" };
+    std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> onAtt;
     Rectangle<int> vu;
 };
 

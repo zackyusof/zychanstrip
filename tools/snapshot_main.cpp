@@ -252,6 +252,22 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
         else
             check (! editor.isMeterPageVisible(), "clicking METER again returns to the rack");
 
+        // The meter page must offer its own way back: click BACK and confirm we return to the
+        // rack. Only meaningful while the page is actually open (hidden components are not
+        // enumerated by getChildren()).
+        if (auto* meter = editor.isMeterPageVisible() ? findNamed (editor, "Meter page") : nullptr)
+        {
+            const auto t3 = juce::Time::getCurrentTime();
+            const juce::Point<float> p3 (24.0f, 29.0f);   // inside the BACK button
+            juce::MouseEvent ev3 (juce::Desktop::getInstance().getMainMouseSource(), p3,
+                juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, meter, meter,
+                t3, p3, t3, 1, false);
+            meter->mouseDown (ev3);
+            check (! editor.isMeterPageVisible(), "BACK on the meter page returns to the rack");
+        }
+        else if (pass == 1)
+            check (false, "meter page component found");
+
         // Always finish this pass on the meter page so the snapshot shows it.
         if (! editor.isMeterPageVisible())
         {

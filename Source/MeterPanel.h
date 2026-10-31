@@ -18,6 +18,9 @@ public:
     /** Called from the editor's 30 Hz timer. */
     void tick();
 
+    /** Invoked when the operator asks to return to the processor (rack) page. */
+    std::function<void()> onBack;
+
     void setScale (int index);                 // 0 linear, 1 K-20, 2 K-14, 3 K-12
     int  getScale() const { return scale; }
     void setRtaAveraging (int index);
@@ -36,7 +39,7 @@ private:
     RackStripProcessor& proc;
 
     int scale = 0;
-    juce::Rectangle<int> resetBtn, scaleBtn, headerBar, meterArea, footerArea, scopeArea, corrArea, rtaArea;
+    juce::Rectangle<int> resetBtn, scaleBtn, backBtn, headerBar, meterArea, footerArea, scopeArea, corrArea, rtaArea;
     std::array<float, RackMeters::kBands> bandDb {};
     std::array<float, RackMeters::kBands> bandHoldDb {};
     int rtaAverage = 0;                        // 0 fast .. 3 slow (visual smoothing)

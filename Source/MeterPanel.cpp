@@ -133,12 +133,18 @@ void MeterPanel::resized()
     rtaArea = r;
 
     const auto hb = headerBar;
+    backBtn  = { hb.getX(), hb.getCentreY() - 11, 68, 22 };
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
     scaleBtn = { hb.getRight() - 104, hb.getCentreY() - 11, 104, 22 };
 }
 
 void MeterPanel::mouseDown (const MouseEvent& e)
 {
+    if (backBtn.contains (e.getPosition()))
+    {
+        if (onBack) onBack();
+        return;
+    }
     if (resetBtn.contains (e.getPosition()))
     {
         proc.getMeters().reset();
@@ -258,15 +264,25 @@ void MeterPanel::paintHeader (Graphics& g)
     g.setColour (bronze);
     g.fillRect (headerBar.getX(), headerBar.getBottom() - 1, headerBar.getWidth(), 1);
 
+    // Return-to-rack button, mirroring the RACK/METER switch on the processor page
+    g.setColour (bgInset);
+    g.fillRoundedRectangle (backBtn.toFloat(), 2.0f);
+    g.setColour (bronze.withAlpha (0.45f));
+    g.drawRoundedRectangle (backBtn.toFloat(), 2.0f, 1.0f);
+    g.setFont (sslSans (9.0f, true));
+    g.setColour (inkWhite);
+    g.drawText ("<  RACK", backBtn, Justification::centred, false);
+
     g.setFont (Font (FontOptions (15.0f, Font::bold)));
     const String brand = "S O L I D   S T A T E   L O G I C";
     g.setColour (inkWhite);
-    g.drawText (brand, headerBar.getX(), headerBar.getY(), headerBar.getWidth() / 2, headerBar.getHeight(),
+    g.drawText (brand, backBtn.getRight() + 10, headerBar.getY(),
+                headerBar.getWidth() / 2, headerBar.getHeight(),
                 Justification::centredLeft, false);
 
     g.setFont (sslSans (9.0f, true));
     g.setColour (inkDim);
-    g.drawText ("METER", headerBar.getX() + 8, headerBar.getBottom() - 14, 100, 12, Justification::centredLeft, false);
+    g.drawText ("METER", backBtn.getRight() + 18, headerBar.getBottom() - 14, 100, 12, Justification::centredLeft, false);
 
     // Scale selector
     g.setColour (bgInset);

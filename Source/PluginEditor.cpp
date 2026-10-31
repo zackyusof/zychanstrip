@@ -1895,6 +1895,9 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
 {
     setLookAndFeel (laf.get());
     meterPanel = std::make_unique<MeterPanel> (proc);
+    // The meter page carries its own way back to the rack, mirroring the RACK/METER switch.
+    meterPanel->onBack = [this] { showPage (false); };
+    meterPanel->setName ("Meter page");
     addChildComponent (*meterPanel);
     addAndMakeVisible (canvas);
     canvas.setBounds (0, 0, kEditorW, kEditorH);

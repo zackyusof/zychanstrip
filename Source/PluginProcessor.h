@@ -45,6 +45,8 @@ private:
 
     std::array<std::unique_ptr<rack::Module>, NumModules> modules;
     std::atomic<uint32_t> packedOrder { 0x03020100u };
+    std::atomic<float>* masterLevel = nullptr;
+    juce::SmoothedValue<float> masterGain { 1.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripProcessor)
 };

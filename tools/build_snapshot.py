@@ -4,14 +4,18 @@
 Renders the RackStrip editor to snapshot.png so the GUI can be reviewed without a DAW
 (and without a working AudioComponentRegistrar).
 """
+import argparse
 import os
 import re
 import shlex
 import subprocess
 import sys
 
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--build-dir", default=None, help="Configured Ninja build directory")
+args = parser.parse_args()
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BUILD = os.path.join(REPO, "build")
+BUILD = os.path.abspath(os.path.expanduser(args.build_dir or os.path.join(REPO, "build")))
 OUT = os.path.join(BUILD, "snapshot")
 os.makedirs(OUT, exist_ok=True)
 

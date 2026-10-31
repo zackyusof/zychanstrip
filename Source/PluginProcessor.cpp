@@ -55,6 +55,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLa
     addF ("lim_release", "Limiter Release", 10.0f, 1000.0f, 100.0f, "ms", 0.4f);
     addF ("lim_enhance", "Limiter Enhance", 0.0f, 100.0f, 0.0f);
 
+    // Append new controls so existing host parameter indices remain stable.
+    addF ("master_level", "Master Level", -60.0f, 6.0f, 0.0f, "dB");
+
     return layout;
 }
 
@@ -69,6 +72,7 @@ RackStripProcessor::RackStripProcessor()
     modules[Opto]    = std::make_unique<rack::OptoModule>    (apvts, "opto_");
     modules[Fet]     = std::make_unique<rack::FetModule>     (apvts, "fet_");
     modules[Limiter] = std::make_unique<rack::LimiterModule> (apvts, "lim_");
+    masterLevel = apvts.getRawParameterValue ("master_level");
 }
 
 bool RackStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -87,6 +91,8 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
         latency += m->getLatencySamples();
     }
     setLatencySamples (latency);   // constant regardless of order or bypass
+    masterGain.reset (sr, 0.02);
+    masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
 }
 
 void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -97,6 +103,10 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
+
+    // The master always follows the complete rack, independently of module order.
+    masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+    masterGain.applyGain (buffer, buffer.getNumSamples());
 }
 
 //==============================================================================
@@ -141,6 +151,15 @@ void RackStripProcessor::setStateInformation (const void* data, int size)
         if (xml->hasTagName (apvts.state.getType()))
         {
             auto state = juce::ValueTree::fromXml (*xml);
+            // Sessions saved before the master existed must restore unity, even
+            // when loaded into an instance whose current master is not at unity.
+            if (! state.getChildWithProperty ("id", "master_level").isValid())
+            {
+                juce::ValueTree masterState ("PARAM");
+                masterState.setProperty ("id", "master_level", nullptr);
+                masterState.setProperty ("value", 0.0f, nullptr);
+                state.appendChild (masterState, nullptr);
+            }
             apvts.replaceState (state);
 
             auto tokens = juce::StringArray::fromTokens (state.getProperty ("order", "0,1,2,3").toString(), ",", "");

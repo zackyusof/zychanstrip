@@ -7,12 +7,12 @@ using namespace juce;
 //==============================================================================
 namespace
 {
-constexpr int kMargin = 10;      // window chrome margin
-constexpr int kHeaderH = 52;     // header bar height
-constexpr int kGripH = 26;       // space above each plate for the drag grip
-constexpr int kGap = 16;         // gap between plates
-constexpr int kEditorW = 1376;
-constexpr int kEditorH = 768;
+constexpr int kMargin = 8;      // window chrome margin
+constexpr int kHeaderH = 44;     // header bar height
+constexpr int kGripH = 24;       // space above each plate for the drag grip
+constexpr int kGap = 10;         // gap between plates
+constexpr int kEditorW = 1080;
+constexpr int kEditorH = 760;
 
 Font fnt (float h, bool bold = true) { return Font (FontOptions (h, bold ? Font::bold : Font::plain)); }
 
@@ -23,12 +23,12 @@ const Colour chassisBottom  { 0xff0b0d0e };
 const Colour headerBar      { 0xff272b2e };
 const Colour faceDark       { 0xff1b1c1e };
 const Colour faceDarkLow    { 0xff070808 };
-const Colour faceLightTop   { 0xff9a9ea1 };
-const Colour faceLightLow   { 0xff6e7276 };
-const Colour fetTop         { 0xff1f2124 };
+const Colour faceLightTop   { 0xffd5d6d3 };
+const Colour faceLightLow   { 0xffa8aaa7 };
+const Colour fetTop         { 0xff17191b };
 const Colour fetLow         { 0xff0e0f10 };
-const Colour limTop         { 0xff4b555c };
-const Colour limLow         { 0xff191d20 };
+const Colour limTop         { 0xff536c7b };
+const Colour limLow         { 0xff2b3e4c };
 const Colour cream          { 0xfff3e8bf };
 const Colour creamLow       { 0xffd9c48c };
 const Colour needleInk      { 0xff231a10 };
@@ -488,7 +488,7 @@ public:
         (void) s; (void) minPos; (void) maxPos;
     }
 
-    static void drawMasterBar (Graphics& g, int x, int y, int w, int h, float pos, Slider& s)
+    static void drawMasterBar (Graphics& g, int x, int y, int w, int h, float pos, Slider&)
     {
         const Rectangle<float> track ((float) x, (float) y + (float) h * 0.5f - 4.0f, (float) w, 8.0f);
         g.setColour (Colour (0xff0a0c0d));
@@ -496,28 +496,12 @@ public:
         g.setColour (Colours::white.withAlpha (0.12f));
         g.drawRoundedRectangle (track, 3.0f, 1.0f);
 
-        // LED segments to the right of the thumb
-        const int n = 7;
-        const float segW = 9.0f, segGap = 3.0f;
-        const float totalW = (float) n * segW + (float) (n - 1) * segGap;
-        const float sx = track.getRight() + 8.0f;
-        const float t = s.valueToProportionOfLength (s.getValue());
-        (void) pos;
-        for (int i = 0; i < n; ++i)
-        {
-            const float lt = (float) i / (float) (n - 1);
-            const auto c = Colour (0xff35d24a).interpolatedWith (Colour (0xffe8b21a), jlimit (0.0f, 1.0f, lt * 1.2f - 0.2f))
-                                            .interpolatedWith (Colour (0xffe0452a), jlimit (0.0f, 1.0f, lt * 1.6f - 0.6f));
-            const bool on = lt <= t + 0.02f;
-            const Rectangle<float> seg (sx + (float) i * (segW + segGap), track.getCentreY() - 4.0f, segW, 8.0f);
-            g.setColour (on ? c : c.withMultipliedBrightness (0.16f));
-            g.fillRoundedRectangle (seg, 1.5f);
-            if (on) { g.setColour (c.withAlpha (0.22f)); g.fillRoundedRectangle (seg.expanded (1.5f), 2.0f); }
-        }
-        (void) totalW;
+        // The illuminated track shows the trim position, rather than a decorative output meter.
+        g.setColour (Colour (0xff7598aa));
+        g.fillRoundedRectangle (track.withRight (jlimit (track.getX(), track.getRight(), pos)), 3.0f);
 
         // chrome thumb
-        const Rectangle<float> thumb ((float) x + t * (float) w - 9.0f, track.getCentreY() - 11.0f, 18.0f, 22.0f);
+        const Rectangle<float> thumb (pos - 9.0f, track.getCentreY() - 11.0f, 18.0f, 22.0f);
         g.setColour (Colours::black.withAlpha (0.5f));
         g.fillRoundedRectangle (thumb.translated (1.0f, 1.5f), 3.0f);
         g.setGradientFill (ColourGradient (Colour (0xfff6feff), thumb.getX(), thumb.getY(),
@@ -620,6 +604,7 @@ public:
         : moduleId (id), proc (p), prefix (prefixText), plateTop (top), plateLow (bottom), labelColour (engraving)
     {
         setOpaque (false);
+        setName (StringArray { "Console", "Opto", "FET", "Limiter" }[id]);
         addAndMakeVisible (captionLayer);
         captionLayer.setInterceptsMouseClicks (false, false);
         bypass.setColour (ToggleButton::tickColourId, Colour (0xffff3b30));
@@ -670,6 +655,8 @@ public:
             captionLayer.toBack();
         }
     }
+
+    void cancelDrag() { dragging = false; }
 
     void mouseMove (const MouseEvent& e) override
     {
@@ -850,9 +837,9 @@ protected:
     void layoutContent (Rectangle<int> c) override
     {
         const int colW = c.getWidth() / 2;
-        const int knob = 74;
+        const int knob = 64;
         const int cell = knob + 20;          // knob + legend line
-        const int trim = 48;
+        const int trim = 44;
         const int trimCell = trim + 16;
 
         int y = c.getY() + 20;
@@ -891,12 +878,12 @@ protected:
 
         y = thrRow + cell + 6;
         atkRow = y;
-        place (atk, { c.getX() + 10,          y, knob, knob });
-        place (rel, { c.getRight() - knob - 10, y, knob, knob });
-        place (out, { c.getCentreX() - 22,    y + 30, 44, 44 });
+        place (atk, { c.getX() + colW / 2 - knob / 2, y, knob, knob });
+        place (rel, { c.getX() + colW + colW / 2 - knob / 2, y, knob, knob });
 
         y = atkRow + cell + 6;
-        place (hpf, { c.getCentreX() - 26, y, 52, 52 });
+        place (out, { c.getX() + colW / 2 - 26, y, 52, 52 });
+        place (hpf, { c.getX() + colW + colW / 2 - 26, y, 52, 52 });
 
         badge = { c.getX() + 4, c.getBottom() - 32, 74, 28 };
     }
@@ -910,10 +897,10 @@ protected:
 
         caption (g, "Low",    knobCaption (lf),   capSize);
         caption (g, "Hi-Mid", knobCaption (hmfG), capSize);
-        caption (g, "Low",    knobCaption (lmfG), capSize);
+        caption (g, "Low-Mid", knobCaption (lmfG), capSize);
         caption (g, "High",   knobCaption (hf),   capSize);
-        caption (g, "Q",      trimCaption (lmfF), 10.0f);
-        caption (g, "Gain",   trimCaption (hmfF), 10.0f);
+        caption (g, "LMF Hz", trimCaption (lmfF), 10.0f);
+        caption (g, "HMF Hz", trimCaption (hmfF), 10.0f);
 
         g.setColour (Colours::white.withAlpha (0.20f));
         g.fillRect (Rectangle<int> (content.getX() + 4, eqRule, content.getWidth() - 8, 1));
@@ -928,7 +915,7 @@ protected:
         caption (g, "Ratio",     knobCaption (rat), capSize);
         caption (g, "Attack",    knobCaption (atk), capSize);
         caption (g, "Release",   knobCaption (rel), capSize);
-        caption (g, "Bypass",    trimCaption (out), 9.0f);
+        caption (g, "OUTPUT",    trimCaption (out), 9.0f);
         caption (g, "HPF",       trimCaption (hpf), 9.0f);
 
         paintBadge (g, badge.toFloat(), "550B");
@@ -994,7 +981,7 @@ protected:
         const int vw = jmin (c.getWidth() - 26, 210);
         vu = { c.getCentreX() - vw / 2, c.getY() + 10, vw, vw * 3 / 4 };
 
-        const int kw = 104;
+        const int kw = 84;
         const int ky = vu.getBottom() + 54;
         place (gain, { c.getX() + 4,                 ky, kw, kw });
         place (peak, { c.getRight() - kw - 4,        ky, kw, kw });
@@ -1017,10 +1004,10 @@ protected:
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "INPUT",  { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 22, 120, 18 }, 14.0f);
-        caption (g, "GAIN",   { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 8,  120, 16 }, 14.0f);
-        caption (g, "PEAK",   { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 22, 120, 18 }, 14.0f);
-        caption (g, "REDUCTION", { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 8, 120, 16 }, 14.0f);
+        caption (g, "INPUT",  { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 44, 120, 18 }, 14.0f);
+        caption (g, "GAIN",   { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 26, 120, 16 }, 14.0f);
+        caption (g, "PEAK",   { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 44, 120, 18 }, 14.0f);
+        caption (g, "REDUCTION", { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 26, 120, 16 }, 14.0f);
 
         paintBadge (g, Rectangle<float> ((float) content.getX() + 4.0f, (float) content.getBottom() - 34.0f, 78.0f, 30.0f), "LA-2A");
     }
@@ -1081,12 +1068,12 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // two big silver knobs side by side at the top
+        // Silver input/output caps sized to the narrower hardware plate.
         const int ky = c.getY() + 34;
-        place (input,  { c.getX() + 2,               ky, 116, 116 });
-        place (output, { c.getRight() - 118,         ky, 116, 116 });
+        place (input,  { c.getX() + 2,               ky, 88, 88 });
+        place (output, { c.getRight() - 90,         ky, 88, 88 });
 
-        ratioLabel = { c.getX(), ky + 128, c.getWidth(), 20 };
+        ratioLabel = { c.getX(), ky + 104, c.getWidth(), 20 };
         const int bw = (c.getWidth() - 8 - 4 * 5) / 5;
         for (int i = 0; i < 5; ++i)
             ratioBtns[(size_t) i].setBounds (c.getX() + 4 + i * (bw + 5), ratioLabel.getBottom() + 2, bw, 26);
@@ -1094,8 +1081,8 @@ protected:
         meter = { c.getX() + 10, ratioBtns[0].getBounds().getBottom() + 16, c.getWidth() - 20, 104 };
 
         const int ay = meter.getBottom() + 34;
-        place (atk, { c.getX() + 8,        ay, 100, 100 });
-        place (rel, { c.getRight() - 108,  ay, 100, 100 });
+        place (atk, { c.getX() + 8,        ay, 78, 78 });
+        place (rel, { c.getRight() - 86,  ay, 78, 78 });
         grLabel = { c.getX() + c.getWidth() / 2 - 40, ay + 44, 80, 18 };
     }
 
@@ -1159,7 +1146,7 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int kh = 84;
+        const int kh = 70;
         const int kw = c.getWidth() / 3;
         const int ky = c.getY() + 26;
         place (gain,    { c.getX(),                ky, kw, kh });
@@ -1177,9 +1164,9 @@ protected:
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "THRESHOLD", { gain.slider.getBounds().getX() - 16,    gain.slider.getY() - 19, gain.slider.getBounds().getWidth() + 32, 17 }, 11.0f);
-        caption (g, "CEILING",   { ceiling.slider.getBounds().getX() - 16, ceiling.slider.getY() - 19, ceiling.slider.getBounds().getWidth() + 32, 17 }, 11.0f);
-        caption (g, "RELEASE",   { release.slider.getBounds().getX() - 16, release.slider.getY() - 19, release.slider.getBounds().getWidth() + 32, 17 }, 11.0f);
+        caption (g, "THRESHOLD", { gain.slider.getBounds().getX(), gain.slider.getY() - 19, gain.slider.getBounds().getWidth(), 17 }, 9.5f);
+        caption (g, "CEILING",   { ceiling.slider.getBounds().getX(), ceiling.slider.getY() - 19, ceiling.slider.getBounds().getWidth(), 17 }, 9.5f);
+        caption (g, "RELEASE",   { release.slider.getBounds().getX(), release.slider.getY() - 19, release.slider.getBounds().getWidth(), 17 }, 9.5f);
         caption (g, "ENHANCE", enhanceLabel, 15.0f);
 
         // dB scale beside the fader
@@ -1241,6 +1228,8 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     : AudioProcessorEditor (p), proc (p), laf (std::make_unique<RackLookAndFeel>())
 {
     setLookAndFeel (laf.get());
+    addAndMakeVisible (canvas);
+    canvas.setBounds (0, 0, kEditorW, kEditorH);
 
     panels[RackStripProcessor::Console] = std::make_unique<ConsolePanel> (proc);
     panels[RackStripProcessor::Opto]    = std::make_unique<OptoPanel> (proc);
@@ -1266,15 +1255,21 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
             draggingId = -1;
             layoutFor (previewOrder, -1, true);
         };
-        addAndMakeVisible (*panel);
+        canvas.addAndMakeVisible (*panel);
     }
 
-    // master level in the header (a display-only trim over the limiter output)
-    masterFader.setRange (0.0, 1.0, 0.0);
-    masterFader.setValue (0.82, dontSendNotification);
+    // Host-automatable output trim after the complete module chain.
+    masterFader.setName ("Master level");
+    masterFader.setTextValueSuffix (" dB");
+    masterFader.setPopupDisplayEnabled (true, true, this);
+    masterFader.setDoubleClickReturnValue (true, 0.0);
     masterFader.setColour (Slider::thumbColourId, Colours::white);
-    addAndMakeVisible (masterFader);
+    canvas.addAndMakeVisible (masterFader);
+    masterAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_level", masterFader);
 
+    setResizable (true, true);
+    setResizeLimits (864, 608, 1620, 1140);
+    getConstrainer()->setFixedAspectRatio ((double) kEditorW / kEditorH);
     setSize (kEditorW, kEditorH);
     startTimerHz (30);
 }
@@ -1288,14 +1283,14 @@ RackStripEditor::~RackStripEditor()
 
 Rectangle<int> RackStripEditor::slotBounds (int slot) const
 {
-    const int pw = (getWidth() - kMargin * 2 - kGap * 3) / 4;
-    const int top = kHeaderH + kGripH + 4;
-    return { kMargin + slot * (pw + kGap), top, pw, getHeight() - top - kMargin };
+    const int pw = (kEditorW - kMargin * 2 - kGap * 3) / 4;
+    const int top = kHeaderH + 4;
+    return { kMargin + slot * (pw + kGap), top, pw, kEditorH - top - kMargin };
 }
 
 int RackStripEditor::slotForCentreX (int x) const
 {
-    const int pw = (getWidth() - kMargin * 2 - kGap * 3) / 4;
+    const int pw = (kEditorW - kMargin * 2 - kGap * 3) / 4;
     return jlimit (0, 3, (x - kMargin) / (pw + kGap));
 }
 
@@ -1322,15 +1317,19 @@ void RackStripEditor::layoutFor (const std::array<int, 4>& order, int skipId, bo
 void RackStripEditor::resized()
 {
     animator.cancelAllAnimations (false);
-    layoutFor (proc.getOrder(), -1, false);
-    masterFader.setBounds (getWidth() - kMargin - 150, kHeaderH / 2 - 12, 130, 24);
+    draggingId = -1;
+    previewOrder = proc.getOrder();
+    for (auto& panel : panels) panel->cancelDrag();
+    layoutFor (previewOrder, -1, false);
+    masterFader.setBounds (kEditorW - kMargin - 160, kHeaderH / 2 - 12, 148, 24);
 
-    if (getWidth() > 0 && getHeight() > 0)
-    {
-        chromeImage = Image (Image::ARGB, getWidth(), getHeight(), true);
-        Graphics cg (chromeImage);
-        paint (cg);
-    }
+    // Transform a child, never AudioProcessorEditor itself: hosts own the editor's DPI transform.
+    const float scale = jmax (0.01f, jmin ((float) getWidth() / kEditorW, (float) getHeight() / kEditorH));
+    canvasTransform = AffineTransform::scale (scale).translated (
+        ((float) getWidth() - kEditorW * scale) * 0.5f,
+        ((float) getHeight() - kEditorH * scale) * 0.5f);
+    canvas.setTransform (canvasTransform);
+    repaint();
 }
 
 void RackStripEditor::timerCallback()
@@ -1340,7 +1339,9 @@ void RackStripEditor::timerCallback()
 
 void RackStripEditor::paint (Graphics& g)
 {
-    const auto full = getLocalBounds().toFloat();
+    g.fillAll (Colour (0xff08090a));
+    g.addTransform (canvasTransform);
+    const Rectangle<float> full (0.0f, 0.0f, (float) kEditorW, (float) kEditorH);
 
     // outer chassis
     g.setColour (Colour (0xff08090a));
@@ -1362,15 +1363,6 @@ void RackStripEditor::paint (Graphics& g)
     g.drawLine (header.getX() + 6.0f, header.getY() + 1.0f, header.getRight() - 6.0f, header.getY() + 1.0f, 1.0f);
     g.setColour (Colours::black.withAlpha (0.55f));
     g.drawLine (header.getX() + 6.0f, header.getBottom(), header.getRight() - 6.0f, header.getBottom(), 1.2f);
-
-    // traffic-light glyphs
-    const float gy = header.getCentreY();
-    g.setColour (Colour (0xffd9dcde));
-    g.drawLine (30.0f, gy - 6.0f, 44.0f, gy + 6.0f, 1.6f);
-    g.drawLine (30.0f, gy + 6.0f, 44.0f, gy - 6.0f, 1.6f);
-    g.drawRoundedRectangle (Rectangle<float> (66.0f, gy - 1.5f, 14.0f, 3.0f), 1.5f, 1.0f);
-    g.setColour (Colour (0xffd9dcde).withAlpha (0.8f));
-    g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre ({ 100.0f, gy }), 1.2f);
 
     // title
     g.setFont (fnt (21.0f, false));
@@ -1397,7 +1389,8 @@ void RackStripEditor::paint (Graphics& g)
 void RackStripEditor::paintOverChildren (Graphics& g)
 {
     // outer bevel last so it sits above the plates
-    const auto full = getLocalBounds().toFloat();
+    g.addTransform (canvasTransform);
+    const Rectangle<float> full (0.0f, 0.0f, (float) kEditorW, (float) kEditorH);
     g.setColour (Colours::white.withAlpha (0.12f));
     g.drawRoundedRectangle (full.reduced (2.5f), 9.0f, 1.2f);
     g.setColour (Colours::black.withAlpha (0.9f));

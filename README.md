@@ -8,6 +8,8 @@ match, and the order is saved with your session.
 The interface is a photo-real rendering of that rack: brushed and anodised metal faces, bevelled
 screws, machined knobs with printed scales, a brass VU movement and segmented LED ladders. There are
 no bitmap assets — everything is drawn procedurally, so the panel stays sharp at any scale.
+The compact 1080 × 760 interface resizes from 864 × 608 to 1620 × 1140 while keeping its proportions;
+drag the lower-right corner to resize it.
 
 ---
 
@@ -131,15 +133,20 @@ host input (stereo or mono)
 └───────────────────┘
         │
         ▼
+master output trim (−60 … +6 dB)
+        │
+        ▼
 host output
 ```
 
 Each module processes **in place** — it reads and writes the same buffer and returns it — so the chain
-is a straight serial insert. `processBlock` is simply:
+is a straight serial insert. After the modules, a smoothed master gain controls the final output:
 
 ```cpp
 for (int id : getOrder())
     modules[id]->run (buffer);
+masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+masterGain.applyGain (buffer, buffer.getNumSamples());
 ```
 
 `getOrder()` is a `std::array<int,4>` where `order[slot] = moduleId`, published atomically as a packed
@@ -231,7 +238,7 @@ preset cannot produce a chain with a missing or duplicated stage.
 
 ## Parameters
 
-28 automated parameters in total.
+29 automated parameters in total, including the master output trim.
 
 | Module | Prefix | Parameters |
 | --- | --- | --- |
@@ -239,6 +246,7 @@ preset cannot produce a chain with a missing or duplicated stage.
 | Opto | `opto_` | `bypass`, `peak`, `gain`, `mode` |
 | FET | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` (choice) |
 | Limiter | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance` |
+| Master | `master_` | `level` (−60 … +6 dB, default 0 dB) |
 
 The **ON** switch on the opto plate is wired to the `opto_mode` parameter (compress ⇄ limit). The
 **METER** lamp and the **Comp**/**Gate** lamps on the console plate are faceplate indicators only — this
@@ -297,13 +305,14 @@ and notarization.
 ### Headless GUI snapshot
 
 `tools/build_snapshot.py` links a small application against the objects the main build already produced
-and renders the editor to `snapshot.png`, so the interface can be reviewed without a DAW — which is
-essential when AU discovery is unavailable.
+and renders the editor at minimum, default and maximum sizes. It also checks master gain in mono
+and stereo, smoothing, parameter attachment, state recall, fixed-ratio resizing and module dragging.
 
 ```bash
 cmake --build build --config Release        # produce the module objects once
 python3 tools/build_snapshot.py             # build the snapshot tool
-cd build/snapshot && ./snapshot             # writes snapshot.png (1376 × 768)
+build/snapshot/snapshot /path/to/output     # checks + three rack-WxH.png snapshots
+# For an out-of-tree Ninja build, pass --build-dir /path/to/build to build_snapshot.py.
 ```
 
 It reuses the exact `DEFINES`, `FLAGS` and `INCLUDES` that Ninja used for `PluginEditor.cpp.o`, so the
@@ -331,5 +340,7 @@ python3 ~/.config/opencode/scripts/dev_spec.py lint docs/specs/photoreal-gui.md
 - **The meters are cosmetic read-outs of real data.** They show gain reduction and levels actually
   reported by the processor, but they are not calibrated reference meters — use a proper metering plugin
   for LUFS and true peak when mastering.
-- **The master bar in the header** is a display element of the rack chrome; it does not alter the audio.
-  Use the limiter for level control.
+- **The master bar in the header** controls the final output after all modules. It ranges from −60 to
+  +6 dB, saves with the session and supports host automation. Double-click to restore 0 dB. Changes
+  ramp over 20 ms; sessions saved before this control existed restore at unity. Positive master gain
+  can raise the output above the limiter ceiling because it follows the limiter.

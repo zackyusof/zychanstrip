@@ -25,6 +25,7 @@ private:
 
     RackStripProcessor& proc;
     std::unique_ptr<RackLookAndFeel> laf;
+    juce::Component canvas { "Rack canvas" };
     std::array<std::unique_ptr<ModulePanel>, 4> panels;
     juce::ComponentAnimator animator;
 
@@ -33,7 +34,8 @@ private:
 
     // header: master level control
     juce::Slider masterFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
-    juce::Image chromeImage;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttachment;
+    juce::AffineTransform canvasTransform;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripEditor)
 };

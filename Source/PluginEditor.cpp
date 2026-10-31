@@ -1934,7 +1934,22 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     masterFader.setDoubleClickReturnValue (true, 0.0);
     masterFader.setColour (Slider::thumbColourId, Colours::white);
     canvas.addAndMakeVisible (masterFader);
+
+    pageToggle.setName ("Page toggle");
+    pageToggle.setBounds (kMargin + 232, 10, 84, 30);
+    pageToggle.onChanged = [this] (bool showMeters) { showPage (showMeters); };
+    canvas.addAndMakeVisible (pageToggle);
     masterAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_level", masterFader);
+
+    // Dry/wet mix, sits after the master volume in the signal path
+    mixFader.setName ("Dry/Wet mix");
+    mixFader.setTextValueSuffix (" %");
+    mixFader.setNumDecimalPlacesToDisplay (0);
+    mixFader.setPopupDisplayEnabled (true, true, this);
+    mixFader.setDoubleClickReturnValue (true, 100.0);
+    mixFader.setColour (Slider::thumbColourId, Colour (0xff57d4c2));
+    canvas.addAndMakeVisible (mixFader);
+    mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_mix", mixFader);
 
     setResizable (true, true);
     setResizeLimits (864, 608, 1620, 1140);
@@ -1990,8 +2005,9 @@ void RackStripEditor::resized()
     previewOrder = proc.getOrder();
     for (auto& panel : panels) panel->cancelDrag();
     layoutFor (previewOrder, -1, false);
-    masterFader.setBounds (kEditorW - kMargin - 160, kHeaderH / 2 - 12, 148, 24);
-    pageToggle = { kMargin + 232, 10, 84, 30 };
+    // Master + dry/wet share the header right side; mix sits below the master level.
+    masterFader.setBounds (kEditorW - kMargin - 160, 8, 148, 16);
+    mixFader.setBounds (kEditorW - kMargin - 160, 26, 148, 14);
     if (meterPanel != nullptr && metersShown)
         meterPanel->setBounds (getLocalBounds());
 
@@ -2016,23 +2032,51 @@ void RackStripEditor::timerCallback()
 void RackStripEditor::showPage (bool meters)
 {
     metersShown = meters;
+    pageToggle.setMeters (meters);
     if (meterPanel != nullptr) meterPanel->setVisible (meters);
     canvas.setVisible (! meters);
     resized();
     repaint();
 }
 
-void RackStripEditor::mouseDown (const MouseEvent& e)
+//==============================================================================
+//  Page toggle (child of the canvas: the canvas consumes editor-level clicks)
+//==============================================================================
+void RackStripEditor::PageToggle::paint (Graphics& g)
 {
-    // The page toggle lives in the machined header bar; map through the canvas transform.
-    const auto p = e.getPosition();
-    const float scale = jmax (0.01f,
-        jmin ((float) getWidth() / (float) kEditorW, (float) getHeight() / (float) kEditorH));
-    const float offX = ((float) getWidth() - (float) kEditorW * scale) * 0.5f;
-    const float offY = ((float) getHeight() - (float) kEditorH * scale) * 0.5f;
-    const Point<float> logical (((float) p.x - offX) / scale, ((float) p.y - offY) / scale);
-    if (pageToggle.toFloat().contains (logical))
-        showPage (! metersShown);
+    auto t = getLocalBounds().toFloat();
+    g.setColour (Colour (0xff0b0d0e));
+    g.fillRoundedRectangle (t, 3.0f);
+    g.setColour (Colours::white.withAlpha (0.18f));
+    g.drawRoundedRectangle (t, 3.0f, 1.0f);
+
+    const auto half = t.getWidth() * 0.5f;
+    const Rectangle<float> rackBtn (t.getX(), t.getY(), half, t.getHeight());
+    const Rectangle<float> meterBtn (t.getX() + half, t.getY(), half, t.getHeight());
+
+    g.setGradientFill (ColourGradient (meters ? Colour (0xff15181a) : Colour (0xff57d4c2),
+                                       rackBtn.getX(), rackBtn.getY(),
+                                       meters ? Colour (0xff0a0c0d) : Colour (0xff2f9d8f),
+                                       rackBtn.getX(), rackBtn.getBottom(), false));
+    g.fillRoundedRectangle (rackBtn.reduced (2.0f), 2.0f);
+    g.setGradientFill (ColourGradient (meters ? Colour (0xff57d4c2) : Colour (0xff15181a),
+                                       meterBtn.getX(), meterBtn.getY(),
+                                       meters ? Colour (0xff2f9d8f) : Colour (0xff0a0c0d),
+                                       meterBtn.getX(), meterBtn.getBottom(), false));
+    g.fillRoundedRectangle (meterBtn.reduced (2.0f), 2.0f);
+
+    g.setFont (fnt (10.0f, true));
+    g.setColour (meters ? Colour (0xff9aa0a4) : Colour (0xff06201d));
+    g.drawText ("RACK", rackBtn, Justification::centred, false);
+    g.setColour (meters ? Colour (0xff06201d) : Colour (0xff9aa0a4));
+    g.drawText ("METER", meterBtn, Justification::centred, false);
+}
+
+void RackStripEditor::PageToggle::mouseDown (const MouseEvent&)
+{
+    meters = ! meters;
+    repaint();
+    if (onChanged) onChanged (meters);
 }
 
 void RackStripEditor::paint (Graphics& g)
@@ -2114,40 +2158,15 @@ void RackStripEditor::paint (Graphics& g)
     // Master level title + calibrated scale ticks
     g.setFont (fnt (12.0f, true));
     g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, header.getY() + 1.0f, 62.0f, header.getHeight()), Justification::centredRight);
+    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, 10.0f, 64.0f, 12.0f), Justification::centredRight);
     g.setColour (Colour (0xffc8ccd0));
-    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, header.getY(), 62.0f, header.getHeight()), Justification::centredRight);
-
-    // 6. Rack / METER page selector
-    {
-        const auto t = pageToggle.toFloat();
-        g.setColour (Colour (0xff0b0d0e));
-        g.fillRoundedRectangle (t, 3.0f);
-        g.setColour (Colours::white.withAlpha (0.18f));
-        g.drawRoundedRectangle (t, 3.0f, 1.0f);
-
-        const auto half = t.getWidth() * 0.5f;
-        const Rectangle<float> rackBtn (t.getX(), t.getY(), half, t.getHeight());
-        const Rectangle<float> meterBtn (t.getX() + half, t.getY(), half, t.getHeight());
-
-        const bool onMeter = metersShown;
-        g.setGradientFill (ColourGradient (onMeter ? Colour (0xff15181a) : Colour (0xff57d4c2),
-                                           rackBtn.getX(), rackBtn.getY(),
-                                           onMeter ? Colour (0xff0a0c0d) : Colour (0xff2f9d8f),
-                                           rackBtn.getX(), rackBtn.getBottom(), false));
-        g.fillRoundedRectangle (rackBtn.reduced (2.0f), 2.0f);
-        g.setGradientFill (ColourGradient (onMeter ? Colour (0xff57d4c2) : Colour (0xff15181a),
-                                           meterBtn.getX(), meterBtn.getY(),
-                                           onMeter ? Colour (0xff2f9d8f) : Colour (0xff0a0c0d),
-                                           meterBtn.getX(), meterBtn.getBottom(), false));
-        g.fillRoundedRectangle (meterBtn.reduced (2.0f), 2.0f);
-
-        g.setFont (fnt (10.0f, true));
-        g.setColour (onMeter ? Colour (0xff9aa0a4) : Colour (0xff06201d));
-        g.drawText ("RACK", rackBtn, Justification::centred, false);
-        g.setColour (onMeter ? Colour (0xff06201d) : Colour (0xff9aa0a4));
-        g.drawText ("METER", meterBtn, Justification::centred, false);
-    }
+    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, 9.0f, 64.0f, 12.0f), Justification::centredRight);
+    // Dry/wet label beside the second bar
+    g.setFont (fnt (10.0f, true));
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.drawText ("DRY/WET", Rectangle<float> (full.getWidth() - 230.0f, 27.0f, 64.0f, 12.0f), Justification::centredRight);
+    g.setColour (Colour (0xff9fe8dd));
+    g.drawText ("DRY/WET", Rectangle<float> (full.getWidth() - 230.0f, 26.0f, 64.0f, 12.0f), Justification::centredRight);
 
     // 7. Plate shadows so the faceplates read as physically raised hardware
     for (int s = 0; s < 4; ++s)

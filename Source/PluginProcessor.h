@@ -55,6 +55,8 @@ private:
     std::array<std::unique_ptr<rack::Module>, NumModules> modules;
     std::atomic<uint32_t> packedOrder { 0x03020100u };
     RackMeters meters;
+    juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
+    std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };
 

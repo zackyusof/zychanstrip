@@ -19,7 +19,6 @@ public:
 
 private:
     void timerCallback() override;
-    void mouseDown (const juce::MouseEvent&) override;
     void showPage (bool meters);
 
 public:
@@ -47,11 +46,27 @@ private:
     // header: master level control
     juce::Slider masterFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttachment;
+
+    // Parallel processing: dry/wet after the master volume
+    juce::Slider mixFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     juce::AffineTransform canvasTransform;
 
     // Metering page (SSL-style analyser) shown instead of the rack
     std::unique_ptr<MeterPanel> meterPanel;
-    juce::Rectangle<int> pageToggle;
+    /** Header switch that swaps the rack for the metering page. A real child component,
+        because the rack canvas intercepts clicks and the editor never sees them. */
+    class PageToggle : public juce::Component
+    {
+    public:
+        PageToggle() { setMouseCursor (juce::MouseCursor::PointingHandCursor); }
+        std::function<void (bool)> onChanged;
+        bool meters = false;
+        void setMeters (bool m) { meters = m; repaint(); }
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent& e) override;
+    };
+    PageToggle pageToggle;
     bool metersShown = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripEditor)

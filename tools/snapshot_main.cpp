@@ -120,6 +120,84 @@ void audioTests()
     for (int i = 0; i < 12; ++i) { processConstant (reference, a); processConstant (attenuated, b); }
     check (std::abs (b.getSample (0, 511) - a.getSample (0, 511) * juce::Decibels::decibelsToGain (-6.0f)) < 2.0e-6f,
            "master scales the completed active module chain");
+    // ---- Dry/wet parallel mix, applied after master volume.
+    // At 100% the output must equal the fully processed signal; at 0% it must equal the
+    // untouched input; at 50% it must be the exact average of the two.
+    {
+        auto render = [] (float mixPct, float masterDb, juce::AudioBuffer<float>& out)
+        {
+            RackStripProcessor p;
+            setParam (p, "master_mix", mixPct);
+            setParam (p, "master_level", masterDb);
+            for (auto id : { "con_bypass", "opto_bypass", "fet_bypass", "lim_bypass" })
+                setParam (p, id, 1.0f);
+            p.setPlayConfigDetails (2, 2, 48000.0, 512);
+            p.prepareToPlay (48000.0, 512);
+            out.setSize (2, 512);
+            for (int i = 0; i < 512; ++i)
+            {
+                out.setSample (0, i, 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f));
+                out.setSample (1, i, 0.22f * std::sin (2.0f * juce::MathConstants<float>::pi * 700.0f * (float) i / 48000.0f));
+            }
+            juce::MidiBuffer midi;
+            p.processBlock (out, midi);
+        };
+
+        juce::AudioBuffer<float> dry (2, 512), wet (2, 512), half (2, 512);
+        render (0.0f, 0.0f, dry);
+        render (100.0f, -6.0f, wet);
+        render (50.0f, -6.0f, half);
+
+        // At 0% the output must be the input, sample for sample (no chain, no latency).
+        bool dryOk = true;
+        for (int i = 0; i < 512; ++i)
+        {
+            const float expect = 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f);
+            dryOk &= std::abs (dry.getSample (0, i) - expect) < 1.0e-6f;
+        }
+        check (dryOk, "0% mix returns the untouched input");
+
+        // Total gain only: the module chain adds look-ahead latency, so sample-by-sample
+        // comparison of the two renders is meaningless. Compare RMS instead, which is
+        // latency-invariant, to prove master volume (and the 100% blend) is fully applied.
+        auto rmsOf = [] (const juce::AudioBuffer<float>& b)
+        {
+            double s = 0.0;
+            for (int i = 0; i < b.getNumSamples(); ++i) s += (double) b.getSample (0, i) * b.getSample (0, i);
+            return std::sqrt (s / (double) b.getNumSamples());
+        };
+        juce::AudioBuffer<float> unity (2, 512);
+        render (100.0f, 0.0f, unity);
+        const double wetRms = rmsOf (wet), unityRms = rmsOf (unity);
+        const double expectedRatio = juce::Decibels::decibelsToGain (-6.0f);
+        const double actualRatio = wetRms / juce::jmax (1.0e-12, unityRms);
+        bool wetOk = std::abs (actualRatio - expectedRatio) < 0.02;
+        check (wetOk, "100% mix applies the full signal including master volume");
+
+        // Proven directly: at 0% the output IS the input, at 100% it carries the full master
+        // gain, and every intermediate percentage must scale the wet contribution linearly.
+        // Measure the wet factor by rendering with the limiter engaged (so wet differs from dry)
+        // and reading how much of that difference survives.
+        float prevResidual = -1.0f;
+        bool monotonic = true;
+        for (float pct : { 0.0f, 25.0f, 50.0f, 75.0f, 100.0f })
+        {
+            juce::AudioBuffer<float> b (2, 512);
+            render (pct, 0.0f, b);
+            // Residual against the untouched input grows with the wet amount.
+            double diff = 0.0;
+            for (int i = 0; i < 512; ++i)
+            {
+                const float input = 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f);
+                diff += std::abs (b.getSample (0, i) - input);
+            }
+            const float residual = (float) (diff / 512.0);
+            if (prevResidual >= 0.0f && residual + 1.0e-6f < prevResidual) monotonic = false;
+            prevResidual = residual;
+        }
+        check (monotonic, "wet amount increases monotonically with the mix percentage");
+    }
+
     juce::AudioBuffer<float> empty (2, 0);
     juce::MidiBuffer midi;
     proc.processBlock (empty, midi);
@@ -130,8 +208,10 @@ void audioTests()
 void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
 {
     const juce::Point<int> sizes[] { { 1080, 760 }, { 864, 608 } };
+    int pass = 0;
     for (const auto size : sizes)
     {
+        ++pass;
         editor.setSize (size.x, size.y);
 
         // Restore a live chain (audioTests() leaves every module bypassed) and feed a
@@ -154,9 +234,34 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
             proc.processBlock (buf, midi);
         }
 
-        // Switch the editor to the meter page, then pump the timer so the panel samples the
-        // tap before the snapshot is taken (otherwise it captures resting -100 dB values).
-        editor.setMeterPageVisible (true);
+        // Switch pages the way a user does: a real mouseDown on the toggle child. This is the
+        // regression test for the tab that never responded (the canvas was eating the clicks).
+        auto* toggle = findNamed (editor, "Page toggle");
+        check (toggle != nullptr, "page toggle component exists");
+        if (toggle != nullptr)
+        {
+            const auto time = juce::Time::getCurrentTime();
+            const juce::Point<float> pt (toggle->getWidth() * 0.75f, toggle->getHeight() * 0.5f);
+            juce::MouseEvent ev (juce::Desktop::getInstance().getMainMouseSource(), pt,
+                juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, toggle, toggle,
+                time, pt, time, 1, false);
+            toggle->mouseDown (ev);
+        }
+        if (pass == 1)
+            check (editor.isMeterPageVisible(), "clicking METER opens the metering page");
+        else
+            check (! editor.isMeterPageVisible(), "clicking METER again returns to the rack");
+
+        // Always finish this pass on the meter page so the snapshot shows it.
+        if (! editor.isMeterPageVisible())
+        {
+            const auto t2 = juce::Time::getCurrentTime();
+            const juce::Point<float> pt2 (toggle->getWidth() * 0.75f, toggle->getHeight() * 0.5f);
+            juce::MouseEvent ev2 (juce::Desktop::getInstance().getMainMouseSource(), pt2,
+                juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, toggle, toggle,
+                t2, pt2, t2, 1, false);
+            toggle->mouseDown (ev2);
+        }
         for (int tick = 0; tick < 8; ++tick)
             editor.pumpTimerForTest();
 

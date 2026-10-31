@@ -60,6 +60,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLa
 
     // Append new controls so existing host parameter indices remain stable.
     addF ("master_level", "Master Level", -60.0f, 6.0f, 0.0f, "dB");
+    // Parallel processing: blends the processed master output against the untouched input.
+    // Defaults to 100% wet so existing sessions sound exactly as before.
+    addF ("master_mix", "Dry/Wet Mix", 0.0f, 100.0f, 100.0f, "%");
 
     // New EQ560 controls follow all legacy parameters, including the master.
     for (size_t i = 0; i < rack::Eq560::bandIds.size(); ++i)
@@ -82,6 +85,7 @@ RackStripProcessor::RackStripProcessor()
     modules[Fet]     = std::make_unique<rack::FetModule>     (apvts, "fet_");
     modules[Limiter] = std::make_unique<rack::LimiterModule> (apvts, "lim_");
     masterLevel = apvts.getRawParameterValue ("master_level");
+    mixAmount   = apvts.getRawParameterValue ("master_mix");
 }
 
 bool RackStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -100,6 +104,7 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
         latency += m->getLatencySamples();
     }
     setLatencySamples (latency);   // constant regardless of order or bypass
+    dryBuffer.setSize (2, juce::jmax (1, block), false, false, true);
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     meters.prepare (sr, block);
@@ -108,17 +113,39 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
 void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+    const int numSamples = buffer.getNumSamples();
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
-        buffer.clear (c, 0, buffer.getNumSamples());
+        buffer.clear (c, 0, numSamples);
+
+    // Keep the untouched input for the parallel (dry/wet) blend. Prepared in prepareToPlay;
+    // grown here only if the host sends a larger block than it declared.
+    if (dryBuffer.getNumChannels() < buffer.getNumChannels() || dryBuffer.getNumSamples() < numSamples)
+        dryBuffer.setSize (juce::jmax (buffer.getNumChannels(), dryBuffer.getNumChannels()),
+                           juce::jmax (numSamples, dryBuffer.getNumSamples()), false, false, true);
+    for (int c = 0; c < buffer.getNumChannels(); ++c)
+        dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
 
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
 
     // The master always follows the complete rack, independently of module order.
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
-    masterGain.applyGain (buffer, buffer.getNumSamples());
+    masterGain.applyGain (buffer, numSamples);
 
-    // Metering tap sits AFTER the master so the meters show what actually leaves the plugin.
+    // Dry/wet blend AFTER the master, so the mix control scales the finished signal
+    // against the original input (classic parallel processing).
+    const float wet = juce::jlimit (0.0f, 1.0f, mixAmount->load() * 0.01f);
+    if (wet < 0.9999f)
+    {
+        const float dry = 1.0f - wet;
+        for (int c = 0; c < buffer.getNumChannels(); ++c)
+        {
+            buffer.applyGain (c, 0, numSamples, wet);
+            buffer.addFrom (c, 0, dryBuffer, c, 0, numSamples, dry);
+        }
+    }
+
+    // Metering tap sits AFTER the master and the mix, so the meters show what actually leaves.
     meters.process (buffer);
 }
 

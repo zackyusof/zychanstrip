@@ -1875,8 +1875,11 @@ private:
         addAndMakeVisible (s);
     }
 
-    std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
+    // Declaration order matters: members are destroyed in reverse, so the sliders must be
+    // declared BEFORE the attachments that reference them (otherwise the attachment's
+    // destructor calls removeListener() on an already-freed Slider).
     Slider gain, ceiling, release, fader;
+    std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
     Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;

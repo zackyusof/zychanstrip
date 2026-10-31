@@ -107,7 +107,12 @@ void MeterPanel::tick()
     }
     const float c = m.correlation();
     corrSmoothed += (c - corrSmoothed) * 0.4f;
-    repaint();
+
+    // Never repaint while the editor is being torn down. A Timer firing during app quit used to
+    // post a message after the editor's handles were gone (crash in MessageQueue::post on a null
+    // mutex). Skipping repaint while invisible or mid-destruction makes the timer harmless.
+    if (isShowing() && ! isCurrentlyBlockedByAnotherModalComponent())
+        repaint();
 }
 
 void MeterPanel::resized()

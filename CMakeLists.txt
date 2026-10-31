@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(RackStrip VERSION 0.1.0)
+project(zychanstrip VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,12 +22,13 @@ else()
     set(PLUGIN_FORMATS "")
 endif()
 
-juce_add_plugin(RackStrip
-    COMPANY_NAME "YourCompany"
-    PLUGIN_MANUFACTURER_CODE Ycmp
-    PLUGIN_CODE Rkst
+juce_add_plugin(zychanstrip
+    COMPANY_NAME "ZYUSOF"
+    PLUGIN_MANUFACTURER_CODE ZYUS
+    PLUGIN_CODE Zych
     FORMATS ${PLUGIN_FORMATS}
-    PRODUCT_NAME "Rack Strip"
+    PRODUCT_NAME "zychanstrip"
+    BUNDLE_ID "net.zyusof.zychanstrip"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -35,19 +36,19 @@ juce_add_plugin(RackStrip
     AU_MAIN_TYPE kAudioUnitType_Effect
     VST3_CATEGORIES Fx Dynamics EQ)
 
-target_sources(RackStrip PRIVATE
+target_sources(zychanstrip PRIVATE
     Source/Modules.h
     Source/PluginProcessor.h
     Source/PluginProcessor.cpp
     Source/PluginEditor.h
     Source/PluginEditor.cpp)
 
-target_compile_definitions(RackStrip PUBLIC
+target_compile_definitions(zychanstrip PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0)
 
-target_link_libraries(RackStrip
+target_link_libraries(zychanstrip
     PRIVATE
         juce::juce_audio_utils
         juce::juce_dsp
@@ -61,5 +62,5 @@ if(APPLE)
     set_source_files_properties(THIRD_PARTY_NOTICES.md PROPERTIES
         HEADER_FILE_ONLY TRUE
         MACOSX_PACKAGE_LOCATION Resources)
-    target_sources(RackStrip_AU PRIVATE THIRD_PARTY_NOTICES.md)
+    target_sources(zychanstrip_AU PRIVATE THIRD_PARTY_NOTICES.md)
 endif()

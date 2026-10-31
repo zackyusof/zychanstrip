@@ -40,6 +40,8 @@ public:
 
     float getAutoGainCompensation() const { return modules[Limiter]->gainCompDb.load(); }
 
+    float getLimiterOutput() const { return modules[Limiter]->outPeak.load(); }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:

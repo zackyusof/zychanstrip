@@ -11,7 +11,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLa
     {
         layout.add (std::make_unique<juce::AudioParameterFloat> (
             juce::ParameterID { id, 1 }, name, juce::NormalisableRange<float> (lo, hi, 0.0f, skew), def,
-            juce::AudioParameterFloatAttributes().withLabel (unit)));
+            juce::AudioParameterFloatAttributes()
+                .withLabel (unit)
+                .withStringFromValueFunction ([] (float v, int) { return juce::String (v, 1); })
+                .withValueFromStringFunction ([] (const juce::String& t) { return t.getFloatValue(); })));
     };
     auto addB = [&] (const juce::String& id, const juce::String& name, bool def)
     {

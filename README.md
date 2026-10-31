@@ -1,4 +1,4 @@
-# RackStrip
+# zychanstrip
 
 A four-module channel strip for macOS as an **Audio Unit (AU) effect**, built with JUCE 8 and designed
 to feel like four pieces of outboard gear bolted into one rack. Every module is a separate face plate
@@ -8,14 +8,14 @@ match, and the order is saved with your session.
 The interface is a photo-real rendering of that rack: brushed and anodised metal faces, bevelled
 screws, machined knobs with printed scales, a brass VU movement and segmented LED ladders. There are
 no bitmap assets — everything is drawn procedurally, so the panel stays sharp at any scale.
-The compact 1080 × 760 interface resizes from 864 × 608 to 1620 × 1140 while keeping its proportions;
-drag the lower-right corner to resize it.
+The interface defaults to its smallest compact size (**864 × 608**) and resizes up to **1620 × 1140** while
+keeping its fixed 27:19 aspect ratio; drag the lower-right corner to resize it.
 
 ---
 
 ## Contents
 
-- [The four modules](#the-four-modules)
+- [The four modules & analog color](#the-four-modules--analog-color)
 - [Signal flow and audio routing](#signal-flow-and-audio-routing)
 - [Latency and phase](#latency-and-phase)
 - [Channel handling](#channel-handling)
@@ -27,7 +27,10 @@ drag the lower-right corner to resize it.
 
 ---
 
-## The four modules
+## The four modules & analog color
+
+Each module features an authentic analog color and saturation model capturing the non-linearities,
+transformer iron, tube warmth, and op-amp drive of classic hardware:
 
 ### 1. Dedicated API 560 Graphic EQ
 
@@ -35,17 +38,21 @@ The first plate is an authentic hardware-styled recreation of the classic ten-ba
 full-height vertical fader travel, brushed dark faceplate, authentic API twin op-amp chevron emblem,
 mounting screw cutouts, and a hardware **IN** toggle switch.
 
+**Analog Color Model:**
+- **API 2520 Discrete Op-Amp & 2503 Transformer**: Models the discrete op-amp's punchy, forward midrange
+  with subtle second-harmonic asymmetry and third-harmonic transformer iron core saturation (`apiConsoleColor`),
+  producing the signature American console drive when pushed.
+
 **EQ Bands**
 
 | Band | Frequency | Range | Default | Notes |
 | --- | --- | --- | --- | --- |
-| Band 1–10 | 16k, 8k, 4k, 2k, 1k, 500, 250, 125, 63, 31 Hz | ±12 dB each | 0 dB | Ten fixed proportional-Q bands; red cap on 500 Hz |
+| Band 1–10 | 16k, 8k, 4k, 2k, 1k, 500, 250, 125, 63, 31 Hz | ±12 dB each | 0.0 dB | Ten fixed proportional-Q bands; red cap on 1 kHz |
 | IN Switch | – | on / off | on | Hardware bypass switch for the 560 module |
 
 The EQ core is a C++ adaptation of [chokehold’s EQ 560](https://github.com/chkhld/jsfx/blob/f6d175d8253375a51832fd52aa86482c191caadc/Equalizer/eq_560.jsfx),
 from `chkhld/jsfx` (MIT license). It ports the state-variable peak filters, proportional-Q curve (bandwidth
-narrows as boost/cut increases) and 2× Butterworth oversampling. Upstream random noise, idle blanking,
-and fixed character bumps are omitted. Attribution and license are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+narrows as boost/cut increases) and 2× Butterworth oversampling. Attribution and license are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 and the installed AU resources.
 
 *Note on legacy dynamics parameters:* The original channel strip dynamics controls (`con_thresh`, `con_ratio`,
@@ -58,10 +65,15 @@ faceplate, the module is dedicated purely to the API 560 graphic EQ.
 An optical-style leveller with a program-dependent, two-stage release — designed to breathe rather than
 pump.
 
+**Analog Color Model:**
+- **12AX7 / 12BH7 Triode Tube & UTC Transformer**: Models the warm, rich even-order harmonic distortion
+  (predominantly 2nd harmonic) and gentle musical saturation of the classic Teletronix LA-2A tube circuit
+  (`optoTubeColor`), giving vocals and bass full, thick analog body.
+
 | Control | Range | Default | Notes |
 | --- | --- | --- | --- |
-| Gain | 0 – 100 | 0 | Make-up, up to +30 dB |
-| Peak Reduction | 0 – 100 | 0 | Drives a threshold from 0 down to −40 dB |
+| Gain | 0 – 100 | 0.0 | Make-up, up to +30 dB |
+| Peak Reduction | 0 – 100 | 0.0 | Drives a threshold from 0 down to −40 dB |
 | ON (LIMIT) | on / off | off | **Compress (3:1) ⇄ Limit (12:1)** — a real parameter (`opto_mode`) |
 | Meter | – | on | Faceplate lamp only; this unit always reads reduction |
 
@@ -76,12 +88,16 @@ while sustained level is held — the behaviour that gives optical compressors t
 A fast FET-style compressor: **input drives a fixed threshold**, which is how these units are actually
 used — you push the input to get more compression and pull the output back to compensate.
 
+**Analog Color Model:**
+- **Class-A FET & 11754 Transformer**: Models the aggressive odd-order harmonics (predominantly 3rd harmonic)
+  and fast transient bite of the 1176 LN revision (`fetColor`), providing punch, snap, and grit when driven hard.
+
 | Control | Range | Default | Notes |
 | --- | --- | --- | --- |
-| Input | 0 – 30 dB | 0 dB | Drives the input stage into a fixed −10 dB threshold |
-| Output | −20 – +20 dB | 0 dB | |
-| Attack | 1 – 7 | 3 | Mapped to 0.8 ms (1) … 0.02 ms (7) — higher is faster |
-| Release | 1 – 7 | 4 | Mapped to 1100 ms (1) … 50 ms (7) |
+| Input | 0 – 30 dB | 0.0 dB | Drives the input stage into a fixed −10 dB threshold |
+| Output | −20 – +20 dB | 0.0 dB | Output makeup |
+| Attack | 1 – 7 | 3.0 | Mapped to 0.8 ms (1) … 0.02 ms (7) — higher is faster |
+| Release | 1 – 7 | 4.0 | Mapped to 1100 ms (1) … 50 ms (7) |
 | Ratio | 4 / 8 / 12 / 20 / 30 | 4:1 | Backlit button bank (labelled `4:1 … ALL`) |
 
 Attack and release are deliberately inverted against their panel numbers to match the hardware
@@ -91,12 +107,17 @@ convention (a higher number is a faster position). The small backlit dial is a g
 
 A look-ahead brick-wall limiter, intended as the last stage.
 
+**Analog Color Model:**
+- **Master Console & Analog Tape Saturation**: Blends analog tape odd-harmonic compression and console bus
+  warmth with the Enhance drive circuit (`analogMasterSaturation`), avoiding harsh digital clipping while
+  maintaining precise peak ceilings.
+
 | Control | Range | Default | Notes |
 | --- | --- | --- | --- |
-| Gain | 0 – 18 dB | 0 dB | Drives the limiter |
+| Gain | 0 – 18 dB | 0.0 dB | Drives the limiter |
 | Ceiling | −12 – 0 dB | −0.3 dB | Absolute output ceiling |
-| Release | 10 – 1000 ms | 100 ms | |
-| Enhance | 0 – 100 | 0 | Adds up to 12 dB of drive plus a harmonic blend |
+| Release | 10 – 1000 ms | 100.0 ms | Limiter recovery |
+| Enhance | 0 – 100 | 0.0 | Adds up to 12 dB of drive plus harmonic tape blend |
 | Auto Gain | on/off | on | Compensates this module’s input/output RMS level |
 
 The limiter uses a sliding minimum over the look-ahead window followed by a moving average.
@@ -107,11 +128,13 @@ stereo RMS estimates, then applies smoothed compensation. It compensates changes
 including Enhance and drive; it does not compensate earlier EQ/compressor stages or the manual Master.
 It is enabled in new instances and can be switched off. Older saved sessions restore with Auto Gain off.
 Compensation is bounded to ±36 dB, with 200 ms RMS estimation and 100 ms correction smoothing.
-Matching is also bounded by the limiter ceiling, so exact level matching is not
-possible when the input itself exceeds the ceiling. This is RMS matching, not LUFS normalization.
 
-The two tall ladders show gain reduction (amber) and output level (green through blue). They always
-show activity so the panel reads like the hardware even when nothing is being limited.
+**Meters & Idle Blanking:**
+The two tall ladders show gain reduction (amber, Ladder A) and true audio output level (green through cyan, Ladder B).
+The meters feature active idle blanking: when no audio is passing through or when the module is not processing,
+both ladders completely extinguish (0 LEDs lit) and the reduction readout blanks, keeping the rack quiet
+and uncluttered during pauses. When limiting, Ladder A tracks reduction and displays `"-X.X dB"`, while Ladder B
+tracks real output peak level.
 
 ---
 
@@ -224,7 +247,7 @@ The plugin is an **Audio Unit Effect** (`aufx`) supporting both full stereo and 
 ### 3. Latency & bypass phase consistency
 - **Constant Lookahead Delay**: The Limiter delay line runs sample-exact (`ceil(0.0015 × sr) − 1` samples, ~1.375 ms at 48 kHz) in both active and bypassed states (`runLimiter(buf, false)` continues buffering).
 - **Phase alignment in DAW mix**: Bypassing individual modules or dragging plates to change rack order does not alter plugin latency, completely eliminating comb filtering or timing drift against parallel tracks in your DAW.
-- The plugin is **not** a synth, declares no MIDI input or output, and does not report a tail beyond its latency. It declares itself as `kAudioUnitType_Effect` with subtype `Rkst` and manufacturer `Ycmp`.
+- The plugin is **not** a synth, declares no MIDI input or output, and does not report a tail beyond its latency. It declares itself as `kAudioUnitType_Effect` with subtype `Zych` and manufacturer `ZYUS`.
 
 ---
 
@@ -243,6 +266,8 @@ preset cannot produce a chain with a missing or duplicated stage.
 ## Parameters
 
 40 automated parameters in total, including ten graphic-EQ bands and Enhance Auto Gain.
+All floating-point parameter values and slider popup displays are cleanly rounded to **1 decimal place**
+(e.g. `20.0 Hz`, `-0.3 dB`, `100.0 ms`, `4.0 : 1`).
 
 | Module | Prefix | Parameters |
 | --- | --- | --- |
@@ -250,7 +275,7 @@ preset cannot produce a chain with a missing or duplicated stage.
 | Opto | `opto_` | `bypass`, `peak`, `gain`, `mode` |
 | FET | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` (choice) |
 | Limiter | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance`, `auto_gain` |
-| Master | `master_` | `level` (−60 … +6 dB, default 0 dB) |
+| Master | `master_` | `level` (−60 … +6 dB, default 0.0 dB) |
 
 The six old four-band EQ parameters (`con_lf`, `con_lmf_f`, `con_lmf`, `con_hmf_f`,
 `con_hmf`, `con_hf`) remain registered at their existing host indices but are inactive after replacement.
@@ -276,7 +301,7 @@ The build targets **AU only** and is configured for **arm64** (see `CMakeLists.t
 `COPY_PLUGIN_AFTER_BUILD` enabled the bundle is installed to:
 
 ```
-~/Library/Audio/Plug-Ins/Components/Rack Strip.component
+~/Library/Audio/Plug-Ins/Components/zychanstrip.component
 ```
 
 If you have no system CMake, a pip install works and lands here:
@@ -289,7 +314,7 @@ export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 ### Validating the AU
 
 ```bash
-auval -v aufx Rkst Ycmp
+auval -v aufx Zych ZYUS
 ```
 
 If a host or `auval` reports *"didn't find the component"* while the bundle is definitely installed, the
@@ -300,11 +325,14 @@ build problem:
 sudo launchctl kickstart -k system/com.apple.audio.AudioComponentRegistrar
 ```
 
-### Changing the identity before shipping
+### Identity and configuration
 
-Set `COMPANY_NAME`, `PLUGIN_MANUFACTURER_CODE` (exactly four characters, at least one uppercase) and
-`PLUGIN_CODE` in `CMakeLists.txt`. Distributing AU builds outside your own machine needs code signing
-and notarization.
+The plugin ID is configured as `zychanstrip`:
+- `PRODUCT_NAME`: `zychanstrip`
+- `BUNDLE_ID`: `net.zyusof.zychanstrip`
+- `COMPANY_NAME`: `ZYUSOF`
+- `PLUGIN_MANUFACTURER_CODE`: `ZYUS`
+- `PLUGIN_CODE`: `Zych`
 
 ---
 

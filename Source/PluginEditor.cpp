@@ -941,11 +941,12 @@ public:
         addAndMakeVisible (bypass);
     }
 
-    void tick()
+    virtual void tick()
     {
         const float target = proc.getGainReduction (moduleId);
         gr += (target - gr) * 0.35f;
         if (std::abs (target - gr) < 0.002f) gr = target;
+        if (gr < 0.05f) gr = 0.0f;
         repaint();
     }
 
@@ -1036,6 +1037,7 @@ protected:
         k.slider.setRotaryParameters (MathConstants<float>::pi * 1.22f, MathConstants<float>::pi * 2.78f, true);
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
+        k.slider.setNumDecimalPlacesToDisplay (1);
         k.slider.setPopupDisplayEnabled (true, true, nullptr);
         k.slider.setDoubleClickReturnValue (true, k.slider.getDoubleClickReturnValue());
         k.att = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + id, k.slider);
@@ -1132,6 +1134,7 @@ public:
             // In the API 560 photo: 1K (index 4) has the iconic red cap!
             band.slider.setColour (Slider::thumbColourId, i == 4 ? Colour (0xffd8262a) : Colour (0xffe6e9e4));
             band.slider.setTextValueSuffix (" dB");
+            band.slider.setNumDecimalPlacesToDisplay (1);
             band.slider.setPopupDisplayEnabled (true, true, nullptr);
             band.slider.setDoubleClickReturnValue (true, 0.0);
             band.att = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + ids[i], band.slider);
@@ -1434,6 +1437,7 @@ public:
 
         fader.setSliderStyle (Slider::LinearVertical);
         fader.setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
+        fader.setNumDecimalPlacesToDisplay (1);
         fader.setPopupDisplayEnabled (true, true, nullptr);
         faderAtt = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "lim_enhance", fader);
         addAndMakeVisible (fader);
@@ -1503,15 +1507,30 @@ protected:
         }
     }
 
+    void tick() override
+    {
+        ModulePanel::tick();
+        const float targetOut = proc.getLimiterOutput();
+        outLevel += (targetOut - outLevel) * 0.35f;
+        if (std::abs (targetOut - outLevel) < 0.001f) outLevel = targetOut;
+        if (outLevel < 0.001f) outLevel = 0.0f;
+    }
+
     void paintMeter (Graphics& g) override
     {
-        const float red = jlimit (0.0f, 1.0f, gr / 14.0f);
-        paintLadder (g, ladderA.toFloat(), red * 0.85f + 0.06f, Colour (0xffc06a10), Colour (0xffffd23a), 28);
-        paintLadder (g, ladderB.toFloat(), juce::jlimit (0.0f, 1.0f, 0.30f + red * 0.55f),
-                     Colour (0xff17b04a), Colour (0xff5fe1f5), 28);
+        // Enhance module meter fix: display nothing when not processing
+        const float red = gr > 0.05f ? jlimit (0.0f, 1.0f, gr / 14.0f) : 0.0f;
+        const float outDb = outLevel > 1.0e-5f ? Decibels::gainToDecibels (outLevel) : -100.0f;
+        const float outNorm = outDb > -48.0f ? jlimit (0.0f, 1.0f, (outDb + 48.0f) / 48.0f) : 0.0f;
 
-        engraveText (g, "-" + String (gr, 1) + " dB", { ladderA.getX() - 18, ladderA.getBottom() + 8, ladderA.getWidth() + 36, 16 },
-                     Justification::centred, 11.0f, labelColour, false);
+        paintLadder (g, ladderA.toFloat(), red, Colour (0xffc06a10), Colour (0xffffd23a), 28);
+        paintLadder (g, ladderB.toFloat(), outNorm, Colour (0xff17b04a), Colour (0xff5fe1f5), 28);
+
+        if (gr >= 0.1f)
+        {
+            engraveText (g, "-" + String (gr, 1) + " dB", { ladderA.getX() - 18, ladderA.getBottom() + 8, ladderA.getWidth() + 36, 16 },
+                         Justification::centred, 11.0f, labelColour, false);
+        }
     }
 
 private:
@@ -1521,6 +1540,7 @@ private:
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> faderAtt;
     Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
+    float outLevel = 0.0f;
 };
 
 //==============================================================================
@@ -1563,6 +1583,7 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     // Host-automatable output trim after the complete module chain
     masterFader.setName ("Master level");
     masterFader.setTextValueSuffix (" dB");
+    masterFader.setNumDecimalPlacesToDisplay (1);
     masterFader.setPopupDisplayEnabled (true, true, this);
     masterFader.setDoubleClickReturnValue (true, 0.0);
     masterFader.setColour (Slider::thumbColourId, Colours::white);
@@ -1572,7 +1593,7 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     setResizable (true, true);
     setResizeLimits (864, 608, 1620, 1140);
     getConstrainer()->setFixedAspectRatio ((double) kEditorW / kEditorH);
-    setSize (kEditorW, kEditorH);
+    setSize (864, 608);
     startTimerHz (30);
 }
 

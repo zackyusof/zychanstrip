@@ -20,7 +20,7 @@ OUT = os.path.join(BUILD, "snapshot")
 os.makedirs(OUT, exist_ok=True)
 
 ninja = open(os.path.join(BUILD, "build.ninja")).read().split("\n")
-start = next(i for i, l in enumerate(ninja) if "CMakeFiles/RackStrip.dir/Source/PluginEditor.cpp.o:" in l)
+start = next(i for i, l in enumerate(ninja) if "Source/PluginEditor.cpp.o:" in l)
 block = ninja[start:start + 12]
 vars_ = {}
 for line in block:
@@ -42,8 +42,9 @@ cmd = [cxx] + flags + defines + includes + ["-isysroot", sdk, "-c", src, "-o", o
 print("compile:", " ".join(cmd[:6]), "...")
 subprocess.check_call(cmd)
 
+target_name = "zychanstrip" if os.path.exists(os.path.join(BUILD, "CMakeFiles", "zychanstrip.dir")) else "RackStrip"
 objs = []
-for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", "RackStrip.dir")):
+for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")):
     for f in files:
         if not f.endswith(".o"):
             continue

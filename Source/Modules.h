@@ -48,6 +48,55 @@ inline float softClip (float x)
 }
 
 //==============================================================================
+// Analog Color & Saturation Models
+//==============================================================================
+
+/** API 2520 discrete op-amp & 2503 output transformer analog saturation.
+    Produces API's classic punchy midrange with subtle 2nd harmonic asymmetry
+    and 3rd harmonic transformer iron saturation. */
+inline float apiConsoleColor (float x)
+{
+    const float x2 = x * x;
+    const float shaped = x - 0.032f * x2 + 0.018f * x * x2;
+    return std::tanh (shaped * 1.035f) * 0.966f;
+}
+
+/** Teletronix LA-2A 12AX7/12BH7 triode vacuum tube & UTC transformer analog color.
+    Produces rich even-order (2nd harmonic) tube warmth with soft musical compression. */
+inline float optoTubeColor (float x)
+{
+    const float x2 = x * x;
+    const float tube = x + 0.075f * (x2 - std::abs (x) * x) - 0.025f * x * x2;
+    const float a = std::abs (tube);
+    if (a < 0.55f) return tube;
+    const float sign = tube < 0.0f ? -1.0f : 1.0f;
+    return sign * (0.55f + 0.45f * std::tanh ((a - 0.55f) / 0.45f));
+}
+
+/** Urei / UA 1176 Class-A FET gain reduction & 11754 output transformer analog color.
+    Produces aggressive odd harmonics (predominantly 3rd harmonic), punchy bite and transformer iron saturation. */
+inline float fetColor (float x)
+{
+    const float a = std::abs (x);
+    if (a < 0.30f)
+        return x * (1.0f - 0.06f * x * x);
+    const float sign = x < 0.0f ? -1.0f : 1.0f;
+    return sign * (0.30f + 0.70f * std::tanh ((a - 0.30f) / 0.70f));
+}
+
+/** Master console & tape saturation with Enhance harmonic exciter.
+    Blends analog tape 3rd harmonic compression with subtle transformer warmth. */
+inline float analogMasterSaturation (float x, float enh)
+{
+    if (enh <= 0.0f)
+        return x;
+    const float drive = 1.0f + enh * 0.45f;
+    const float driven = x * drive;
+    const float tape = std::tanh (driven);
+    return (1.0f - enh * 0.35f) * x + (enh * 0.35f) * (tape / drive);
+}
+
+//==============================================================================
 class Module
 {
 public:
@@ -55,17 +104,18 @@ public:
         : apvts (s), prefix (std::move (paramPrefix)) {}
     virtual ~Module() = default;
 
-    virtual void prepare (double sr, int /*maxBlock*/) { sampleRate = sr; }
+    virtual void prepare (double sr, int /*maxBlock*/) { sampleRate = sr; outPeak.store (0.0f); }
     virtual int  getLatencySamples() const { return 0; }
 
     void run (juce::AudioBuffer<float>& buf)
     {
-        if (get ("bypass") > 0.5f) { processBypassed (buf); grDb.store (0.0f); }
+        if (get ("bypass") > 0.5f) { processBypassed (buf); grDb.store (0.0f); outPeak.store (0.0f); }
         else                         process (buf);
     }
 
     std::atomic<float> grDb { 0.0f };   // gain reduction for the UI meter
     std::atomic<float> gainCompDb { 0.0f }; // Enhance Auto Gain correction, stereo linked
+    std::atomic<float> outPeak { 0.0f }; // Output peak level for UI meters
 
 protected:
     virtual void process (juce::AudioBuffer<float>&) = 0;
@@ -112,7 +162,10 @@ protected:
         {
             eq.beginSample();
             for (int ch = 0; ch < nch; ++ch)
-                buf.setSample (ch, i, (float) eq.processSample (ch, buf.getSample (ch, i)));
+            {
+                const float s = (float) eq.processSample (ch, buf.getSample (ch, i));
+                buf.setSample (ch, i, apiConsoleColor (s));
+            }
         }
         grDb.store (0.0f);
     }
@@ -165,7 +218,7 @@ protected:
 
             const float g = dbToGain (-applied) * makeup;
             for (int ch = 0; ch < nch; ++ch)
-                buf.getWritePointer (ch)[i] = softClip (buf.getSample (ch, i) * g);
+                buf.getWritePointer (ch)[i] = optoTubeColor (buf.getSample (ch, i) * g);
         }
         grDb.store (maxGr);
     }
@@ -208,7 +261,7 @@ protected:
             maxGr = std::max (maxGr, env);
             const float g = dbToGain (-env) * outG;
             for (int ch = 0; ch < nch; ++ch)
-                buf.getWritePointer (ch)[i] = softClip (buf.getSample (ch, i) * g);
+                buf.getWritePointer (ch)[i] = fetColor (buf.getSample (ch, i) * g);
         }
         grDb.store (maxGr);
     }
@@ -257,6 +310,7 @@ private:
         const float rC = timeCoef (get ("release"), sampleRate);
         const bool autoGain = active && autoGainParameter->load() > 0.5f;
         float minG = 1.0f;
+        float blockOutPeak = 0.0f;
 
         for (int i = 0; i < n; ++i)
         {
@@ -267,7 +321,7 @@ private:
                 const float dry = buf.getSample (ch, i);
                 dryDelay[ch][(size_t) wp] = dry;
                 float x = dry * drive;
-                if (active && enh > 0.0f) x = x + (std::tanh (x) - x) * enh * 0.5f;
+                if (active) x = analogMasterSaturation (x, enh);
                 in[ch] = x;
                 pk = std::max (pk, std::abs (x));
             }
@@ -311,11 +365,16 @@ private:
             // Linked safety gain preserves the stereo image while keeping the existing ceiling.
             const float safety = active && outputPeak > ceil ? ceil / outputPeak : 1.0f;
             for (int ch = 0; ch < nch; ++ch)
-                buf.setSample (ch, i, wet[ch] * compensation * safety);
+            {
+                const float s = wet[ch] * compensation * safety;
+                buf.setSample (ch, i, s);
+                blockOutPeak = std::max (blockOutPeak, std::abs (s));
+            }
             wp = (wp + 1) % la;
         }
         grDb.store (active ? -gainToDb (minG) : 0.0f);
         gainCompDb.store (active ? compensationDb : 0.0f);
+        outPeak.store (active ? blockOutPeak : 0.0f);
     }
 
     std::atomic<float>* autoGainParameter;

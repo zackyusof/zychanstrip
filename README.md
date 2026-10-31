@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/screenshots/zychanstrip-rack.jpg" alt="zychanstrip — Mastering & Tracking Rack" width="100%">
+</p>
+
 # zychanstrip
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS

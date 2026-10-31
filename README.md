@@ -29,6 +29,7 @@ In a world filled with flat, generic digital plugins, **zychanstrip** is built f
 * **Instant Drag-and-Drop Modular Reordering**: Want EQ before compression? Or opto leveling feeding aggressive FET limiting? Simply grab the six-dot chassis grip and drag. The audio engine switches order atomically on buffer boundaries—completely glitch-free, with the order saved right into your DAW session.
 * **Rock-Solid Phase & Constant-Latency Guarantee**: Moving modules or toggling bypass states never changes plugin latency by even a single sample. Your DAW mix stays 100% phase-aligned with zero comb filtering or timing drift against parallel tracks.
 * **True Stereo Link with Zero Stereo Drift**: Detectors evaluate unified stereo energy across both channels to apply identical scalar gain reduction, guaranteeing zero image tilt or center collapsing even under heavy compression.
+* **Full Mouse Scroll Wheel Control on All Knobs & Faders**: Hover and scroll over any rotary knob, horizontal EQ fader, vertical Enhance slider, or the master level bar for effortless, tactile parameter tweaks without click-fatigue.
 * **100% Procedural Resolution-Independent Retina Graphics**: Zero bitmap PNGs or compressed image strips. Every knob skirt, bezel screw, brushed hair texture, specular reflection, and needle shadow is rendered procedurally in real-time. Resizes smoothly from compact **864 × 608** up to **1620 × 1140** while locking an optimal 27:19 hardware aspect ratio.
 * **Studio-Grade Vintage Broadcast VU Meters**: Precision ANSI C16.5 / IEEE 152 ballistic meters with authentic logarithmic scaling, red overload saturation zones, knife-edge tapered needles, and incandescent tungsten illumination.
 
@@ -223,6 +224,14 @@ To re-order the signal chain, click and drag the **six-dot chassis grip** above 
 | **FET** | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` (4:1, 8:1, 12:1, 20:1, ALL) |
 | **Limiter** | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance`, `auto_gain` |
 | **Master** | `master_` | `level` (−60.0 to +6.0 dB, double-click restores 0.0 dB unity) |
+
+### Tactile Control & Mouse Wheel Interaction
+
+Every knob and slider across all four modules and the master bar supports intuitive mouse wheel and trackpad control:
+* **Hover & Scroll**: Hover the cursor over any rotary knob, 10-band EQ fader, the vertical Enhance fader, or the horizontal Master level slider and use your mouse wheel or trackpad scroll gesture for smooth, incremental parameter adjustment without needing to click-and-drag.
+* **Fine-Tuning Precision**: Hold `Shift` while scrolling or dragging for high-resolution micro-adjustments.
+* **Instant Default Reset**: Double-click any control to instantly restore its default/unity position (e.g. 0.0 dB on all EQ bands and Master gain).
+* **Popup Readouts**: Hovering or dragging displays real-time precision numerical readouts rounded cleanly to 1 decimal place.
 
 ---
 

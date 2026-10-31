@@ -33,8 +33,8 @@ const Colour faceLightTop   { 0xffe2e4e1 };
 const Colour faceLightLow   { 0xffafb2ae };
 const Colour fetTop         { 0xff181a1c };
 const Colour fetLow         { 0xff0b0d0e };
-const Colour limTop         { 0xff12182b };
-const Colour limLow         { 0xff0a0d16 };
+const Colour limTop         { 0xffeef1f4 };
+const Colour limLow         { 0xff9aa3ac };
 const Colour cream          { 0xfffcf5dc };
 const Colour creamLow       { 0xffd9c798 };
 const Colour needleInk      { 0xff18120c };
@@ -1745,16 +1745,14 @@ public:
         : ModulePanel (p, RackStripProcessor::Limiter, "lim_",
                        pal::limTop, pal::limLow, pal::engrave)
     {
-        setupKnob (gain,    "gain",    pal::blackCap, Colour (0xffffb000));
-        setupKnob (ceiling, "ceiling", pal::blackCap, Colour (0xffffb000));
-        setupKnob (release, "release", pal::blackCap, Colour (0xffffb000));
+        // All four controls are vertical sliders so they read as one bank, matching ENHANCE.
+        labelColour = Colour (0xff1b2027);   // dark engraving on the polished plate
+        bypass.setColour (ToggleButton::textColourId, labelColour);
+        setupFader (gain,    "gain");
+        setupFader (ceiling, "ceiling");
+        setupFader (release, "release");
+        setupFader (fader,   "enhance");
 
-        fader.setSliderStyle (Slider::LinearVertical);
-        fader.setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
-        fader.setNumDecimalPlacesToDisplay (1);
-        fader.setPopupDisplayEnabled (true, true, nullptr);
-        faderAtt = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "lim_enhance", fader);
-        addAndMakeVisible (fader);
         autoGain.setName ("Auto Gain");
         autoGain.setButtonText ("AUTO GAIN");
         autoGain.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
@@ -1766,59 +1764,77 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int kh = 70;
-        const int kw = c.getWidth() / 3;
-        const int ky = c.getY() + 26;
-        place (gain,    { c.getX(),                ky, kw, kh });
-        place (ceiling, { c.getX() + kw,           ky, kw, kh });
-        place (release, { c.getX() + kw * 2,       ky, kw, kh });
+        // Left: a bank of four vertical sliders. Right: both meters side by side.
+        const int meterZone = 66;                      // reserves room for the two ladders
+        const int bankW = c.getWidth() - meterZone;
+        const int cellW = bankW / 4;
 
-        autoGain.setBounds (c.getCentreX() - 58, ky + kh + 10, 116, 24);
-        const int fy = ky + kh + 52;
-        const int fh = c.getBottom() - fy - 52;
-        ladderA = { c.getX() + 24, fy + 22, 26, fh };
-        ladderB = { c.getRight() - 50, fy + 22, 26, fh };
-        fader.setBounds (c.getCentreX() - 26, fy, 52, fh + 22);
-        scaleRect = { c.getCentreX() - 62, fy + 22, 124, fh };
-        enhanceLabel = { c.getX(), fader.getBottom() + 2, c.getWidth(), 20 };
+        const int top = c.getY() + 24;                 // room for the captions above
+        autoGain.setBounds (c.getX() + 2, top, bankW - 8, 24);
+        const int fy = top + 34;
+        const int fh = c.getBottom() - fy - 26;
+
+        Slider* all[4] { &gain, &ceiling, &release, &fader };
+        for (int i = 0; i < 4; ++i)
+        {
+            const int cx = c.getX() + cellW * i + cellW / 2;
+            all[i]->setBounds (cx - 13, fy, 26, fh);
+        }
+
+        // Both meters together on the right edge, GR then output.
+        const int mx = c.getRight() - meterZone + 8;
+        ladderA = { mx,           fy + 22, 22, fh - 22 };
+        ladderB = { mx + 34,      fy + 22, 22, fh - 22 };
+        scaleRect = { mx - 2, fy + 22, meterZone - 6, fh - 22 };
+        enhanceLabel = { c.getX(), c.getBottom() - 20, c.getWidth(), 18 };
     }
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "THRESHOLD", { gain.slider.getBounds().getX(), gain.slider.getY() - 19, gain.slider.getBounds().getWidth(), 17 }, 9.5f);
-        caption (g, "CEILING",   { ceiling.slider.getBounds().getX(), ceiling.slider.getY() - 19, ceiling.slider.getBounds().getWidth(), 17 }, 9.5f);
-        caption (g, "RELEASE",   { release.slider.getBounds().getX(), release.slider.getY() - 19, release.slider.getBounds().getWidth(), 17 }, 9.5f);
-        caption (g, "ENHANCE", enhanceLabel, 15.0f);
+        const char* names[4] { "THRESHOLD", "CEILING", "RELEASE", "ENHANCE" };
+        Slider* all[4] { &gain, &ceiling, &release, &fader };
+        for (int i = 0; i < 4; ++i)
+        {
+            const auto b = all[i]->getBounds();
+            caption (g, names[i], Rectangle<int> (b.getX() - 8, b.getY() - 18, b.getWidth() + 16, 16), 8.5f);
+        }
 
-        // dB scale beside fader
-        g.setFont (fnt (10.0f, false));
+        // dB scale beside the meters
+        g.setFont (fnt (9.0f, false));
         for (int i = 0; i <= 6; ++i)
         {
             const float t = (float) i / 6.0f;
-            const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * t;
+            const float y = (float) ladderA.getY() + (float) ladderA.getHeight() * t;
             const int db = (int) std::round (12.0f - 24.0f * t);
             g.setColour (Colours::black.withAlpha (0.75f));
-            g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 7.0f, 26.0f, 14.0f), Justification::centredRight);
-            g.setColour (Colours::white.withAlpha (0.6f));
-            g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 8.0f, 26.0f, 14.0f), Justification::centredRight);
-        }
-        for (int i = 0; i <= 12; ++i)
-        {
-            const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * (float) i / 12.0f;
-            g.setColour (Colours::white.withAlpha (0.25f));
-            g.drawLine ((float) scaleRect.getCentreX() + 14.0f, y, (float) scaleRect.getCentreX() + 22.0f, y, 1.0f);
-            g.drawLine ((float) scaleRect.getCentreX() - 22.0f, y, (float) scaleRect.getCentreX() - 14.0f, y, 1.0f);
+            g.drawText (String (db), Rectangle<float> ((float) ladderA.getX() - 26.0f, y - 6.0f, 24.0f, 13.0f), Justification::centredRight);
+            g.setColour (Colours::white.withAlpha (0.65f));
+            g.drawText (String (db), Rectangle<float> ((float) ladderA.getX() - 26.0f, y - 7.0f, 24.0f, 13.0f), Justification::centredRight);
         }
 
-        // Slots beside ladders
-        for (auto s : { Rectangle<int> (ladderA.getX() - 14, ladderA.getY() - 6, 4, ladderA.getHeight() + 12),
-                        Rectangle<int> (ladderB.getRight() + 10, ladderB.getY() - 6, 4, ladderB.getHeight() + 12) })
-        {
-            g.setColour (Colour (0xff080a0b));
-            g.fillRoundedRectangle (s.toFloat(), 2.0f);
-            g.setColour (Colours::white.withAlpha (0.18f));
-            g.drawRoundedRectangle (s.toFloat(), 2.0f, 1.0f);
-        }
+    }
+
+    // The metre surround is painted into the face image so the ladders draw on top of it.
+    void paintFaceBase (Graphics& g) override
+    {
+        if (ladderA.isEmpty()) return;
+
+        const Rectangle<int> frame (ladderA.getX() - 10, ladderA.getY() - 16,
+                                    (ladderB.getRight() - ladderA.getX()) + 20, ladderA.getHeight() + 26);
+        g.setColour (Colour (0xff23282e));
+        g.fillRoundedRectangle (frame.toFloat(), 3.0f);
+        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.10f), 0.0f, (float) frame.getY(),
+                                           Colours::transparentWhite, 0.0f, (float) frame.getCentreY(), false));
+        g.fillRoundedRectangle (frame.toFloat(), 3.0f);
+        g.setColour (Colours::black.withAlpha (0.65f));
+        g.drawRoundedRectangle (frame.toFloat(), 3.0f, 1.0f);
+        g.setColour (Colours::white.withAlpha (0.22f));
+        g.drawRoundedRectangle (frame.reduced (1.0f).toFloat(), 2.5f, 0.8f);
+
+        g.setFont (fnt (7.5f, true));
+        g.setColour (Colour (0xffd4dae0));
+        g.drawText ("GR",  Rectangle<int> (ladderA.getX() - 4, ladderA.getY() - 12, ladderA.getWidth() + 8, 10), Justification::centred, false);
+        g.drawText ("OUT", Rectangle<int> (ladderB.getX() - 4, ladderB.getY() - 12, ladderB.getWidth() + 8, 10), Justification::centred, false);
     }
 
     void tick() override
@@ -1848,11 +1864,21 @@ protected:
     }
 
 private:
-    Knob gain, ceiling, release;
-    Slider fader;
+    void setupFader (Slider& s, const String& id)
+    {
+        s.setSliderStyle (Slider::LinearVertical);
+        s.setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
+        s.setNumDecimalPlacesToDisplay (1);
+        s.setPopupDisplayEnabled (true, true, nullptr);
+        s.setName ("limiter " + id);
+        attachments.push_back (std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + id, s));
+        addAndMakeVisible (s);
+    }
+
+    std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
+    Slider gain, ceiling, release, fader;
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> faderAtt;
     Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
     float outLevel = 0.0f;
 };

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshots/zychanstrip-rack.jpg" alt="zychanstrip — Mastering & Tracking Rack" width="100%">
+  <img src="docs/screenshots/zychanstrip-rack.png" alt="zychanstrip — Mastering & Tracking Rack" width="100%">
 </p>
 
 # zychanstrip

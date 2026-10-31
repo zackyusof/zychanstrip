@@ -256,161 +256,454 @@ void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale
     }
 }
 
-/** Photorealistic vintage VU meter with authentic tungsten backlighting, convex glass reflection,
-    and needle shadow cast onto the dial face. Works for both round (Opto) and rectangular (FET) meters. */
-void paintVuDial (Graphics& g, Rectangle<float> r, float angle, float a0, float a1,
-                  const String& leftCaption, const String& rightCaption, float labelSize,
-                  const String& unitCaption = {}, bool isRectangular = false)
+/** Authentic ANSI C16.5 / IEEE 152 broadcast VU meter ballistic deflection.
+    Returns normalized deflection (0.08 at -20 VU, 0.90 at 0 VU, 1.0 at +3 VU). */
+inline float vuDeflectionForDb (float db)
+{
+    if (db >= 0.0f)
+        return jlimit (0.0f, 1.0f, 0.90f + 0.10f * (db / 3.0f));
+    const float v = std::pow (10.0f, db / 20.0f);
+    return jlimit (0.05f, 1.0f, v * 0.90f);
+}
+
+/** Authentic large circular vintage VU meter (Teletronix LA-2A style).
+    Features precision broadcast ballistic markings, red overload sector,
+    counter-balanced knife-edge needle, molded bakelite bezel with quadrant screws,
+    and incandescent tungsten illumination. */
+void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
 {
     const auto c = r.getCentre();
+    const float R_meter = r.getWidth() * 0.5f;
 
-    // 1. Heavy moulded bakelite bezel
-    const Rectangle<float> bezel = r.expanded (jmax (6.0f, r.getHeight() * 0.065f));
-    g.setColour (Colours::black.withAlpha (0.80f));
-    if (isRectangular)
-        g.fillRoundedRectangle (bezel.translated (0.0f, 3.5f), 5.0f);
-    else
-        g.fillEllipse (bezel.translated (0.0f, 3.5f));
+    // 1. Heavy moulded black bakelite bezel with quadrant mounting screws
+    const Rectangle<float> bezel = r.expanded (4.0f);
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.fillEllipse (bezel.translated (0.0f, 3.5f));
 
-    g.setGradientFill (ColourGradient (Colour (0xff484c50), bezel.getX(), bezel.getY(),
+    g.setGradientFill (ColourGradient (Colour (0xff42464a), bezel.getX(), bezel.getY(),
                                        Colour (0xff101214), bezel.getRight(), bezel.getBottom(), false));
-    if (isRectangular)
-        g.fillRoundedRectangle (bezel, 4.0f);
-    else
-        g.fillEllipse (bezel);
+    g.fillEllipse (bezel);
 
-    // Bezel inner stepped brass/chrome retaining rim
-    g.setColour (Colours::white.withAlpha (0.35f));
-    if (isRectangular)
-        g.drawRoundedRectangle (bezel.reduced (0.8f), 4.0f, 1.2f);
-    else
-        g.drawEllipse (bezel.reduced (0.8f), 1.2f);
+    // Bezel specular highlights
+    g.setColour (Colours::white.withAlpha (0.25f));
+    g.drawEllipse (bezel.reduced (0.8f), 1.2f);
+    g.setColour (Colour (0xff0a0c0e));
+    g.drawEllipse (bezel.reduced (3.0f), 1.2f);
 
-    g.setColour (Colour (0xffb89852).withAlpha (0.60f));
-    if (isRectangular)
-        g.drawRoundedRectangle (r.expanded (1.6f), 3.0f, 1.2f);
-    else
-        g.drawEllipse (r.expanded (1.8f), 1.2f);
+    // Stepped inner brass retaining rim
+    const Rectangle<float> brassRim = r.expanded (0.5f);
+    g.setGradientFill (ColourGradient (Colour (0xffcda95e), brassRim.getX(), brassRim.getY(),
+                                       Colour (0xff685222), brassRim.getRight(), brassRim.getBottom(), false));
+    g.drawEllipse (brassRim, 2.0f);
 
-    // 2. Warm backlit dial paper
-    g.setGradientFill (ColourGradient (pal::cream, c.x, r.getY() - r.getHeight() * 0.15f,
-                                       pal::creamLow, c.x, r.getBottom() + r.getHeight() * 0.10f, false));
-    if (isRectangular)
-        g.fillRoundedRectangle (r, 3.0f);
-    else
-        g.fillEllipse (r);
+    // Bezel mounting screws at 45, 135, 225, 315 degrees
+    for (int i = 0; i < 4; ++i)
+    {
+        const float sa = MathConstants<float>::pi * (0.25f + 0.5f * (float) i);
+        const Point<float> sPos = c + Point<float> (std::sin (sa), -std::cos (sa)) * (R_meter + 1.6f);
+        const auto sRect = Rectangle<float> (6.5f, 6.5f).withCentre (sPos);
+        g.setColour (Colours::black.withAlpha (0.6f));
+        g.fillEllipse (sRect.translated (0.0f, 0.8f));
+        g.setGradientFill (ColourGradient (Colour (0xff9aa0a6), sRect.getX(), sRect.getY(),
+                                           Colour (0xff32363a), sRect.getRight(), sRect.getBottom(), false));
+        g.fillEllipse (sRect);
+        g.setColour (Colours::white.withAlpha (0.35f));
+        g.drawEllipse (sRect, 0.6f);
+        // Slotted screw head groove
+        const float slotAng = sa + 0.5f;
+        const Point<float> slotDir (std::sin (slotAng), -std::cos (slotAng));
+        g.setColour (Colour (0xff121416));
+        g.drawLine (Line<float> (sPos - slotDir * 2.2f, sPos + slotDir * 2.2f), 1.0f);
+    }
 
-    // Warm incandescent bulb glow behind the glass
-    g.setGradientFill (ColourGradient (Colour (0x55ffde82), c.x, r.getY() + r.getHeight() * 0.20f,
+    // 2. Recessed dial face paper with authentic incandescent backlighting
+    g.saveState();
+    Path clip;
+    clip.addEllipse (r);
+    g.reduceClipRegion (clip);
+
+    // Warm aged ivory paper
+    g.setGradientFill (ColourGradient (Colour (0xfffbf5e2), c.x, r.getY(),
+                                       Colour (0xffedd6a6), c.x, r.getBottom(), false));
+    g.fillEllipse (r);
+
+    // Incandescent bulb glow from top/center
+    g.setGradientFill (ColourGradient (Colour (0x62ffd97d), c.x, r.getY() + r.getHeight() * 0.28f,
                                        Colours::transparentWhite, c.x, r.getBottom(), true));
-    if (isRectangular)
-        g.fillRoundedRectangle (r, 3.0f);
-    else
-        g.fillEllipse (r);
+    g.fillEllipse (r);
 
-    g.setColour (Colour (0xff0a0907));
-    if (isRectangular)
-        g.drawRoundedRectangle (r, 3.0f, 1.4f);
-    else
-        g.drawEllipse (r, 1.6f);
+    // Recessed bezel shadow cast onto paper
+    g.setGradientFill (ColourGradient (Colour (0x55000000), c.x, r.getY(),
+                                       Colours::transparentBlack, c.x, r.getY() + 22.0f, false));
+    g.fillRect (r);
+    g.setColour (Colour (0x30000000));
+    g.drawEllipse (r.reduced (0.8f), 1.8f);
 
-    // 3. Dial scale arc & markings
-    const float pivotY = r.getY() + r.getHeight() * 0.74f;
-    const Point<float> pivot (c.x, pivotY);
-    const float radius = r.getHeight() * 0.31f;
-    auto dir = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
+    // 3. Dial scale arcs & markings
+    const Point<float> pivot (c.x, r.getY() + r.getHeight() * 0.75f);
+    const float R = r.getHeight() * 0.49f;
+    const float a0 = -0.74f; // approx -42.4 deg
+    const float a1 =  0.74f; // approx +42.4 deg
+    auto angleForT = [&] (float t) { return a0 + (a1 - a0) * t; };
+    auto dirForA = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
 
-    // Scale arc
-    Path arc; arc.addCentredArc (pivot.x, pivot.y, radius, radius, 0.0f, a0, a1, true);
-    g.setColour (pal::needleInk.withAlpha (0.85f));
-    g.strokePath (arc, PathStrokeType (1.2f));
+    // Upper VU arc: black from -20 to 0 VU (t=0.08..0.90)
+    Path blackArc;
+    blackArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
+    g.setColour (pal::needleInk);
+    g.strokePath (blackArc, PathStrokeType (1.3f));
 
-    // Dial ticks + numerals
-    const int ticks = 21;
-    for (int i = 0; i < ticks; ++i)
+    // Upper VU arc: RED overload section from 0 to +3 VU (t=0.90..1.00)
+    Path redArc;
+    redArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.90f), angleForT (1.00f), true);
+    g.setColour (Colour (0xffc82418));
+    g.strokePath (redArc, PathStrokeType (3.0f));
+
+    // Secondary modulation percentage arc below
+    const float R_sec = R - 10.0f;
+    Path secArc;
+    secArc.addCentredArc (pivot.x, pivot.y, R_sec, R_sec, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
+    g.setColour (pal::needleInk.withAlpha (0.65f));
+    g.strokePath (secArc, PathStrokeType (0.85f));
+
+    // Major VU markings
+    const struct { float db; const char* txt; } majorVu[] =
     {
-        const float a = a0 + (a1 - a0) * (float) i / (float) (ticks - 1);
-        const auto d = dir (a);
-        const bool major = (i % 4) == 0;
-        g.setColour (pal::needleInk.withAlpha (0.92f));
-        g.drawLine (Line<float> (pivot + d * radius, pivot + d * (radius + (major ? 7.0f : 4.0f))), major ? 1.4f : 0.85f);
+        { -20.0f, "-20" }, { -10.0f, "-10" }, { -7.0f, "-7" }, { -5.0f, "-5" },
+        { -3.0f, "-3" },   { -2.0f, "-2" },   { -1.0f, "-1" }, { 0.0f, "0" },
+        { 1.0f, "+1" },    { 2.0f, "+2" },    { 3.0f, "+3" }
+    };
+    for (const auto& m : majorVu)
+    {
+        const float t = vuDeflectionForDb (m.db);
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
+        const bool isRed = (m.db > 0.0f);
 
-        if (major && labelSize > 0.0f)
-        {
-            g.setFont (fnt (labelSize, false));
-            const auto centre = pivot + d * (radius + 15.0f);
-            g.drawText (String (i * 5), Rectangle<float> (20.0f, 12.0f).withCentre (centre), Justification::centred);
-        }
+        // Tick mark
+        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk);
+        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + (isRed ? 6.5f : 5.5f))), isRed ? 1.6f : 1.2f);
+
+        // Numeral
+        g.setFont (fnt (8.0f, true));
+        const Point<float> labelPos = pivot + d * (R + 11.5f);
+        g.drawText (m.txt, Rectangle<float> (22.0f, 10.0f).withCentre (labelPos), Justification::centred, false);
     }
 
-    // Dial text captions
-    if (leftCaption.isNotEmpty())
+    // Minor intermediate VU ticks
+    const float minorVu[] = { -15.0f, -9.0f, -8.0f, -6.0f, -4.0f, -2.5f, -1.5f, -0.5f, 0.5f, 1.5f, 2.5f };
+    for (float db : minorVu)
     {
-        g.setFont (fnt (jmax (8.0f, labelSize * 0.95f), false));
-        g.setColour (pal::needleInk.withAlpha (0.85f));
-        g.drawText (leftCaption, Rectangle<float> (pivot.x - radius * 0.95f, pivot.y - radius * 0.42f,
-                                                   radius * 0.95f, 11.0f), Justification::centredRight);
-    }
-    if (unitCaption.isNotEmpty())
-    {
-        g.setFont (fnt (jmax (9.0f, labelSize * 1.05f), true));
-        g.setColour (pal::needleInk.withAlpha (0.92f));
-        g.drawText (unitCaption, Rectangle<float> (pivot.x - radius * 1.35f, pivot.y + 10.0f,
-                                                   radius * 2.7f, 14.0f), Justification::centred);
-    }
-    if (rightCaption.isNotEmpty())
-    {
-        g.setFont (fnt (jmax (8.0f, labelSize * 0.95f), true));
-        g.setColour (Colour (0xffb82618));
-        g.drawText (rightCaption, Rectangle<float> (pivot.x + radius * 0.05f, pivot.y - radius * 0.42f,
-                                                    radius, 11.0f), Justification::centredLeft);
-        Path redArc;
-        redArc.addCentredArc (pivot.x, pivot.y, radius + 3.0f, radius + 3.0f, 0.0f, a1 - 0.34f, a1, true);
-        g.setColour (Colour (0xffb82618).withAlpha (0.92f));
-        g.strokePath (redArc, PathStrokeType (3.2f));
+        const float t = vuDeflectionForDb (db);
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
+        const bool isRed = (db > 0.0f);
+        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk.withAlpha (0.70f));
+        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + 3.0f)), 0.8f);
     }
 
-    // 4. Pointer needle with realistic drop shadow cast onto paper
-    const float a = a0 + (a1 - a0) * jlimit (0.0f, 1.0f, angle);
+    // Lower modulation percentage scale (0 to 100%)
+    const int pcts[] = { 0, 20, 40, 60, 80, 100 };
+    for (int p : pcts)
+    {
+        const float t = ((float) p / 100.0f) * 0.90f;
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
 
-    // Needle shadow (offset 2.2px down and right)
-    Point<float> shadowOff (2.2f, 2.2f);
-    Path shadowNeedle;
-    shadowNeedle.addRoundedRectangle (-1.0f, -(radius + 1.0f), 2.0f, radius - 1.0f, 0.9f);
-    g.setColour (Colours::black.withAlpha (0.28f));
-    g.fillPath (shadowNeedle, AffineTransform::rotation (a).translated (pivot.x + shadowOff.x, pivot.y + shadowOff.y));
+        g.setColour (pal::needleInk.withAlpha (0.75f));
+        g.drawLine (Line<float> (pivot + d * (R_sec - 3.5f), pivot + d * R_sec), 0.85f);
+
+        g.setFont (fnt (6.5f, false));
+        const Point<float> pPos = pivot + d * (R_sec - 8.5f);
+        g.drawText (String (p), Rectangle<float> (18.0f, 8.0f).withCentre (pPos), Justification::centred, false);
+    }
+
+    // Typography
+    g.setFont (fnt (7.0f, true));
+    g.setColour (pal::needleInk.withAlpha (0.75f));
+    g.drawText ("TELETRONIX", Rectangle<float> (80.0f, 10.0f).withCentre ({ c.x, pivot.y - R * 0.56f }), Justification::centred, false);
+
+    g.setFont (Font (FontOptions ("Georgia", 15.0f, Font::bold)));
+    g.setColour (pal::needleInk.withAlpha (0.92f));
+    g.drawText ("VU", Rectangle<float> (50.0f, 16.0f).withCentre ({ c.x, pivot.y - R * 0.38f }), Justification::centred, false);
+
+    g.setFont (fnt (7.5f, true));
+    g.setColour (pal::needleInk.withAlpha (0.80f));
+    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (pivot + dirForA (angleForT (0.04f)) * (R + 11.5f)), Justification::centred, false);
+
+    g.setFont (fnt (8.5f, true));
+    g.setColour (pal::needleInk.withAlpha (0.88f));
+    g.drawText ("REDUCTION", Rectangle<float> (100.0f, 12.0f).withCentre ({ c.x, pivot.y - R * 0.20f }), Justification::centred, false);
+
+    // 4. Knife-edge needle with drop shadow and counter-weight tail
+    const float needleAngle = a0 + (a1 - a0) * jlimit (0.02f, 1.0f, deflection);
+
+    // Needle drop shadow
+    const Point<float> sOff (2.2f, 2.5f);
+    Path sNeedle;
+    sNeedle.startNewSubPath (-1.2f, 0.0f);
+    sNeedle.lineTo (-0.4f, -(R + 5.0f));
+    sNeedle.lineTo ( 0.4f, -(R + 5.0f));
+    sNeedle.lineTo ( 1.2f, 0.0f);
+    sNeedle.closeSubPath();
+    g.setColour (Colours::black.withAlpha (0.24f));
+    g.fillPath (sNeedle, AffineTransform::rotation (needleAngle).translated (pivot.x + sOff.x, pivot.y + sOff.y));
 
     // Needle blade
     Path needle;
-    needle.addRoundedRectangle (-0.95f, -(radius + 1.0f), 1.9f, radius - 1.0f, 0.9f);
+    needle.startNewSubPath (-1.1f, 0.0f);
+    needle.lineTo (-0.35f, -(R + 5.0f));
+    needle.lineTo ( 0.35f, -(R + 5.0f));
+    needle.lineTo ( 1.1f, 0.0f);
+    needle.closeSubPath();
     g.setColour (pal::needleInk);
-    g.fillPath (needle, AffineTransform::rotation (a).translated (pivot.x, pivot.y));
+    g.fillPath (needle, AffineTransform::rotation (needleAngle).translated (pivot.x, pivot.y));
 
-    // Needle pivot hub
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.fillEllipse (Rectangle<float> (11.0f, 11.0f).withCentre (pivot.translated (0.0f, 1.0f)));
-    g.setGradientFill (ColourGradient (Colour (0xff2c2824), pivot.x - 3.0f, pivot.y - 3.0f,
-                                       Colour (0xff0a0806), pivot.x + 3.0f, pivot.y + 3.0f, false));
-    g.fillEllipse (Rectangle<float> (9.5f, 9.5f).withCentre (pivot));
-    g.setColour (Colours::white.withAlpha (0.45f));
-    g.drawEllipse (Rectangle<float> (9.5f, 9.5f).withCentre (pivot), 0.8f);
+    // Counter-weight tail
+    Path tail;
+    tail.addEllipse (Rectangle<float> (5.5f, 5.5f).withCentre ({ 0.0f, 9.0f }));
+    tail.addRectangle (-0.9f, 0.0f, 1.8f, 9.5f);
+    g.fillPath (tail, AffineTransform::rotation (needleAngle).translated (pivot.x, pivot.y));
+
+    // Pivot Hub
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.fillEllipse (Rectangle<float> (16.0f, 16.0f).withCentre (pivot));
+    g.setGradientFill (ColourGradient (Colour (0xffe2bf72), pivot.x - 3.0f, pivot.y - 3.0f,
+                                       Colour (0xff825d18), pivot.x + 3.0f, pivot.y + 3.0f, false));
+    g.fillEllipse (Rectangle<float> (11.0f, 11.0f).withCentre (pivot));
+    g.setColour (Colours::white.withAlpha (0.50f));
+    g.drawEllipse (Rectangle<float> (11.0f, 11.0f).withCentre (pivot), 0.8f);
 
     // 5. Curved glass dome reflection
-    g.saveState();
-    Path clip;
-    if (isRectangular)
-        clip.addRoundedRectangle (r, 3.0f);
-    else
-        clip.addEllipse (r);
-    g.reduceClipRegion (clip);
-    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.45f), r.getX() + r.getWidth() * 0.16f, r.getY(),
-                                       Colours::transparentWhite, r.getX() + r.getWidth() * 0.48f, r.getY() + r.getHeight() * 0.65f, false));
-    g.fillRect (r);
+    Path glare;
+    glare.addCentredArc (c.x, c.y, R_meter * 0.90f, R_meter * 0.90f, 0.0f, -2.1f, -0.4f, false);
+    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.35f), r.getX() + r.getWidth() * 0.22f, r.getY() + 10.0f,
+                                       Colours::transparentWhite, c.x, c.y, false));
+    g.strokePath (glare, PathStrokeType (16.0f));
 
-    // Lower glass reflection
-    g.setGradientFill (ColourGradient (Colours::transparentBlack, c.x, r.getY() + r.getHeight() * 0.50f,
-                                       Colour (0x35000000), c.x, r.getBottom(), false));
-    g.fillRect (r);
+    g.setGradientFill (ColourGradient (Colours::transparentWhite, c.x, r.getY() + r.getHeight() * 0.40f,
+                                       Colour (0x28000000), c.x, r.getBottom(), false));
+    g.fillEllipse (r);
+
+    g.restoreState();
+}
+
+/** Authentic rectangular vintage Simpson 29T meter (UREI 1176 style).
+    Features precision ballistic scale with red overload sector, signature lower
+    molded bakelite apron mask, ZERO ADJ slotted calibration screw, and long sweeping needle. */
+void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
+{
+    const auto c = r.getCentre();
+
+    // 1. Heavy moulded rectangular bakelite housing with drop shadow
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.fillRoundedRectangle (r.translated (0.0f, 3.5f), 5.0f);
+
+    g.setGradientFill (ColourGradient (Colour (0xff3e4044), r.getX(), r.getY(),
+                                       Colour (0xff111215), r.getRight(), r.getBottom(), false));
+    g.fillRoundedRectangle (r, 5.0f);
+
+    // Bezel specular border
+    g.setColour (Colours::white.withAlpha (0.22f));
+    g.drawRoundedRectangle (r.reduced (0.8f), 5.0f, 1.2f);
+    g.setColour (Colour (0xff0a0b0d));
+    g.drawRoundedRectangle (r.reduced (2.5f), 4.0f, 1.0f);
+
+    // Stepped inner metallic chrome/silver rim
+    const Rectangle<float> chromeRim = r.reduced (4.0f);
+    g.setGradientFill (ColourGradient (Colour (0xffcbced2), chromeRim.getX(), chromeRim.getY(),
+                                       Colour (0xff484a4e), chromeRim.getRight(), chromeRim.getBottom(), false));
+    g.drawRoundedRectangle (chromeRim, 3.5f, 1.5f);
+
+    // 2. Illuminated dial window
+    const Rectangle<float> inner = r.reduced (6.5f);
+    g.saveState();
+    Path winClip;
+    winClip.addRoundedRectangle (inner, 3.0f);
+    g.reduceClipRegion (winClip);
+
+    // Warm aged buff dial paper
+    g.setGradientFill (ColourGradient (Colour (0xfffaf4e1), c.x, inner.getY(),
+                                       Colour (0xffead4a0), c.x, inner.getBottom(), false));
+    g.fillRect (inner);
+
+    // Incandescent bulb illumination from top
+    g.setGradientFill (ColourGradient (Colour (0x65ffd872), c.x, inner.getY() + 14.0f,
+                                       Colours::transparentWhite, c.x, inner.getBottom(), true));
+    g.fillRect (inner);
+
+    // Recessed frame inner shadow
+    g.setGradientFill (ColourGradient (Colour (0x60000000), c.x, inner.getY(),
+                                       Colours::transparentBlack, c.x, inner.getY() + 18.0f, false));
+    g.fillRect (inner);
+    g.setColour (Colour (0x40000000));
+    g.drawRoundedRectangle (inner, 3.0f, 1.2f);
+
+    // 3. Dial scale arcs & markings
+    const Point<float> pivot (c.x, inner.getBottom() + 4.0f);
+    const float R = inner.getHeight() * 0.70f;
+    const float a0 = -0.64f; // approx -36.7 deg
+    const float a1 =  0.64f; // approx +36.7 deg
+    auto angleForT = [&] (float t) { return a0 + (a1 - a0) * t; };
+    auto dirForA = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
+
+    // Upper VU arc: black from -20 to 0 VU (t=0.08..0.90)
+    Path blackArc;
+    blackArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
+    g.setColour (pal::needleInk);
+    g.strokePath (blackArc, PathStrokeType (1.3f));
+
+    // Upper VU arc: RED overload section from 0 to +3 VU (t=0.90..1.00)
+    Path redArc;
+    redArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.90f), angleForT (1.00f), true);
+    g.setColour (Colour (0xffc82418));
+    g.strokePath (redArc, PathStrokeType (3.0f));
+
+    // Secondary modulation percentage arc below
+    const float R_sec = R - 9.5f;
+    Path secArc;
+    secArc.addCentredArc (pivot.x, pivot.y, R_sec, R_sec, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
+    g.setColour (pal::needleInk.withAlpha (0.65f));
+    g.strokePath (secArc, PathStrokeType (0.85f));
+
+    // Major VU markings
+    const struct { float db; const char* txt; } majorVu[] =
+    {
+        { -20.0f, "-20" }, { -10.0f, "-10" }, { -7.0f, "-7" }, { -5.0f, "-5" },
+        { -3.0f, "-3" },   { -2.0f, "-2" },   { -1.0f, "-1" }, { 0.0f, "0" },
+        { 1.0f, "+1" },    { 2.0f, "+2" },    { 3.0f, "+3" }
+    };
+    for (const auto& m : majorVu)
+    {
+        const float t = vuDeflectionForDb (m.db);
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
+        const bool isRed = (m.db > 0.0f);
+
+        // Tick mark
+        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk);
+        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + (isRed ? 6.0f : 5.0f))), isRed ? 1.6f : 1.2f);
+
+        // Numeral
+        g.setFont (fnt (7.5f, true));
+        const Point<float> labelPos = pivot + d * (R + 10.5f);
+        g.drawText (m.txt, Rectangle<float> (22.0f, 10.0f).withCentre (labelPos), Justification::centred, false);
+    }
+
+    // Minor intermediate VU ticks
+    const float minorVu[] = { -15.0f, -9.0f, -8.0f, -6.0f, -4.0f, -2.5f, -1.5f, -0.5f, 0.5f, 1.5f, 2.5f };
+    for (float db : minorVu)
+    {
+        const float t = vuDeflectionForDb (db);
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
+        const bool isRed = (db > 0.0f);
+        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk.withAlpha (0.70f));
+        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + 2.8f)), 0.8f);
+    }
+
+    // Lower modulation percentage scale (0 to 100%)
+    const int pcts[] = { 0, 20, 40, 60, 80, 100 };
+    for (int p : pcts)
+    {
+        const float t = ((float) p / 100.0f) * 0.90f;
+        const float a = angleForT (t);
+        const auto d = dirForA (a);
+
+        g.setColour (pal::needleInk.withAlpha (0.75f));
+        g.drawLine (Line<float> (pivot + d * (R_sec - 3.0f), pivot + d * R_sec), 0.85f);
+
+        g.setFont (fnt (6.5f, false));
+        const Point<float> pPos = pivot + d * (R_sec - 8.0f);
+        g.drawText (String (p), Rectangle<float> (18.0f, 8.0f).withCentre (pPos), Justification::centred, false);
+    }
+
+    // Typography: positioned clearly in the visible window above the mask
+    g.setFont (Font (FontOptions ("Georgia", 15.0f, Font::bold)));
+    g.setColour (pal::needleInk.withAlpha (0.92f));
+    g.drawText ("VU", Rectangle<float> (46.0f, 16.0f).withCentre ({ c.x, inner.getY() + 66.0f }), Justification::centred, false);
+
+    g.setFont (fnt (7.5f, true));
+    g.setColour (pal::needleInk.withAlpha (0.80f));
+    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (pivot + dirForA (angleForT (0.04f)) * (R + 10.5f)), Justification::centred, false);
+
+    g.setFont (fnt (8.0f, true));
+    g.setColour (pal::needleInk.withAlpha (0.85f));
+    g.drawText ("GR", Rectangle<float> (30.0f, 10.0f).withCentre ({ c.x, inner.getY() + 84.0f }), Justification::centred, false);
+
+    // 4. Needle with drop shadow emerging from behind lower mask
+    const float needleAngle = a0 + (a1 - a0) * jlimit (0.02f, 1.0f, deflection);
+
+    // Needle drop shadow
+    const Point<float> sOff (2.2f, 2.5f);
+    Path sNeedle;
+    sNeedle.startNewSubPath (-1.1f, 0.0f);
+    sNeedle.lineTo (-0.35f, -(R + 5.0f));
+    sNeedle.lineTo ( 0.35f, -(R + 5.0f));
+    sNeedle.lineTo ( 1.1f, 0.0f);
+    sNeedle.closeSubPath();
+    g.setColour (Colours::black.withAlpha (0.24f));
+    g.fillPath (sNeedle, AffineTransform::rotation (needleAngle).translated (pivot.x + sOff.x, pivot.y + sOff.y));
+
+    // Needle blade
+    Path needle;
+    needle.startNewSubPath (-1.0f, 0.0f);
+    needle.lineTo (-0.3f, -(R + 5.0f));
+    needle.lineTo ( 0.3f, -(R + 5.0f));
+    needle.lineTo ( 1.0f, 0.0f);
+    needle.closeSubPath();
+    g.setColour (pal::needleInk);
+    g.fillPath (needle, AffineTransform::rotation (needleAngle).translated (pivot.x, pivot.y));
+
+    // 5. Signature lower moulded black bakelite mask / apron covering movement
+    const float maskY = inner.getBottom() - inner.getHeight() * 0.26f;
+    Path mask;
+    mask.startNewSubPath (inner.getX() - 1.0f, inner.getBottom() + 1.0f);
+    mask.lineTo (inner.getX() - 1.0f, maskY);
+    mask.quadraticTo (c.x, maskY - 6.0f, inner.getRight() + 1.0f, maskY);
+    mask.lineTo (inner.getRight() + 1.0f, inner.getBottom() + 1.0f);
+    mask.closeSubPath();
+
+    g.setGradientFill (ColourGradient (Colour (0xff26282b), c.x, maskY - 6.0f,
+                                       Colour (0xff0e0f11), c.x, inner.getBottom(), false));
+    g.fillPath (mask);
+
+    Path maskEdge;
+    maskEdge.startNewSubPath (inner.getX(), maskY);
+    maskEdge.quadraticTo (c.x, maskY - 6.0f, inner.getRight(), maskY);
+    g.setColour (Colours::white.withAlpha (0.28f));
+    g.strokePath (maskEdge, PathStrokeType (1.0f));
+
+    // Iconic ZERO ADJ mechanical calibration screw
+    const Point<float> screwPos (c.x, inner.getBottom() - 14.0f);
+    g.setColour (Colours::black.withAlpha (0.65f));
+    g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (screwPos.translated (0.0f, 0.5f)));
+
+    g.setGradientFill (ColourGradient (Colour (0xffadb2b8), screwPos.x - 3.0f, screwPos.y - 3.0f,
+                                       Colour (0xff44474c), screwPos.x + 3.0f, screwPos.y + 3.0f, false));
+    g.fillEllipse (Rectangle<float> (10.0f, 10.0f).withCentre (screwPos));
+    g.setColour (Colours::white.withAlpha (0.45f));
+    g.drawEllipse (Rectangle<float> (10.0f, 10.0f).withCentre (screwPos), 0.8f);
+
+    // Horizontal screwdriver slot
+    g.setColour (Colour (0xff141618));
+    g.fillRect (Rectangle<float> (8.0f, 1.4f).withCentre (screwPos));
+
+    g.setFont (fnt (6.5f, true));
+    g.setColour (Colour (0xff888e94));
+    g.drawText ("ZERO ADJ", Rectangle<float> (46.0f, 8.0f).withCentre ({ c.x, inner.getBottom() - 4.5f }), Justification::centred, false);
+
+    // 6. Flat polished glass reflection
+    Path glare;
+    glare.startNewSubPath (inner.getX() + 10.0f, inner.getY());
+    glare.lineTo (inner.getX() + 50.0f, inner.getY());
+    glare.lineTo (inner.getX() + 20.0f, inner.getBottom());
+    glare.lineTo (inner.getX() - 10.0f, inner.getBottom());
+    glare.closeSubPath();
+    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.22f), inner.getX() + 30.0f, inner.getY(),
+                                       Colours::transparentWhite, inner.getX() + 50.0f, inner.getY() + 40.0f, false));
+    g.fillPath (glare);
+
     g.restoreState();
 }
 
@@ -1277,17 +1570,18 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int vw = jmin (c.getWidth() - 26, 210);
-        vu = { c.getCentreX() - vw / 2, c.getY() + 10, vw, vw * 3 / 4 };
+        // Authentic large round circular VU meter scaled to fill frame nicely
+        const int vw = jmin (c.getWidth() - 8, 214);
+        vu = { c.getCentreX() - vw / 2, c.getY() + 4, vw, vw };
 
         const int kw = 84;
-        const int ky = vu.getBottom() + 54;
-        place (gain, { c.getX() + 4,                 ky, kw, kw });
-        place (peak, { c.getRight() - kw - 4,        ky, kw, kw });
+        const int ky = 320;
+        place (gain, { c.getX() + 8,                 ky, kw, kw });
+        place (peak, { c.getRight() - kw - 8,        ky, kw, kw });
 
-        const int ty = ky + kw + 34;
-        meterBtn.setBounds (c.getCentreX() - 46, ty, 92, 26);
-        onBtn.setBounds (c.getCentreX() - 46, ty + 40, 92, 26);
+        const int ty = 430;
+        meterBtn.setBounds (c.getCentreX() - 48, ty, 96, 26);
+        onBtn.setBounds (c.getCentreX() - 48, ty + 38, 96, 26);
     }
 
     void paintFaceBase (Graphics& g) override
@@ -1303,12 +1597,21 @@ protected:
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "INPUT",  { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 44, 120, 18 }, 14.0f);
-        caption (g, "GAIN",   { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 26, 120, 16 }, 14.0f);
-        caption (g, "PEAK",   { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 44, 120, 18 }, 14.0f);
-        caption (g, "REDUCTION", { peak.slider.getBounds().getCentreX() - 60, peak.slider.getY() - 26, 120, 16 }, 14.0f);
+        caption (g, "INPUT GAIN",      { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 30, 120, 24 }, 13.0f);
+        caption (g, "PEAK REDUCTION", { peak.slider.getBounds().getCentreX() - 65, peak.slider.getY() - 30, 130, 24 }, 13.0f);
 
-        paintBadge (g, Rectangle<float> ((float) content.getX() + 4.0f, (float) content.getBottom() - 34.0f, 78.0f, 30.0f), "LA-2A");
+        // Lower vintage sub-plate filling empty negative space with authentic nomenclature
+        const Rectangle<float> subPlate ((float) content.getX() + 8.0f, 516.0f, (float) content.getWidth() - 16.0f, 96.0f);
+        g.setColour (Colours::black.withAlpha (0.12f));
+        g.drawRoundedRectangle (subPlate, 3.0f, 1.0f);
+        g.setColour (Colours::white.withAlpha (0.35f));
+        g.drawRoundedRectangle (subPlate.translated (0.0f, 1.0f), 3.0f, 0.8f);
+
+        caption (g, "TELETRONIX", { (int) subPlate.getX(), (int) subPlate.getY() + 14, (int) subPlate.getWidth(), 18 }, 14.0f);
+        caption (g, "AUTOMATIC LEVELING AMPLIFIER", { (int) subPlate.getX(), (int) subPlate.getY() + 34, (int) subPlate.getWidth(), 14 }, 8.5f, Justification::centred, false);
+        caption (g, "PATENT NO. 3,258,696", { (int) subPlate.getX(), (int) subPlate.getY() + 52, (int) subPlate.getWidth(), 14 }, 7.5f, Justification::centred, false);
+
+        paintBadge (g, Rectangle<float> ((float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f), "LA-2A");
     }
 
     void paintMeter (Graphics& g) override
@@ -1317,10 +1620,10 @@ protected:
         // Warm glow bloom around round VU housing
         g.setGradientFill (ColourGradient (Colour (0x38ffd27a), r.getCentreX(), r.getCentreY(),
                                            Colour (0x00ffd27a), r.getCentreX(), r.getCentreY() - r.getHeight(), true));
-        g.fillEllipse (r.expanded (20.0f));
+        g.fillEllipse (r.expanded (18.0f));
 
-        const float f = jlimit (0.0f, 1.0f, gr / 20.0f);
-        paintVuDial (g, r, f, -0.95f, 0.95f, "", "", 10.0f, "REDUCTION", false);
+        const float db = -jlimit (0.0f, 20.0f, gr);
+        paintOptoVuMeter (g, r, vuDeflectionForDb (db));
     }
 
 private:
@@ -1368,20 +1671,23 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int ky = c.getY() + 34;
-        place (input,  { c.getX() + 2,               ky, 88, 88 });
-        place (output, { c.getRight() - 90,         ky, 88, 88 });
+        const int kw = 86;
+        const int ky = c.getY() + 26;
+        place (input,  { c.getX() + 6,               ky, kw, kw });
+        place (output, { c.getRight() - kw - 6,      ky, kw, kw });
 
-        ratioLabel = { c.getX(), ky + 104, c.getWidth(), 20 };
-        const int bw = (c.getWidth() - 8 - 4 * 5) / 5;
+        ratioLabel = { c.getX(), 170, c.getWidth(), 18 };
+        const int bw = (c.getWidth() - 8 - 4 * 4) / 5;
         for (int i = 0; i < 5; ++i)
-            ratioBtns[(size_t) i].setBounds (c.getX() + 4 + i * (bw + 5), ratioLabel.getBottom() + 2, bw, 26);
+            ratioBtns[(size_t) i].setBounds (c.getX() + 4 + i * (bw + 4), 192, bw, 26);
 
-        meter = { c.getX() + 10, ratioBtns[0].getBounds().getBottom() + 16, c.getWidth() - 20, 104 };
+        // Scaled-up rectangular Simpson 29T VU meter filling negative space
+        meter = { c.getCentreX() - 108, 230, 216, 154 };
 
-        const int ay = meter.getBottom() + 34;
-        place (atk, { c.getX() + 8,        ay, 78, 78 });
-        place (rel, { c.getRight() - 86,  ay, 78, 78 });
+        const int ay = meter.getBottom() + 32;
+        const int akw = 80;
+        place (atk, { c.getX() + 10,       ay, akw, akw });
+        place (rel, { c.getRight() - akw - 10, ay, akw, akw });
         grLabel = { c.getX() + c.getWidth() / 2 - 40, ay + 44, 80, 18 };
     }
 
@@ -1390,27 +1696,35 @@ protected:
         caption (g, "INPUT",  { input.slider.getBounds().getCentreX() - 50, input.slider.getY() - 20, 100, 18 }, 13.0f);
         caption (g, "OUTPUT", { output.slider.getBounds().getCentreX() - 50, output.slider.getY() - 20, 100, 18 }, 13.0f);
         caption (g, "RATIO",  ratioLabel, 14.0f);
-        caption (g, "ATTACK", { atk.slider.getBounds().getCentreX() - 50, atk.slider.getY() - 16, 100, 18 }, 13.0f);
-        caption (g, "RELEASE",{ rel.slider.getBounds().getCentreX() - 50, rel.slider.getY() - 16, 100, 18 }, 13.0f);
+        caption (g, "ATTACK", { atk.slider.getBounds().getCentreX() - 50, atk.slider.getY() - 18, 100, 18 }, 13.0f);
+        caption (g, "RELEASE",{ rel.slider.getBounds().getCentreX() - 50, rel.slider.getY() - 18, 100, 18 }, 13.0f);
 
         // Vintage UREI-style wordmark in the top centre
         engraveText (g, "urei", { content.getX(), content.getY() - 6, content.getWidth(), 22 },
                      Justification::centred, 21.0f, Colour (0xffe8e8e8), false);
 
-        paintBadge (g, { (float) content.getCentreX() - 44.0f, (float) content.getBottom() - 30.0f, 88.0f, 26.0f }, "1176");
+        // Lower vintage sub-plate filling empty negative space with authentic nomenclature
+        const Rectangle<float> subPlate ((float) content.getX() + 8.0f, 516.0f, (float) content.getWidth() - 16.0f, 96.0f);
+        g.setColour (Colours::black.withAlpha (0.45f));
+        g.fillRoundedRectangle (subPlate, 3.0f);
+        g.setColour (Colours::white.withAlpha (0.12f));
+        g.drawRoundedRectangle (subPlate, 3.0f, 1.0f);
+
+        engraveText (g, "LIMITING AMPLIFIER", { (int) subPlate.getX(), (int) subPlate.getY() + 14, (int) subPlate.getWidth(), 16 },
+                     Justification::centred, 11.5f, pal::engrave, true);
+        engraveText (g, "MODEL 1176 LN", { (int) subPlate.getX(), (int) subPlate.getY() + 34, (int) subPlate.getWidth(), 18 },
+                     Justification::centred, 13.5f, Colour (0xffe6c878), true);
+        engraveText (g, "SOLID STATE PEAK LIMITER", { (int) subPlate.getX(), (int) subPlate.getY() + 56, (int) subPlate.getWidth(), 14 },
+                     Justification::centred, 8.5f, pal::engraveDim, false);
+
+        paintBadge (g, { (float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f }, "1176");
     }
 
     void paintMeter (Graphics& g) override
     {
         const auto r = meter.toFloat();
-        // Rectangular Simpson-style meter with warm backlighting
-        g.setColour (Colours::black.withAlpha (0.85f));
-        g.fillRoundedRectangle (r.expanded (4.0f), 4.0f);
-        g.setColour (Colours::white.withAlpha (0.15f));
-        g.drawRoundedRectangle (r.expanded (4.0f), 4.0f, 1.0f);
-
-        const float f = jlimit (0.0f, 1.0f, gr / 20.0f);
-        paintVuDial (g, r, f, -0.95f, 0.95f, "dB", "GR", 9.0f, {}, true);
+        const float db = -jlimit (0.0f, 20.0f, gr);
+        paintFetVuMeter (g, r, vuDeflectionForDb (db));
     }
 
 private:

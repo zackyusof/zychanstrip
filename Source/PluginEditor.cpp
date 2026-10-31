@@ -33,8 +33,8 @@ const Colour faceLightTop   { 0xffe2e4e1 };
 const Colour faceLightLow   { 0xffafb2ae };
 const Colour fetTop         { 0xff181a1c };
 const Colour fetLow         { 0xff0b0d0e };
-const Colour limTop         { 0xffeef1f4 };
-const Colour limLow         { 0xff9aa3ac };
+const Colour limTop         { 0xff3b4a63 };
+const Colour limLow         { 0xff1b2333 };
 const Colour cream          { 0xfffcf5dc };
 const Colour creamLow       { 0xffd9c798 };
 const Colour needleInk      { 0xff18120c };
@@ -1746,7 +1746,7 @@ public:
                        pal::limTop, pal::limLow, pal::engrave)
     {
         // All four controls are vertical sliders so they read as one bank, matching ENHANCE.
-        labelColour = Colour (0xff1b2027);   // dark engraving on the polished plate
+        labelColour = Colour (0xffe6e8ea);   // light engraving on the dark blue plate
         bypass.setColour (ToggleButton::textColourId, labelColour);
         setupFader (gain,    "gain");
         setupFader (ceiling, "ceiling");

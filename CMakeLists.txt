@@ -55,3 +55,11 @@ target_link_libraries(RackStrip
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+# Ship the adapted EQ core's MIT attribution with the installed Audio Unit.
+if(APPLE)
+    set_source_files_properties(THIRD_PARTY_NOTICES.md PROPERTIES
+        HEADER_FILE_ONLY TRUE
+        MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(RackStrip_AU PRIVATE THIRD_PARTY_NOTICES.md)
+endif()

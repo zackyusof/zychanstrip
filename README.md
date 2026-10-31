@@ -31,18 +31,22 @@ drag the lower-right corner to resize it.
 
 ### 1. Console strip — EQ and dynamics
 
-The broad "console channel" stage. A high-pass, a four-band EQ and a bus-style compressor, laid out as
-two sections.
+The first plate combines a 560-style ten-band graphic EQ, high-pass filter and bus-style compressor.
+The EQ follows the supplied hardware-style GUI: horizontal white faders, cyan guides and a red 500 Hz cap.
 
 **EQ**
 
-| Control | Type | Default | Notes |
+| Control | Range | Default | Notes |
 | --- | --- | --- | --- |
-| HPF | 20 – 300 Hz | 20 Hz | Fixed ~12 dB/oct high-pass, Q 0.707 |
-| LF | ±15 dB | 0 dB | Low shelf at 100 Hz, Q 0.7 |
-| LMF Hz / LMF dB | 200 – 2500 Hz / ±15 dB | 600 Hz / 0 dB | Peaking, Q 0.9 |
-| HMF Hz / HMF dB | 1500 – 8000 Hz / ±15 dB | 3 kHz / 0 dB | Peaking, Q 0.9 |
-| HF | ±15 dB | 0 dB | High shelf at 8 kHz, Q 0.7 |
+| 16K, 8K, 4K, 2K, 1K, 500, 250, 125, 63, 31 Hz | ±12 dB each | 0 dB | Ten fixed bands with gain-dependent Q |
+| HPF | 20–300 Hz | 20 Hz | High-pass before the graphic EQ |
+
+The EQ core is a C++ adaptation of [chokehold’s EQ 560](https://github.com/chkhld/jsfx/blob/f6d175d8253375a51832fd52aa86482c191caadc/Equalizer/eq_560.jsfx),
+from `chkhld/jsfx` (156 GitHub stars when checked on 2026-10-31), under the MIT license.
+It ports the state-variable peak filters, proportional-Q curve and 2× Butterworth oversampling.
+The upstream random noise, idle blanking and fixed character bumps are omitted. This is a source-based
+560-style model, not a manufacturer-certified circuit emulation. Attribution and license are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the installed AU resources.
 
 **Dynamics**
 
@@ -104,13 +108,18 @@ A look-ahead brick-wall limiter, intended as the last stage.
 | Ceiling | −12 – 0 dB | −0.3 dB | Absolute output ceiling |
 | Release | 10 – 1000 ms | 100 ms | |
 | Enhance | 0 – 100 | 0 | Adds up to 12 dB of drive plus a harmonic blend |
+| Auto Gain | on/off | on | Compensates this module’s input/output RMS level |
 
-The limiter uses a sliding-minimum over the look-ahead window followed by a moving average, so gain
-reduction ramps in *before* the peak arrives instead of clamping after it — the standard way to get a
-transparent brick-wall. **Enhance is not a separate effect module**: it raises the drive into the
-limiter and mixes in `tanh(x) − x`, i.e. saturation harmonics. Unlike the drive, the harmonic blend is
-applied *after* the look-ahead, so heavy Enhance settings can add harmonics that slightly exceed the
-ceiling. Keep it low if you are mastering to a strict delivery spec.
+The limiter uses a sliding minimum over the look-ahead window followed by a moving average.
+Enhance adds drive and saturation before limiting; the final output is held to the selected peak ceiling.
+
+**Auto Gain** compares the Enhance module’s latency-aligned input and processed output using linked
+stereo RMS estimates, then applies smoothed compensation. It compensates changes within this module,
+including Enhance and drive; it does not compensate earlier EQ/compressor stages or the manual Master.
+It is enabled in new instances and can be switched off. Older saved sessions restore with Auto Gain off.
+Compensation is bounded to ±36 dB, with 200 ms RMS estimation and 100 ms correction smoothing.
+Matching is also bounded by the limiter ceiling, so exact level matching is not
+possible when the input itself exceeds the ceiling. This is RMS matching, not LUFS normalization.
 
 The two tall ladders show gain reduction (amber) and output level (green through blue). They always
 show activity so the panel reads like the hardware even when nothing is being limited.
@@ -238,15 +247,19 @@ preset cannot produce a chain with a missing or duplicated stage.
 
 ## Parameters
 
-29 automated parameters in total, including the master output trim.
+40 automated parameters in total, including ten graphic-EQ bands and Enhance Auto Gain.
 
 | Module | Prefix | Parameters |
 | --- | --- | --- |
-| Console | `con_` | `bypass`, `hpf`, `lf`, `lmf_f`, `lmf`, `hmf_f`, `hmf`, `hf`, `thresh`, `ratio`, `attack`, `release`, `out` |
+| Console | `con_` | `bypass`, `hpf`, `thresh`, `ratio`, `attack`, `release`, `out`; `eq_16k`, `eq_8k`, `eq_4k`, `eq_2k`, `eq_1k`, `eq_500`, `eq_250`, `eq_125`, `eq_63`, `eq_31` |
 | Opto | `opto_` | `bypass`, `peak`, `gain`, `mode` |
 | FET | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` (choice) |
-| Limiter | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance` |
+| Limiter | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance`, `auto_gain` |
 | Master | `master_` | `level` (−60 … +6 dB, default 0 dB) |
+
+The six old four-band EQ parameters (`con_lf`, `con_lmf_f`, `con_lmf`, `con_hmf_f`,
+`con_hmf`, `con_hf`) remain registered at their existing host indices but are inactive after replacement.
+HPF remains active. Existing sessions start the new ten-band EQ flat.
 
 The **ON** switch on the opto plate is wired to the `opto_mode` parameter (compress ⇄ limit). The
 **METER** lamp and the **Comp**/**Gate** lamps on the console plate are faceplate indicators only — this
@@ -344,3 +357,16 @@ python3 ~/.config/opencode/scripts/dev_spec.py lint docs/specs/photoreal-gui.md
   +6 dB, saves with the session and supports host automation. Double-click to restore 0 dB. Changes
   ramp over 20 ms; sessions saved before this control existed restore at unity. Positive master gain
   can raise the output above the limiter ceiling because it follows the limiter.
+
+
+## Latest update: EQ560 and Enhance Auto Gain
+
+- Replaced the four-band EQ controls with ten 560-style horizontal faders, using the supplied GUI reference.
+- Ported the MIT-licensed [EQ560 DSP core](https://github.com/chkhld/jsfx/blob/f6d175d8253375a51832fd52aa86482c191caadc/Equalizer/eq_560.jsfx), preserving its proportional-Q filter and 2× resampling design.
+- Added automatic input/output RMS compensation inside the Enhance module, with a visible on/off control.
+- Kept the compact proportional resizing, reorderable modules and working manual Master output.
+- Added response, gain-matching, state compatibility and GUI regression checks; bundled upstream attribution in the AU.
+
+The EQ560 source credits [Andrew Simper’s state-variable filter design](https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf)
+and [Exstrom’s Butterworth design](https://www.exstrom.com/journal/sigproc/). RackStrip’s limiter and Auto Gain code is
+in `Source/Modules.h`; it is implemented in this project rather than copied from the EQ560 source.

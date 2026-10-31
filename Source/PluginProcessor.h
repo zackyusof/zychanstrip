@@ -38,6 +38,8 @@ public:
 
     float getGainReduction (int moduleId) const { return modules[(size_t) moduleId]->grDb.load(); }
 
+    float getAutoGainCompensation() const { return modules[Limiter]->gainCompDb.load(); }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:

@@ -427,9 +427,33 @@ public:
                            float pos, float minPos, float maxPos,
                            Slider::SliderStyle style, Slider& s) override
     {
-        if (style == Slider::LinearVertical)      drawChromeFader (g, x, y, w, h, pos, minPos, maxPos, s);
+        if (style == Slider::LinearHorizontal && (bool) s.getProperties()["eq560"])
+            drawGraphicEqFader (g, x, y, w, h, pos, s);
+        else if (style == Slider::LinearVertical) drawChromeFader (g, x, y, w, h, pos, minPos, maxPos, s);
         else if (style == Slider::LinearHorizontal) drawMasterBar (g, x, y, w, h, pos, s);
         else LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, pos, minPos, maxPos, style, s);
+    }
+
+    static void drawGraphicEqFader (Graphics& g, int x, int y, int w, int h, float pos, Slider& s)
+    {
+        const float cy = (float) y + (float) h * 0.5f;
+        const Rectangle<float> slot ((float) x - 9.0f, cy - 5.0f, (float) w + 18.0f, 10.0f);
+        g.setColour (Colour (0xff050c0b));
+        g.fillRoundedRectangle (slot, 5.0f);
+        g.setColour (Colours::black.withAlpha (0.8f));
+        g.drawRoundedRectangle (slot, 5.0f, 1.0f);
+        g.setColour (Colour (0xff63746e).withAlpha (0.35f));
+        g.drawLine (slot.getX() + 4.0f, slot.getBottom() + 0.5f, slot.getRight() - 4.0f, slot.getBottom() + 0.5f);
+
+        const auto cap = s.findColour (Slider::thumbColourId);
+        const Rectangle<float> thumb (pos - 12.0f, cy - 6.0f, 24.0f, 12.0f);
+        g.setColour (Colours::black.withAlpha (0.7f));
+        g.fillEllipse (thumb.expanded (2.0f).translated (0.0f, 1.0f));
+        g.setGradientFill (ColourGradient (cap.brighter (0.25f), thumb.getX(), thumb.getY(),
+                                           cap.darker (0.35f), thumb.getX(), thumb.getBottom(), false));
+        g.fillEllipse (thumb);
+        g.setColour (Colours::white.withAlpha (0.55f));
+        g.drawEllipse (thumb.reduced (0.8f), 0.7f);
     }
 
     static void drawChromeFader (Graphics& g, int x, int y, int w, int h,
@@ -798,34 +822,41 @@ private:
 };
 
 //==============================================================================
-//  Module 1 — console strip: EQ + dynamics  (reference: 550B + 1176 controls)
+//  Module 1 — ten-band 560 graphic EQ + console dynamics
 //==============================================================================
 class ConsolePanel : public ModulePanel
 {
 public:
     explicit ConsolePanel (RackStripProcessor& p)
         : ModulePanel (p, RackStripProcessor::Console, "con_",
-                       pal::faceDark, pal::faceDarkLow, pal::engrave)
+                       Colour (0xff30413b), Colour (0xff172520), pal::engrave)
     {
-        setupKnob (lf,   "lf",    pal::redCap);
-        setupKnob (lmfG, "lmf",   pal::redCap);
-        setupKnob (hmfG, "hmf",   pal::blueCap);
-        setupKnob (hf,   "hf",    pal::blueCap);
-        setupKnob (lmfF, "lmf_f", pal::greenCap, Colour (0xffe8fff0));
-        setupKnob (hmfF, "hmf_f", pal::greenCap, Colour (0xffe8fff0));
-        setupKnob (hpf,  "hpf",   pal::blackCap);
-
-        setupKnob (thr, "thresh",  pal::blackCap);
-        setupKnob (rat, "ratio",   pal::blackCap);
-        setupKnob (atk, "attack",  pal::blackCap);
+        const char* ids[] { "eq_16k", "eq_8k", "eq_4k", "eq_2k", "eq_1k", "eq_500", "eq_250", "eq_125", "eq_63", "eq_31" };
+        for (size_t i = 0; i < bands.size(); ++i)
+        {
+            auto& band = bands[i];
+            band.slider.setSliderStyle (Slider::LinearHorizontal);
+            band.slider.setName (prefix + ids[i]);
+            band.slider.getProperties().set ("eq560", true);
+            band.slider.setColour (Slider::thumbColourId, i == 5 ? Colour (0xffe6272d) : Colour (0xffe8efdf));
+            band.slider.setTextValueSuffix (" dB");
+            band.slider.setPopupDisplayEnabled (true, true, nullptr);
+            band.slider.setDoubleClickReturnValue (true, 0.0);
+            band.att = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + ids[i], band.slider);
+            addAndMakeVisible (band.slider);
+        }
+        setupKnob (thr, "thresh", pal::blackCap);
+        setupKnob (rat, "ratio", pal::blackCap);
+        setupKnob (atk, "attack", pal::blackCap);
         setupKnob (rel, "release", pal::blackCap);
-        setupKnob (out, "out",     pal::blackCap);
+        setupKnob (out, "out", pal::blackCap);
+        setupKnob (hpf, "hpf", pal::blackCap);
 
         for (auto* b : { &compLed, &gateLed })
         {
             b->setClickingTogglesState (true);
             b->setRadioGroupId (9001);
-            b->setColour (ToggleButton::tickColourId, Colour (0xffffffff));
+            b->setColour (ToggleButton::tickColourId, Colours::white);
             b->setColour (ToggleButton::textColourId, labelColour);
             b->getProperties().set ("ledFirst", false);
             addAndMakeVisible (b);
@@ -836,109 +867,75 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int colW = c.getWidth() / 2;
-        const int knob = 64;
-        const int cell = knob + 20;          // knob + legend line
-        const int trim = 44;
-        const int trimCell = trim + 16;
+        for (size_t i = 0; i < bands.size(); ++i)
+            bands[i].slider.setBounds (c.getX() + 36, c.getY() + 44 + (int) i * 29, c.getWidth() - 36, 22);
 
-        int y = c.getY() + 20;
-
-        // --- EQ section -------------------------------------------------
-        eqTop = y;
-        eqRow1 = y;
-        eqRow2 = y + cell + 4;
-        place (lf,   { c.getX() + colW / 2 - knob / 2, eqRow1, knob, knob });
-        place (hmfG, { c.getX() + colW + colW / 2 - knob / 2, eqRow1, knob, knob });
-        place (lmfG, { c.getX() + colW / 2 - knob / 2, eqRow2, knob, knob });
-        place (hf,   { c.getX() + colW + colW / 2 - knob / 2, eqRow2, knob, knob });
-
-        y = eqRow2 + cell + 10;
-        eqRule = y;
-
-        trimRow = y + 8;
-        place (lmfF, { c.getX() + colW / 2 - trim / 2, trimRow, trim, trim });
-        place (hmfF, { c.getX() + colW + colW / 2 - trim / 2, trimRow, trim, trim });
-
-        // --- Dynamics section -------------------------------------------
-        y = trimRow + trimCell + 18;
-        dynTitle = { c.getX(), y, c.getWidth(), 20 };
-
-        y = dynTitle.getBottom() + 6;
-        ledRow = { c.getX(), y, c.getWidth(), 24 };
-        gCtx = ledRow;
-
-        y = ledRow.getBottom() + 12;
-        thrRow = y;
-        compLed.setBounds (c.getCentreX() - 88, ledRow.getY(), 66, 24);
-        gateLed.setBounds (c.getCentreX() + 22, ledRow.getY(), 66, 24);
-
-        place (thr, { c.getX() + colW / 2 - knob / 2, y, knob, knob });
-        place (rat, { c.getX() + colW + colW / 2 - knob / 2, y, knob, knob });
-
-        y = thrRow + cell + 6;
-        atkRow = y;
-        place (atk, { c.getX() + colW / 2 - knob / 2, y, knob, knob });
-        place (rel, { c.getX() + colW + colW / 2 - knob / 2, y, knob, knob });
-
-        y = atkRow + cell + 6;
-        place (out, { c.getX() + colW / 2 - 26, y, 52, 52 });
-        place (hpf, { c.getX() + colW + colW / 2 - 26, y, 52, 52 });
-
+        dynTitle = { c.getX(), c.getY() + 350, c.getWidth(), 20 };
+        const int ledY = dynTitle.getBottom() + 4;
+        compLed.setBounds (c.getCentreX() - 88, ledY, 66, 22);
+        gateLed.setBounds (c.getCentreX() + 22, ledY, 66, 22);
+        constexpr int knob = 54;
+        const int col = c.getWidth() / 3;
+        const int y = c.getY() + 400;
+        place (thr, { c.getX() + col / 2 - knob / 2, y, knob, knob });
+        place (rat, { c.getX() + col + col / 2 - knob / 2, y, knob, knob });
+        place (atk, { c.getX() + col * 2 + col / 2 - knob / 2, y, knob, knob });
+        place (rel, { c.getX() + col / 2 - knob / 2, y + 82, knob, knob });
+        place (out, { c.getX() + col + col / 2 - knob / 2, y + 82, knob, knob });
+        place (hpf, { c.getX() + col * 2 + col / 2 - knob / 2, y + 82, knob, knob });
         badge = { c.getX() + 4, c.getBottom() - 32, 74, 28 };
     }
 
     void paintFaceExtra (Graphics& g) override
     {
-        constexpr float capSize = 12.0f;
+        caption (g, "GRAPHIC EQ", { content.getX(), content.getY(), content.getWidth(), 18 }, 13.0f);
+        auto& first = bands.front().slider;
+        auto sliderBounds = first.getLookAndFeel().getSliderLayout (first).sliderBounds.translated (first.getX(), first.getY());
+        const float x0 = (float) sliderBounds.getX();
+        const float travel = (float) sliderBounds.getWidth();
+        const float y0 = (float) first.getBounds().getCentreY();
+        const float y1 = (float) bands.back().slider.getBounds().getCentreY();
+        for (int i = 0; i <= 4; ++i)
+        {
+            const float x = x0 + travel * (float) i * 0.25f;
+            g.setColour (Colour (0xff36b8cf).withAlpha (i == 2 ? 0.9f : 0.6f));
+            g.drawLine (x, y0 - 3.0f, x, y1 + 3.0f, i == 2 ? 1.5f : 1.0f);
+        }
+        for (int i = 0; i < 3; ++i)
+        {
+            const char* scale[] { "-12", "0", "+12" };
+            caption (g, scale[i], { roundToInt (x0 + travel * (float) i * 0.5f) - 18,
+                                      content.getY() + 21, 36, 16 }, 12.0f);
+        }
+        const char* frequencies[] { "16K", "8K", "4K", "2K", "1K", "500", "250", "125", "63", "31" };
+        for (size_t i = 0; i < bands.size(); ++i)
+            caption (g, frequencies[i], { content.getX() - 5, bands[i].slider.getY() + 2, 34, 18 }, 12.0f, Justification::centredRight);
 
-        engraveText (g, "EQ", { content.getX(), eqTop - 18, content.getWidth(), 18 },
-                     Justification::centred, 18.0f, labelColour, false);
-
-        caption (g, "Low",    knobCaption (lf),   capSize);
-        caption (g, "Hi-Mid", knobCaption (hmfG), capSize);
-        caption (g, "Low-Mid", knobCaption (lmfG), capSize);
-        caption (g, "High",   knobCaption (hf),   capSize);
-        caption (g, "LMF Hz", trimCaption (lmfF), 10.0f);
-        caption (g, "HMF Hz", trimCaption (hmfF), 10.0f);
-
-        g.setColour (Colours::white.withAlpha (0.20f));
-        g.fillRect (Rectangle<int> (content.getX() + 4, eqRule, content.getWidth() - 8, 1));
-
-        caption (g, "Dynamics", dynTitle, 16.0f);
-
-        // Comp LED ... Gate LED, labels to the left of each lamp and clear of each other
-        caption (g, "Comp", { compLed.getBounds().getX(), gCtx.getY(), 40, gCtx.getHeight() }, 13.0f);
-        caption (g, "Gate", { gateLed.getBounds().getX(), gCtx.getY(), 40, gCtx.getHeight() }, 13.0f);
-
-        caption (g, "Threshold", knobCaption (thr), capSize);
-        caption (g, "Ratio",     knobCaption (rat), capSize);
-        caption (g, "Attack",    knobCaption (atk), capSize);
-        caption (g, "Release",   knobCaption (rel), capSize);
-        caption (g, "OUTPUT",    trimCaption (out), 9.0f);
-        caption (g, "HPF",       trimCaption (hpf), 9.0f);
-
-        paintBadge (g, badge.toFloat(), "550B");
+        g.setColour (Colours::white.withAlpha (0.18f));
+        g.fillRect (content.getX(), dynTitle.getY() - 10, content.getWidth(), 1);
+        caption (g, "Dynamics", dynTitle, 15.0f);
+        caption (g, "Comp", { compLed.getX(), compLed.getY(), 40, 22 }, 12.0f);
+        caption (g, "Gate", { gateLed.getX(), gateLed.getY(), 40, 22 }, 12.0f);
+        knobCaption (g, thr, "Threshold");
+        knobCaption (g, rat, "Ratio");
+        knobCaption (g, atk, "Attack");
+        knobCaption (g, rel, "Release");
+        knobCaption (g, out, "Output");
+        knobCaption (g, hpf, "HPF");
+        paintBadge (g, badge.toFloat(), "560");
     }
-
-    void paintMeter (Graphics&) override {}
 
 private:
-    static Rectangle<int> knobCaption (const Knob& k)
+    void knobCaption (Graphics& g, const Knob& k, const String& text)
     {
-        auto b = k.slider.getBounds();
-        return { b.getX() - 18, b.getBottom() + 4, b.getWidth() + 36, 16 };
-    }
-    static Rectangle<int> trimCaption (const Knob& k)
-    {
-        auto b = k.slider.getBounds();
-        return { b.getX() - 14, b.getBottom() + 4, b.getWidth() + 28, 12 };
+        const auto b = k.slider.getBounds();
+        caption (g, text, { b.getX() - 10, b.getBottom() + 4, b.getWidth() + 20, 16 }, 10.0f);
     }
 
-    Knob lf, lmfG, hmfG, hf, lmfF, hmfF, hpf, out, thr, rat, atk, rel;
+    std::array<Knob, 10> bands;
+    Knob hpf, out, thr, rat, atk, rel;
     ToggleButton compLed { "" }, gateLed { "" };
-    int eqTop = 0, eqRow1 = 0, eqRow2 = 0, eqRule = 0, trimRow = 0, thrRow = 0, atkRow = 0;
-    Rectangle<int> dynTitle, ledRow, gCtx, badge { 20, 20, 74, 28 };
+    Rectangle<int> dynTitle, badge;
 };
 
 //==============================================================================
@@ -1141,6 +1138,12 @@ public:
         fader.setPopupDisplayEnabled (true, true, nullptr);
         faderAtt = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "lim_enhance", fader);
         addAndMakeVisible (fader);
+        autoGain.setName ("Auto Gain");
+        autoGain.setButtonText ("AUTO GAIN");
+        autoGain.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
+        autoGain.setColour (ToggleButton::textColourId, labelColour);
+        autoGainAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "lim_auto_gain", autoGain);
+        addAndMakeVisible (autoGain);
     }
 
 protected:
@@ -1153,8 +1156,9 @@ protected:
         place (ceiling, { c.getX() + kw,           ky, kw, kh });
         place (release, { c.getX() + kw * 2,       ky, kw, kh });
 
-        const int fy = ky + kh + 22;
-        const int fh = c.getBottom() - fy - 30;
+        autoGain.setBounds (c.getCentreX() - 58, ky + kh + 10, 116, 24);
+        const int fy = ky + kh + 52;
+        const int fh = c.getBottom() - fy - 52;
         ladderA = { c.getX() + 24, fy + 22, 26, fh };
         ladderB = { c.getRight() - 50, fy + 22, 26, fh };
         fader.setBounds (c.getCentreX() - 26, fy, 52, fh + 22);
@@ -1217,6 +1221,8 @@ protected:
 private:
     Knob gain, ceiling, release;
     Slider fader;
+    ToggleButton autoGain;
+    std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> faderAtt;
     Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
 };

@@ -4,6 +4,7 @@
 #include "PluginEditor.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <cmath>
+#include <complex>
 #include <iostream>
 
 namespace
@@ -46,6 +47,9 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
         if (auto* found = findNamed (*child, name)) return found;
     return nullptr;
 }
+// Test-only implementations remain separate from production DSP.
+#include "dsp_checks.h"
+
 void audioTests()
 {
     RackStripProcessor proc;
@@ -207,9 +211,12 @@ public:
         const auto output = args.isEmpty() ? juce::File::getCurrentWorkingDirectory()
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
+        eqTests();
+        limiterTests();
         audioTests();
         RackStripProcessor proc;
         auto editor = std::unique_ptr<RackStripEditor> (static_cast<RackStripEditor*> (proc.createEditor()));
+        newEditorTests (proc, *editor);
         editorTests (proc, *editor, output);
         std::cout << "RESULT " << passed << "/" << (passed + failed) << " passed" << std::endl;
         setApplicationReturnValue (failed == 0 ? 0 : 1);

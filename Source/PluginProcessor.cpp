@@ -58,6 +58,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLa
     // Append new controls so existing host parameter indices remain stable.
     addF ("master_level", "Master Level", -60.0f, 6.0f, 0.0f, "dB");
 
+    // New EQ560 controls follow all legacy parameters, including the master.
+    for (size_t i = 0; i < rack::Eq560::bandIds.size(); ++i)
+        addF (juce::String ("con_") + rack::Eq560::bandIds[i],
+              "EQ560 " + juce::String (rack::Eq560::frequencies[i], 0) + " Hz", -12.0f, 12.0f, 0.0f, "dB");
+    addB ("lim_auto_gain", "Enhance Auto Gain", true);
+
     return layout;
 }
 
@@ -160,6 +166,18 @@ void RackStripProcessor::setStateInformation (const void* data, int size)
                 masterState.setProperty ("value", 0.0f, nullptr);
                 state.appendChild (masterState, nullptr);
             }
+            auto addMissingParameter = [&] (const juce::String& id, float value)
+            {
+                if (state.getChildWithProperty ("id", id).isValid()) return;
+                juce::ValueTree parameter ("PARAM");
+                parameter.setProperty ("id", id, nullptr);
+                parameter.setProperty ("value", value, nullptr);
+                state.appendChild (parameter, nullptr);
+            };
+            for (const auto* id : rack::Eq560::bandIds)
+                addMissingParameter (juce::String ("con_") + id, 0.0f);
+            // Previously saved sessions retain their original limiter loudness.
+            addMissingParameter ("lim_auto_gain", 0.0f);
             apvts.replaceState (state);
 
             auto tokens = juce::StringArray::fromTokens (state.getProperty ("order", "0,1,2,3").toString(), ",", "");

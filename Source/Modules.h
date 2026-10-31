@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cmath>
 #include <vector>
+#include "Eq560.h"
 
 namespace rack
 {
@@ -64,6 +65,7 @@ public:
     }
 
     std::atomic<float> grDb { 0.0f };   // gain reduction for the UI meter
+    std::atomic<float> gainCompDb { 0.0f }; // Enhance Auto Gain correction, stereo linked
 
 protected:
     virtual void process (juce::AudioBuffer<float>&) = 0;
@@ -80,17 +82,23 @@ protected:
 };
 
 //==============================================================================
-/** Channel strip: high-pass, 4-band EQ and a stereo-linked bus-style compressor. */
+/** Channel strip: high-pass, ten-band EQ560 and a stereo-linked bus-style compressor. */
 class ConsoleModule : public Module
 {
 public:
-    using Module::Module;
+    ConsoleModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
+        : Module (state, std::move (paramPrefix))
+    {
+        for (size_t i = 0; i < bandParameters.size(); ++i)
+            bandParameters[i] = apvts.getRawParameterValue (prefix + Eq560::bandIds[i]);
+    }
 
     void prepare (double sr, int mb) override
     {
         Module::prepare (sr, mb);
-        for (int c = 0; c < 2; ++c) { hpf[c].reset(); lf[c].reset(); lmf[c].reset(); hmf[c].reset(); hf[c].reset(); }
-        cacheValid = false;
+        for (auto& filter : hpf) filter = {};
+        updateFilters();
+        eq.prepare (sr);
         env = 0.0f;
     }
 
@@ -101,18 +109,11 @@ protected:
         const int n = buf.getNumSamples();
         const int nch = std::min (2, buf.getNumChannels());
 
-        for (int ch = 0; ch < nch; ++ch)
+        for (int i = 0; i < n; ++i)
         {
-            auto* d = buf.getWritePointer (ch);
-            for (int i = 0; i < n; ++i)
-            {
-                float x = hpf[ch].processSample (d[i]);
-                x = lf[ch].processSample (x);
-                x = lmf[ch].processSample (x);
-                x = hmf[ch].processSample (x);
-                x = hf[ch].processSample (x);
-                d[i] = x;
-            }
+            eq.beginSample();
+            for (int ch = 0; ch < nch; ++ch)
+                buf.setSample (ch, i, (float) eq.processSample (ch, hpf[(size_t) ch].tick (buf.getSample (ch, i))));
         }
 
         // Compressor
@@ -139,32 +140,37 @@ protected:
     }
 
 private:
-    using Filt = juce::dsp::IIR::Filter<float>;
-    using Coeffs = juce::dsp::IIR::Coefficients<float>;
-
+    // Same second-order Butterworth HPF as before, with stack-only coefficient updates.
+    struct HighPass
+    {
+        double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1 = 0, z2 = 0;
+        void configure (double sr, double hz)
+        {
+            const double k = std::tan (juce::MathConstants<double>::pi * hz / sr);
+            const double norm = 1.0 / (1.0 + k / 0.707 + k * k);
+            b0 = norm; b1 = -2.0 * norm; b2 = norm;
+            a1 = 2.0 * (k * k - 1.0) * norm;
+            a2 = (1.0 - k / 0.707 + k * k) * norm;
+        }
+        double tick (double x)
+        {
+            const double y = b0 * x + z1;
+            z1 = b1 * x - a1 * y + z2; z2 = b2 * x - a2 * y;
+            return y;
+        }
+    };
     void updateFilters()
     {
-        const std::array<float, 7> v { get ("hpf"), get ("lf"), get ("lmf_f"), get ("lmf"),
-                                       get ("hmf_f"), get ("hmf"), get ("hf") };
-        if (cacheValid && v == cache) return;
-        cache = v; cacheValid = true;
-
-        auto cH  = Coeffs::makeHighPass  (sampleRate, v[0], 0.707f);
-        auto cLf = Coeffs::makeLowShelf  (sampleRate, 100.0f, 0.7f, dbToGain (v[1]));
-        auto cLm = Coeffs::makePeakFilter (sampleRate, v[2], 0.9f, dbToGain (v[3]));
-        auto cHm = Coeffs::makePeakFilter (sampleRate, v[4], 0.9f, dbToGain (v[5]));
-        auto cHf = Coeffs::makeHighShelf (sampleRate, 8000.0f, 0.7f, dbToGain (v[6]));
-
-        for (int c = 0; c < 2; ++c)
-        {
-            hpf[c].coefficients = cH;  lf[c].coefficients = cLf;
-            lmf[c].coefficients = cLm; hmf[c].coefficients = cHm; hf[c].coefficients = cHf;
-        }
+        const float frequency = get ("hpf");
+        for (auto& filter : hpf) filter.configure (sampleRate, frequency);
+        std::array<float, 10> values;
+        for (size_t i = 0; i < values.size(); ++i) values[i] = bandParameters[i]->load();
+        eq.setBandGains (values);
     }
 
-    Filt hpf[2], lf[2], lmf[2], hmf[2], hf[2];
-    std::array<float, 7> cache {};
-    bool cacheValid = false;
+    std::array<HighPass, 2> hpf;
+    Eq560 eq;
+    std::array<std::atomic<float>*, 10> bandParameters {};
     float env = 0.0f;
 };
 
@@ -261,16 +267,23 @@ private:
 class LimiterModule : public Module
 {
 public:
-    using Module::Module;
+    LimiterModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
+        : Module (state, std::move (paramPrefix)),
+          autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain")) {}
 
     void prepare (double sr, int mb) override
     {
         Module::prepare (sr, mb);
         la = std::max (2, (int) std::ceil (0.0015 * sr));
         for (auto& d : delay) d.assign ((size_t) la, 0.0f);
+        for (auto& d : dryDelay) d.assign ((size_t) la, 0.0f);
         reqRing.assign ((size_t) la, 1.0f);
         avgRing.assign ((size_t) la, 1.0f);
         sum = (double) la; wp = 0; relGain = 1.0f;
+        dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
+        energyCoef = std::exp (-1.0 / (0.2 * sr));
+        compensationCoef = timeCoef (100.0f, sr);
+        gainCompDb.store (0.0f);
     }
 
     int getLatencySamples() const override { return la - 1; }
@@ -287,6 +300,7 @@ private:
         const float drive = active ? dbToGain (get ("gain") + enh * 12.0f) : 1.0f;
         const float ceil = dbToGain (get ("ceiling"));
         const float rC = timeCoef (get ("release"), sampleRate);
+        const bool autoGain = active && autoGainParameter->load() > 0.5f;
         float minG = 1.0f;
 
         for (int i = 0; i < n; ++i)
@@ -295,7 +309,9 @@ private:
             float in[2] { 0.0f, 0.0f };
             for (int ch = 0; ch < nch; ++ch)
             {
-                float x = buf.getSample (ch, i) * drive;
+                const float dry = buf.getSample (ch, i);
+                dryDelay[ch][(size_t) wp] = dry;
+                float x = dry * drive;
                 if (active && enh > 0.0f) x = x + (std::tanh (x) - x) * enh * 0.5f;
                 in[ch] = x;
                 pk = std::max (pk, std::abs (x));
@@ -315,21 +331,45 @@ private:
             minG = std::min (minG, g);
 
             const int rd = (wp + 1) % la;
+            float wet[2] { 0.0f, 0.0f };
+            double dryPower = 0.0, wetPower = 0.0;
             for (int ch = 0; ch < nch; ++ch)
             {
                 delay[ch][(size_t) wp] = in[ch];
-                float y = delay[ch][(size_t) rd] * (active ? g : 1.0f);
-                buf.getWritePointer (ch)[i] = active ? juce::jlimit (-ceil, ceil, y) : y;
+                const float delayedDry = dryDelay[ch][(size_t) rd];
+                const float y = delay[ch][(size_t) rd] * (active ? g : 1.0f);
+                wet[ch] = active ? juce::jlimit (-ceil, ceil, y) : y;
+                dryPower += (double) delayedDry * delayedDry;
+                wetPower += (double) wet[ch] * wet[ch];
             }
+            const double channelScale = nch > 0 ? 1.0 / nch : 1.0;
+            dryEnergy = energyCoef * dryEnergy + (1.0 - energyCoef) * dryPower * channelScale;
+            wetEnergy = energyCoef * wetEnergy + (1.0 - energyCoef) * wetPower * channelScale;
+            float targetDb = 0.0f;
+            if (autoGain && dryEnergy > 1.0e-12 && wetEnergy > 1.0e-16)
+                targetDb = juce::jlimit (-36.0f, 36.0f, (float) (10.0 * std::log10 (dryEnergy / wetEnergy)));
+            compensationDb = compensationCoef * compensationDb + (1.0f - compensationCoef) * targetDb;
+            if (! active) { compensationDb = 0.0f; dryEnergy = wetEnergy = 0.0; }
+            const float compensation = active ? dbToGain (compensationDb) : 1.0f;
+            float outputPeak = 0.0f;
+            for (int ch = 0; ch < nch; ++ch) outputPeak = std::max (outputPeak, std::abs (wet[ch] * compensation));
+            // Linked safety gain preserves the stereo image while keeping the existing ceiling.
+            const float safety = active && outputPeak > ceil ? ceil / outputPeak : 1.0f;
+            for (int ch = 0; ch < nch; ++ch)
+                buf.setSample (ch, i, wet[ch] * compensation * safety);
             wp = (wp + 1) % la;
         }
         grDb.store (active ? -gainToDb (minG) : 0.0f);
+        gainCompDb.store (active ? compensationDb : 0.0f);
     }
 
-    std::vector<float> delay[2], reqRing, avgRing;
+    std::atomic<float>* autoGainParameter;
+    std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
     int la = 64, wp = 0;
     double sum = 64.0;
     float relGain = 1.0f;
+    double dryEnergy = 0.0, wetEnergy = 0.0, energyCoef = 0.0;
+    float compensationDb = 0.0f, compensationCoef = 0.0f;
 };
 
 } // namespace rack

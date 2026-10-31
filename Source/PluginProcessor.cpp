@@ -102,6 +102,7 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
     setLatencySamples (latency);   // constant regardless of order or bypass
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+    meters.prepare (sr, block);
 }
 
 void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -116,6 +117,9 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     // The master always follows the complete rack, independently of module order.
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     masterGain.applyGain (buffer, buffer.getNumSamples());
+
+    // Metering tap sits AFTER the master so the meters show what actually leaves the plugin.
+    meters.process (buffer);
 }
 
 //==============================================================================

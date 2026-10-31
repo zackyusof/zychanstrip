@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "MeterPanel.h"
 
 using namespace juce;
 
@@ -1893,6 +1894,8 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     : AudioProcessorEditor (p), proc (p), laf (std::make_unique<RackLookAndFeel>())
 {
     setLookAndFeel (laf.get());
+    meterPanel = std::make_unique<MeterPanel> (proc);
+    addChildComponent (*meterPanel);
     addAndMakeVisible (canvas);
     canvas.setBounds (0, 0, kEditorW, kEditorH);
 
@@ -1988,6 +1991,9 @@ void RackStripEditor::resized()
     for (auto& panel : panels) panel->cancelDrag();
     layoutFor (previewOrder, -1, false);
     masterFader.setBounds (kEditorW - kMargin - 160, kHeaderH / 2 - 12, 148, 24);
+    pageToggle = { kMargin + 232, 10, 84, 30 };
+    if (meterPanel != nullptr && metersShown)
+        meterPanel->setBounds (getLocalBounds());
 
     const float scale = jmax (0.01f, jmin ((float) getWidth() / kEditorW, (float) getHeight() / kEditorH));
     canvasTransform = AffineTransform::scale (scale).translated (
@@ -1999,7 +2005,34 @@ void RackStripEditor::resized()
 
 void RackStripEditor::timerCallback()
 {
+    if (metersShown)
+    {
+        if (meterPanel != nullptr) meterPanel->tick();
+        return;
+    }
     for (auto& p : panels) p->tick();
+}
+
+void RackStripEditor::showPage (bool meters)
+{
+    metersShown = meters;
+    if (meterPanel != nullptr) meterPanel->setVisible (meters);
+    canvas.setVisible (! meters);
+    resized();
+    repaint();
+}
+
+void RackStripEditor::mouseDown (const MouseEvent& e)
+{
+    // The page toggle lives in the machined header bar; map through the canvas transform.
+    const auto p = e.getPosition();
+    const float scale = jmax (0.01f,
+        jmin ((float) getWidth() / (float) kEditorW, (float) getHeight() / (float) kEditorH));
+    const float offX = ((float) getWidth() - (float) kEditorW * scale) * 0.5f;
+    const float offY = ((float) getHeight() - (float) kEditorH * scale) * 0.5f;
+    const Point<float> logical (((float) p.x - offX) / scale, ((float) p.y - offY) / scale);
+    if (pageToggle.toFloat().contains (logical))
+        showPage (! metersShown);
 }
 
 void RackStripEditor::paint (Graphics& g)
@@ -2068,8 +2101,7 @@ void RackStripEditor::paint (Graphics& g)
     g.drawText ("MASTERING & TRACKING STRIP", Rectangle<float> (zyMarkBox.getRight() + 12.0f, logoY + 3.0f, 180.0f, 18.0f), Justification::centredLeft);
 
     // Power jewel LED on header
-    const Point<float> pwrC (full.getWidth() * 0.5f, header.getCentreY());
-    g.setColour (Colour (0xff08090a));
+    const Point<float> pwrC (full.getWidth() * 0.5f, header.getCentreY());    g.setColour (Colour (0xff08090a));
     g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC));
     g.setColour (Colours::white.withAlpha (0.25f));
     g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC), 0.8f);
@@ -2086,7 +2118,38 @@ void RackStripEditor::paint (Graphics& g)
     g.setColour (Colour (0xffc8ccd0));
     g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, header.getY(), 62.0f, header.getHeight()), Justification::centredRight);
 
-    // 5. Plate shadows so the faceplates read as physically raised hardware
+    // 6. Rack / METER page selector
+    {
+        const auto t = pageToggle.toFloat();
+        g.setColour (Colour (0xff0b0d0e));
+        g.fillRoundedRectangle (t, 3.0f);
+        g.setColour (Colours::white.withAlpha (0.18f));
+        g.drawRoundedRectangle (t, 3.0f, 1.0f);
+
+        const auto half = t.getWidth() * 0.5f;
+        const Rectangle<float> rackBtn (t.getX(), t.getY(), half, t.getHeight());
+        const Rectangle<float> meterBtn (t.getX() + half, t.getY(), half, t.getHeight());
+
+        const bool onMeter = metersShown;
+        g.setGradientFill (ColourGradient (onMeter ? Colour (0xff15181a) : Colour (0xff57d4c2),
+                                           rackBtn.getX(), rackBtn.getY(),
+                                           onMeter ? Colour (0xff0a0c0d) : Colour (0xff2f9d8f),
+                                           rackBtn.getX(), rackBtn.getBottom(), false));
+        g.fillRoundedRectangle (rackBtn.reduced (2.0f), 2.0f);
+        g.setGradientFill (ColourGradient (onMeter ? Colour (0xff57d4c2) : Colour (0xff15181a),
+                                           meterBtn.getX(), meterBtn.getY(),
+                                           onMeter ? Colour (0xff2f9d8f) : Colour (0xff0a0c0d),
+                                           meterBtn.getX(), meterBtn.getBottom(), false));
+        g.fillRoundedRectangle (meterBtn.reduced (2.0f), 2.0f);
+
+        g.setFont (fnt (10.0f, true));
+        g.setColour (onMeter ? Colour (0xff9aa0a4) : Colour (0xff06201d));
+        g.drawText ("RACK", rackBtn, Justification::centred, false);
+        g.setColour (onMeter ? Colour (0xff06201d) : Colour (0xff9aa0a4));
+        g.drawText ("METER", meterBtn, Justification::centred, false);
+    }
+
+    // 7. Plate shadows so the faceplates read as physically raised hardware
     for (int s = 0; s < 4; ++s)
     {
         const auto r = slotBounds (s);

@@ -125,6 +125,54 @@ void audioTests()
     proc.processBlock (empty, midi);
     check (true, "empty audio block accepted");
 }
+// Renders the SSL-style metering page with real audio pushed through the chain so the
+// meters, scope and correlation show genuine measurements rather than resting values.
+void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
+{
+    const juce::Point<int> sizes[] { { 1080, 760 }, { 864, 608 } };
+    for (const auto size : sizes)
+    {
+        editor.setSize (size.x, size.y);
+
+        // Restore a live chain (audioTests() leaves every module bypassed) and feed a
+        // stereo tone pair so the tap has real signal.
+        for (auto id : { "con_bypass", "opto_bypass", "fet_bypass", "lim_bypass" })
+            setParam (proc, id, 0.0f);
+        setParam (proc, "master_level", 0.0f);
+        proc.setPlayConfigDetails (2, 2, 48000.0, 512);
+        proc.prepareToPlay (48000.0, 512);
+        juce::AudioBuffer<float> buf (2, 512);
+        for (int block = 0; block < 64; ++block)
+        {
+            for (int i = 0; i < 512; ++i)
+            {
+                const float t = (float) (block * 512 + i) / 48000.0f;
+                buf.setSample (0, i, 0.25f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * t));
+                buf.setSample (1, i, 0.20f * std::sin (2.0f * juce::MathConstants<float>::pi * 660.0f * t));
+            }
+            juce::MidiBuffer midi;
+            proc.processBlock (buf, midi);
+        }
+
+        // Switch the editor to the meter page, then pump the timer so the panel samples the
+        // tap before the snapshot is taken (otherwise it captures resting -100 dB values).
+        editor.setMeterPageVisible (true);
+        for (int tick = 0; tick < 8; ++tick)
+            editor.pumpTimerForTest();
+
+        auto img = editor.createComponentSnapshot (editor.getLocalBounds());
+        const auto file = output.getChildFile ("meter-" + juce::String (size.x) + "x" + juce::String (size.y) + ".png");
+        juce::FileOutputStream stream (file);
+        stream.setPosition (0);
+        stream.truncate();
+        check (stream.openedOk() && juce::PNGImageFormat().writeImageToStream (img, stream),
+               "meter page snapshot " + file.getFileName());
+    }
+    // Return to the rack so the following editorTests() render the rack page.
+    editor.setMeterPageVisible (false);
+    editor.setSize (1080, 760);
+}
+
 void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
 {
     auto* master = dynamic_cast<juce::Slider*> (findNamed (editor, "Master level"));
@@ -217,6 +265,7 @@ public:
         RackStripProcessor proc;
         auto editor = std::unique_ptr<RackStripEditor> (static_cast<RackStripEditor*> (proc.createEditor()));
         newEditorTests (proc, *editor);
+        meterPageTests (proc, *editor, output);
         editorTests (proc, *editor, output);
         std::cout << "RESULT " << passed << "/" << (passed + failed) << " passed" << std::endl;
         setApplicationReturnValue (failed == 0 ? 0 : 1);

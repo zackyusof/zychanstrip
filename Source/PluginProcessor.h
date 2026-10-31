@@ -1,5 +1,6 @@
 #pragma once
 #include "Modules.h"
+#include "Meters.h"
 
 class RackStripProcessor : public juce::AudioProcessor
 {
@@ -42,6 +43,10 @@ public:
 
     float getLimiterOutput() const { return modules[Limiter]->outPeak.load(); }
 
+    /** Post-chain metering tap (read-only; never alters audio). */
+    RackMeters& getMeters() noexcept { return meters; }
+    const RackMeters& getMeters() const noexcept { return meters; }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -49,6 +54,7 @@ private:
 
     std::array<std::unique_ptr<rack::Module>, NumModules> modules;
     std::atomic<uint32_t> packedOrder { 0x03020100u };
+    RackMeters meters;
     std::atomic<float>* masterLevel = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };
 

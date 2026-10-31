@@ -38,6 +38,9 @@ juce_add_plugin(zychanstrip
 
 target_sources(zychanstrip PRIVATE
     Source/Modules.h
+    Source/Meters.h
+    Source/MeterPanel.h
+    Source/MeterPanel.cpp
     Source/PluginProcessor.h
     Source/PluginProcessor.cpp
     Source/PluginEditor.h

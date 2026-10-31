@@ -1,8 +1,10 @@
 #pragma once
 #include "PluginProcessor.h"
+#include <memory>
 
 class ModulePanel;
 class RackLookAndFeel;
+class MeterPanel;
 
 /** Master rack editor: photo-real hardware chassis holding four re-orderable module face plates. */
 class RackStripEditor : public juce::AudioProcessorEditor, private juce::Timer
@@ -17,6 +19,16 @@ public:
 
 private:
     void timerCallback() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void showPage (bool meters);
+
+public:
+    /** Test seam: switch pages without synthesising a mouse event. */
+    void setMeterPageVisible (bool show) { showPage (show); }
+    void pumpTimerForTest() { timerCallback(); }
+    bool isMeterPageVisible() const { return metersShown; }
+
+private:
 
     juce::Rectangle<int> slotBounds (int slot) const;
     int slotForCentreX (int x) const;
@@ -36,6 +48,11 @@ private:
     juce::Slider masterFader { juce::Slider::LinearHorizontal, juce::Slider::NoTextBox };
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> masterAttachment;
     juce::AffineTransform canvasTransform;
+
+    // Metering page (SSL-style analyser) shown instead of the rack
+    std::unique_ptr<MeterPanel> meterPanel;
+    juce::Rectangle<int> pageToggle;
+    bool metersShown = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripEditor)
 };

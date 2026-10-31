@@ -51,7 +51,7 @@ for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", "RackStrip.d
             continue
         objs.append(os.path.join(root, f))
 
-fw = ["Cocoa", "CoreAudio", "CoreMIDI", "AudioToolbox", "CoreFoundation", "IOKit", "Foundation",
+fw = ["Cocoa", "CoreAudio", "CoreAudioKit", "CoreMIDI", "AudioToolbox", "CoreFoundation", "IOKit", "Foundation",
       "AppKit", "QuartzCore", "CoreServices", "Metal", "MetalKit", "WebKit", "Security",
       "Accelerate", "CoreVideo", "DiscRecording", "AVFoundation", "CoreMedia", "AudioUnit",
       "Carbon", "UniformTypeIdentifiers"]

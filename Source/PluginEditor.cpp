@@ -3,7 +3,7 @@
 using namespace juce;
 
 //==============================================================================
-//  Palette + small drawing helpers
+//  Palette + photorealistic drawing helpers
 //==============================================================================
 namespace
 {
@@ -14,135 +14,194 @@ constexpr int kGap = 10;         // gap between plates
 constexpr int kEditorW = 1080;
 constexpr int kEditorH = 760;
 
+// Authentic zynamfx ZY monogram SVG (exact brand mark from zynamfx Brand.cpp)
+constexpr const char* kZyMarkSvg =
+R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 20"><rect x="0.75" y="0.75" width="18.5" height="18.5" rx="3" fill="#35262b" stroke="#f06470" stroke-width="1.5"/><path d="M4.5 5h11l-11 10h11" fill="none" stroke="#f06470" stroke-width="2.25" stroke-linecap="square" stroke-linejoin="miter"/><rect x="24.75" y="0.75" width="18.5" height="18.5" rx="3" fill="#19322f" stroke="#57d4c2" stroke-width="1.5"/><path d="m28.5 5 5.5 5 5.5-5M34 10v5" fill="none" stroke="#57d4c2" stroke-width="2.25" stroke-linecap="square" stroke-linejoin="miter"/></svg>)svg";
+
 Font fnt (float h, bool bold = true) { return Font (FontOptions (h, bold ? Font::bold : Font::plain)); }
 
 namespace pal
 {
-const Colour chassisTop     { 0xff2a2e30 };
-const Colour chassisBottom  { 0xff0b0d0e };
-const Colour headerBar      { 0xff272b2e };
-const Colour faceDark       { 0xff1b1c1e };
-const Colour faceDarkLow    { 0xff070808 };
-const Colour faceLightTop   { 0xffd5d6d3 };
-const Colour faceLightLow   { 0xffa8aaa7 };
-const Colour fetTop         { 0xff17191b };
-const Colour fetLow         { 0xff0e0f10 };
-const Colour limTop         { 0xff536c7b };
-const Colour limLow         { 0xff2b3e4c };
-const Colour cream          { 0xfff3e8bf };
-const Colour creamLow       { 0xffd9c48c };
-const Colour needleInk      { 0xff231a10 };
-const Colour engrave        { 0xffdedede };
-const Colour engraveDim     { 0xff9a9a9a };
-const Colour seam           { 0xff000000 };
-const Colour screwHi        { 0xffb9bcc0 };
-const Colour screwLo        { 0xff2c2e31 };
-const Colour redCap         { 0xffc8322b };
-const Colour blueCap        { 0xff2f6fbf };
-const Colour greenCap       { 0xff1f7a43 };
-const Colour blackCap       { 0xff24252a };
-const Colour silverCap      { 0xffb9bdc2 };
-const Colour btnOff         { 0xff1d2833 };
-const Colour btnOn          { 0xff2f7bc4 };
+const Colour chassisTop     { 0xff202428 };
+const Colour chassisBottom  { 0xff090b0c };
+const Colour chassisGrain   { 0xff14171a };
+const Colour headerBarTop   { 0xff2c3135 };
+const Colour headerBarLow   { 0xff15181a };
+const Colour faceDark       { 0xff1e2124 };
+const Colour faceDarkLow    { 0xff0a0c0d };
+const Colour faceLightTop   { 0xffe2e4e1 };
+const Colour faceLightLow   { 0xffafb2ae };
+const Colour fetTop         { 0xff181a1c };
+const Colour fetLow         { 0xff0b0d0e };
+const Colour limTop         { 0xff415462 };
+const Colour limLow         { 0xff1f2a33 };
+const Colour cream          { 0xfffcf5dc };
+const Colour creamLow       { 0xffd9c798 };
+const Colour needleInk      { 0xff18120c };
+const Colour engrave        { 0xffe6e8ea };
+const Colour engraveDim     { 0xff989ea4 };
+const Colour screwHi        { 0xffd4d7db };
+const Colour screwLo        { 0xff282b2e };
+const Colour redCap         { 0xffc82824 };
+const Colour blueCap        { 0xff2b66b2 };
+const Colour greenCap       { 0xff1e7a42 };
+const Colour blackCap       { 0xff222428 };
+const Colour silverCap      { 0xffc8ccd1 };
+const Colour btnOff         { 0xff182028 };
+const Colour btnOn          { 0xff296eb4 };
 }
 
-Colour ledColour (float t)   // 0 = amber, 1 = red
+void drawZyLogo (Graphics& g, Rectangle<float> bounds)
 {
-    const Colour amber (0xffffb000), orange (0xffff6a00), red (0xffff2a1a);
-    t = jlimit (0.0f, 1.0f, t);
-    return t < 0.5f ? amber.interpolatedWith (orange, t * 2.0f) : orange.interpolatedWith (red, (t - 0.5f) * 2.0f);
+    static std::unique_ptr<Drawable> drawable = []() {
+        if (auto xml = XmlDocument::parse (kZyMarkSvg))
+            return Drawable::createFromSVG (*xml);
+        return std::unique_ptr<Drawable>();
+    }();
+    if (drawable != nullptr)
+        drawable->drawWithin (g, bounds, RectanglePlacement::centred | RectanglePlacement::onlyReduceInSize, 1.0f);
 }
 
-/** Rounded metal plate with a vertical gradient, brushed streaks and a hairline rim. */
+/** Realistic brushed metal faceplate with anisotropic lighting and chamfered bevels. */
 void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom, float corner, int seed)
 {
     Path shape;
     shape.addRoundedRectangle (r, corner);
 
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.fillRoundedRectangle (r.translated (0.0f, 3.0f), corner);
+    // Deep ambient occlusion shadow behind plate
+    g.setColour (Colours::black.withAlpha (0.70f));
+    g.fillRoundedRectangle (r.translated (0.0f, 3.5f), corner + 1.0f);
+    g.setColour (Colours::black.withAlpha (0.40f));
+    g.fillRoundedRectangle (r.translated (0.0f, 1.5f), corner);
 
     g.saveState();
     g.reduceClipRegion (shape);
+
+    // Primary anodized metal gradient
     g.setGradientFill (ColourGradient (top, 0.0f, r.getY(), bottom, 0.0f, r.getBottom(), false));
     g.fillRect (r);
 
-    // horizontal brushed streaks
+    // Dense fine brushed metal grain
     Random rnd (seed);
-    for (float y = r.getY(); y < r.getBottom(); y += 1.0f + rnd.nextFloat() * 1.6f)
+    for (float y = r.getY(); y < r.getBottom(); y += 0.85f + rnd.nextFloat() * 1.4f)
     {
-        g.setColour ((rnd.nextBool() ? Colours::white : Colours::black).withAlpha (rnd.nextFloat() * 0.030f));
+        const float alpha = rnd.nextFloat() * 0.038f;
+        g.setColour ((rnd.nextBool() ? Colours::white : Colours::black).withAlpha (alpha));
         g.drawHorizontalLine ((int) y, r.getX(), r.getRight());
     }
 
-    // vertical sheen down the middle
-    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.05f), r.getCentreX(), r.getY(),
-                                       Colours::transparentWhite, r.getCentreX(), r.getY() + r.getHeight() * 0.5f, true));
-    g.fillRect (r);
+    // Overhead diffuse specular sheen
+    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.08f), r.getCentreX(), r.getY(),
+                                       Colours::transparentWhite, r.getCentreX(), r.getY() + r.getHeight() * 0.45f, false));
+    g.fillRect (r.withHeight (r.getHeight() * 0.45f));
+
+    // Subtle bottom bounce highlight
+    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.04f), r.getCentreX(), r.getBottom(),
+                                       Colours::transparentWhite, r.getCentreX(), r.getBottom() - r.getHeight() * 0.20f, false));
+    g.fillRect (r.withTop (r.getBottom() - r.getHeight() * 0.20f));
+
     g.restoreState();
 
-    g.setColour (Colours::white.withAlpha (0.10f));
-    g.drawRoundedRectangle (r.reduced (0.75f), corner, 1.0f);
-    g.setColour (Colours::black.withAlpha (0.85f));
-    g.drawRoundedRectangle (r.reduced (0.25f), corner, 1.4f);
+    // Machined chamfered outer bevel: bright top-left, shadowed bottom-right
+    g.setColour (Colours::white.withAlpha (0.32f));
+    g.drawLine (r.getX() + corner, r.getY() + 0.5f, r.getRight() - corner, r.getY() + 0.5f, 1.0f);
+    g.drawLine (r.getX() + 0.5f, r.getY() + corner, r.getX() + 0.5f, r.getBottom() - corner, 1.0f);
+
+    g.setColour (Colours::black.withAlpha (0.80f));
+    g.drawLine (r.getX() + corner, r.getBottom() - 0.5f, r.getRight() - corner, r.getBottom() - 0.5f, 1.0f);
+    g.drawLine (r.getRight() - 0.5f, r.getY() + corner, r.getRight() - 0.5f, r.getBottom() - corner, 1.0f);
+
+    // Hairline inner rim
+    g.setColour (Colours::black.withAlpha (0.45f));
+    g.drawRoundedRectangle (r.reduced (0.5f), corner, 1.0f);
 }
 
-/** Screw with a bevelled slot head. */
+/** Precision countersunk machine screw with metallic sheen and 3D slot. */
 void paintScrew (Graphics& g, Point<float> p, float rad, float slotAngle)
 {
-    g.setColour (Colours::black.withAlpha (0.5f));
-    g.fillEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (p).translated (0.0f, 1.0f));
+    // Countersunk bevel well in the panel
+    const Rectangle<float> well (p.x - rad - 1.4f, p.y - rad - 1.4f, (rad + 1.4f) * 2.0f, (rad + 1.4f) * 2.0f);
+    g.setColour (Colours::black.withAlpha (0.65f));
+    g.fillEllipse (well);
+    g.setColour (Colours::white.withAlpha (0.22f));
+    g.drawEllipse (well.reduced (0.4f), 0.7f);
 
-    g.setGradientFill (ColourGradient (pal::screwHi, p.x - rad, p.y - rad, pal::screwLo, p.x + rad, p.y + rad, false));
-    g.fillEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (p));
-    g.setColour (Colours::white.withAlpha (0.35f));
-    g.drawEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (p).reduced (0.6f), 0.8f);
-    g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (p).reduced (0.2f), 1.0f);
+    // Screw head dome with metallic gradient
+    const Rectangle<float> head (p.x - rad, p.y - rad, rad * 2.0f, rad * 2.0f);
+    g.setGradientFill (ColourGradient (pal::screwHi, p.x - rad * 0.7f, p.y - rad * 0.7f,
+                                       pal::screwLo, p.x + rad * 0.7f, p.y + rad * 0.7f, false));
+    g.fillEllipse (head);
 
-    // slot
+    // Concentric specular ring
+    g.setColour (Colours::white.withAlpha (0.45f));
+    g.drawEllipse (head.reduced (0.6f), 0.6f);
+    g.setColour (Colours::black.withAlpha (0.55f));
+    g.drawEllipse (head, 0.8f);
+
+    // 3D screw slot
     Path slot;
-    slot.addRoundedRectangle (-rad * 0.72f, -1.1f, rad * 1.44f, 2.2f, 1.1f);
-    g.setColour (Colours::black.withAlpha (0.8f));
-    g.fillPath (slot, AffineTransform::rotation (slotAngle).translated (p.x, p.y));
-    g.setColour (Colours::white.withAlpha (0.16f));
-    g.fillPath (slot, AffineTransform::rotation (slotAngle).translated (p.x, p.y - 0.9f));
+    slot.addRoundedRectangle (-rad * 0.74f, -1.05f, rad * 1.48f, 2.1f, 0.8f);
+    AffineTransform xform = AffineTransform::rotation (slotAngle).translated (p.x, p.y);
+
+    // Slot inner depth
+    g.setColour (Colour (0xff08090a));
+    g.fillPath (slot, xform);
+
+    // Bright lower edge catching light
+    AffineTransform hiXform = AffineTransform::rotation (slotAngle).translated (p.x, p.y + 0.75f);
+    g.setColour (Colours::white.withAlpha (0.30f));
+    g.strokePath (slot, PathStrokeType (0.6f), hiXform);
 }
 
-/** Six-dot drag grip sitting on the chassis above a plate. */
+/** Machined aluminum module extraction handle / drag grip with knurling. */
 void paintGrip (Graphics& g, Rectangle<float> r, bool hot)
 {
-    g.setColour (Colours::black.withAlpha (0.35f));
-    g.fillRoundedRectangle (r.translated (0.0f, 1.0f), 6.0f);
-    g.setColour (Colours::white.withAlpha (hot ? 0.13f : 0.07f));
-    g.fillRoundedRectangle (r, 6.0f);
+    // Drop shadow onto chassis
     g.setColour (Colours::black.withAlpha (0.55f));
-    g.drawRoundedRectangle (r, 6.0f, 0.8f);
+    g.fillRoundedRectangle (r.translated (0.0f, 1.5f), 5.0f);
 
+    // Milled anodized block
+    g.setGradientFill (ColourGradient (hot ? Colour (0xff484e54) : Colour (0xff32373c), 0.0f, r.getY(),
+                                       hot ? Colour (0xff1f2226) : Colour (0xff141618), 0.0f, r.getBottom(), false));
+    g.fillRoundedRectangle (r, 4.0f);
+
+    // Machined chamfer
+    g.setColour (Colours::white.withAlpha (hot ? 0.35f : 0.18f));
+    g.drawRoundedRectangle (r.reduced (0.5f), 4.0f, 1.0f);
+    g.setColour (Colours::black.withAlpha (0.7f));
+    g.drawRoundedRectangle (r, 4.0f, 1.2f);
+
+    // Knurled thumb grip texture (6 raised precision dots with 3D relief)
     const auto c = r.getCentre();
     for (int row = 0; row < 3; ++row)
+    {
         for (int col = 0; col < 2; ++col)
         {
-            const Point<float> p (c.x - 5.0f + (float) col * 10.0f, c.y - 9.0f + (float) row * 9.0f);
-            g.setColour (Colours::black.withAlpha (0.55f));
-            g.fillEllipse (Rectangle<float> (3.4f, 3.4f).withCentre (p.translated (0.0f, 0.7f)));
-            g.setColour (Colours::white.withAlpha (hot ? 0.85f : 0.55f));
+            const Point<float> p (c.x - 5.5f + (float) col * 11.0f, c.y - 8.0f + (float) row * 8.0f);
+            g.setColour (Colours::black.withAlpha (0.75f));
+            g.fillEllipse (Rectangle<float> (3.6f, 3.6f).withCentre (p.translated (0.0f, 0.8f)));
+
+            g.setGradientFill (ColourGradient (Colours::white.withAlpha (hot ? 0.95f : 0.70f), p.x - 1.0f, p.y - 1.0f,
+                                               Colour (0xff70767c), p.x + 1.2f, p.y + 1.2f, false));
             g.fillEllipse (Rectangle<float> (3.0f, 3.0f).withCentre (p));
         }
+    }
 }
 
-/** Engraved-style caption: dark shadow underneath, bright text on top. */
+/** Engraved studio typography with recessed shadow and sharp surface highlight. */
 void engraveText (Graphics& g, const String& text, Rectangle<int> area, Justification j, float height,
                   Colour colour, bool bold = true)
 {
     g.setFont (fnt (height, bold));
-    g.setColour (Colours::black.withAlpha (0.65f));
+    // Crisp dark drop shadow underneath
+    g.setColour (Colours::black.withAlpha (0.75f));
     g.drawText (text, area.translated (0, 1), j);
+    // Main sharp engraved legend
     g.setColour (colour);
     g.drawText (text, area, j);
 }
 
-/** Tick marks + numeric legends around a rotary control. */
+/** Dial scale markings around knobs. */
 struct KnobScale
 {
     float a0 = MathConstants<float>::pi * 1.22f;
@@ -159,84 +218,111 @@ void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale
         const bool major = (i % 4) == 0;
         const float a = sc.a0 + (sc.a1 - sc.a0) * (float) i / (float) (total - 1);
         const Point<float> dir (std::sin (a), -std::cos (a));
-        const float len = major ? 6.0f : 3.0f;
-        g.setColour (c.withAlpha (major ? 0.95f : 0.55f));
+        const float len = major ? 6.5f : 3.5f;
+
+        // Shadow under tick
+        g.setColour (Colours::black.withAlpha (0.50f));
+        g.drawLine (Line<float> (centre + dir * radius + Point<float> (0.0f, 0.8f),
+                                 centre + dir * (radius + len) + Point<float> (0.0f, 0.8f)), major ? 1.5f : 1.0f);
+
+        // Crisp tick mark
+        g.setColour (c.withAlpha (major ? 0.95f : 0.58f));
         g.drawLine (Line<float> (centre + dir * radius, centre + dir * (radius + len)), major ? 1.5f : 1.0f);
     }
 }
 
-/** Brass-dial VU movement inside a dark bezel. The dial is an ellipse whose height drives the
-    pivot and scale radius, so the same code works for the large opto meter and the small GR meter. */
+/** Photorealistic vintage VU meter with authentic tungsten backlighting, convex glass reflection,
+    and needle shadow cast onto the dial face. Works for both round (Opto) and rectangular (FET) meters. */
 void paintVuDial (Graphics& g, Rectangle<float> r, float angle, float a0, float a1,
                   const String& leftCaption, const String& rightCaption, float labelSize,
-                  const String& unitCaption = {})
+                  const String& unitCaption = {}, bool isRectangular = false)
 {
     const auto c = r.getCentre();
 
-    // bezel: moulded dark ring with a bright inner lip
-    const Rectangle<float> bezel = r.expanded (jmax (5.0f, r.getHeight() * 0.055f));
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.fillEllipse (bezel.translated (0.0f, 3.0f));
-    g.setGradientFill (ColourGradient (Colour (0xff57595b), bezel.getX(), bezel.getY(),
-                                       Colour (0xff101112), bezel.getRight(), bezel.getBottom(), false));
-    g.fillEllipse (bezel);
-    g.setColour (Colours::white.withAlpha (0.28f));
-    g.drawEllipse (bezel.reduced (0.7f), 1.2f);
+    // 1. Heavy moulded bakelite bezel
+    const Rectangle<float> bezel = r.expanded (jmax (6.0f, r.getHeight() * 0.065f));
+    g.setColour (Colours::black.withAlpha (0.80f));
+    if (isRectangular)
+        g.fillRoundedRectangle (bezel.translated (0.0f, 3.5f), 5.0f);
+    else
+        g.fillEllipse (bezel.translated (0.0f, 3.5f));
 
-    // glass face
+    g.setGradientFill (ColourGradient (Colour (0xff484c50), bezel.getX(), bezel.getY(),
+                                       Colour (0xff101214), bezel.getRight(), bezel.getBottom(), false));
+    if (isRectangular)
+        g.fillRoundedRectangle (bezel, 4.0f);
+    else
+        g.fillEllipse (bezel);
+
+    // Bezel inner stepped brass/chrome retaining rim
+    g.setColour (Colours::white.withAlpha (0.35f));
+    if (isRectangular)
+        g.drawRoundedRectangle (bezel.reduced (0.8f), 4.0f, 1.2f);
+    else
+        g.drawEllipse (bezel.reduced (0.8f), 1.2f);
+
+    g.setColour (Colour (0xffb89852).withAlpha (0.60f));
+    if (isRectangular)
+        g.drawRoundedRectangle (r.expanded (1.6f), 3.0f, 1.2f);
+    else
+        g.drawEllipse (r.expanded (1.8f), 1.2f);
+
+    // 2. Warm backlit dial paper
     g.setGradientFill (ColourGradient (pal::cream, c.x, r.getY() - r.getHeight() * 0.15f,
                                        pal::creamLow, c.x, r.getBottom() + r.getHeight() * 0.10f, false));
-    g.fillEllipse (r);
-    g.setColour (Colour (0xff0a0906));
-    g.drawEllipse (r, 1.6f);
+    if (isRectangular)
+        g.fillRoundedRectangle (r, 3.0f);
+    else
+        g.fillEllipse (r);
 
-    // glass reflection (upper-left sweep) + lower vignette
-    g.saveState();
-    Path clip; clip.addEllipse (r); g.reduceClipRegion (clip);
-    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.55f), r.getX() + r.getWidth() * 0.18f, r.getY(),
-                                       Colours::transparentWhite, r.getX() + r.getWidth() * 0.45f, r.getY() + r.getHeight() * 0.62f, false));
-    g.fillRect (r);
-    g.setGradientFill (ColourGradient (Colours::transparentBlack, c.x, r.getY() + r.getHeight() * 0.45f,
-                                       Colour (0x44000000), c.x, r.getBottom(), false));
-    g.fillRect (r);
-    g.restoreState();
+    // Warm incandescent bulb glow behind the glass
+    g.setGradientFill (ColourGradient (Colour (0x55ffde82), c.x, r.getY() + r.getHeight() * 0.20f,
+                                       Colours::transparentWhite, c.x, r.getBottom(), true));
+    if (isRectangular)
+        g.fillRoundedRectangle (r, 3.0f);
+    else
+        g.fillEllipse (r);
 
-    // Pivot sits low in the dial; the arc radius is derived from the dial height so the scale
-    // never escapes the ellipse and the numerals sit just inside the rim.
+    g.setColour (Colour (0xff0a0907));
+    if (isRectangular)
+        g.drawRoundedRectangle (r, 3.0f, 1.4f);
+    else
+        g.drawEllipse (r, 1.6f);
+
+    // 3. Dial scale arc & markings
     const float pivotY = r.getY() + r.getHeight() * 0.74f;
     const Point<float> pivot (c.x, pivotY);
     const float radius = r.getHeight() * 0.31f;
     auto dir = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
 
-    // scale arc
+    // Scale arc
     Path arc; arc.addCentredArc (pivot.x, pivot.y, radius, radius, 0.0f, a0, a1, true);
-    g.setColour (pal::needleInk.withAlpha (0.8f));
-    g.strokePath (arc, PathStrokeType (1.1f));
+    g.setColour (pal::needleInk.withAlpha (0.85f));
+    g.strokePath (arc, PathStrokeType (1.2f));
 
-    // ticks + numerals
+    // Dial ticks + numerals
     const int ticks = 21;
     for (int i = 0; i < ticks; ++i)
     {
         const float a = a0 + (a1 - a0) * (float) i / (float) (ticks - 1);
         const auto d = dir (a);
         const bool major = (i % 4) == 0;
-        g.setColour (pal::needleInk.withAlpha (0.9f));
-        g.drawLine (Line<float> (pivot + d * radius, pivot + d * (radius + (major ? 7.0f : 4.0f))), major ? 1.4f : 0.8f);
+        g.setColour (pal::needleInk.withAlpha (0.92f));
+        g.drawLine (Line<float> (pivot + d * radius, pivot + d * (radius + (major ? 7.0f : 4.0f))), major ? 1.4f : 0.85f);
 
         if (major && labelSize > 0.0f)
         {
             g.setFont (fnt (labelSize, false));
             const auto centre = pivot + d * (radius + 15.0f);
-            g.drawText (String (i * 5),
-                        Rectangle<float> (20.0f, 12.0f).withCentre (centre), Justification::centred);
+            g.drawText (String (i * 5), Rectangle<float> (20.0f, 12.0f).withCentre (centre), Justification::centred);
         }
     }
 
-    // captions inside the dial
+    // Dial text captions
     if (leftCaption.isNotEmpty())
     {
         g.setFont (fnt (jmax (8.0f, labelSize * 0.95f), false));
-        g.setColour (pal::needleInk.withAlpha (0.8f));
+        g.setColour (pal::needleInk.withAlpha (0.85f));
         g.drawText (leftCaption, Rectangle<float> (pivot.x - radius * 0.95f, pivot.y - radius * 0.42f,
                                                    radius * 0.95f, 11.0f), Justification::centredRight);
     }
@@ -244,71 +330,130 @@ void paintVuDial (Graphics& g, Rectangle<float> r, float angle, float a0, float 
     {
         g.setFont (fnt (jmax (9.0f, labelSize * 1.05f), true));
         g.setColour (pal::needleInk.withAlpha (0.92f));
-        // placed below the pivot so it never collides with the needle or the numerals
         g.drawText (unitCaption, Rectangle<float> (pivot.x - radius * 1.35f, pivot.y + 10.0f,
                                                    radius * 2.7f, 14.0f), Justification::centred);
     }
     if (rightCaption.isNotEmpty())
     {
         g.setFont (fnt (jmax (8.0f, labelSize * 0.95f), true));
-        g.setColour (Colour (0xffa52f18));
+        g.setColour (Colour (0xffb82618));
         g.drawText (rightCaption, Rectangle<float> (pivot.x + radius * 0.05f, pivot.y - radius * 0.42f,
                                                     radius, 11.0f), Justification::centredLeft);
         Path redArc;
         redArc.addCentredArc (pivot.x, pivot.y, radius + 3.0f, radius + 3.0f, 0.0f, a1 - 0.34f, a1, true);
-        g.setColour (Colour (0xffa52f18).withAlpha (0.9f));
+        g.setColour (Colour (0xffb82618).withAlpha (0.92f));
         g.strokePath (redArc, PathStrokeType (3.2f));
     }
 
-    // needle + pivot screw
+    // 4. Pointer needle with realistic drop shadow cast onto paper
     const float a = a0 + (a1 - a0) * jlimit (0.0f, 1.0f, angle);
-    const auto nd = dir (a);
-    g.setColour (Colours::black.withAlpha (0.18f));
-    g.drawLine (Line<float> (pivot + Point<float> (1.5f, 1.5f), pivot + nd * (radius + 1.0f) + Point<float> (1.5f, 1.5f)), 2.2f);
+
+    // Needle shadow (offset 2.2px down and right)
+    Point<float> shadowOff (2.2f, 2.2f);
+    Path shadowNeedle;
+    shadowNeedle.addRoundedRectangle (-1.0f, -(radius + 1.0f), 2.0f, radius - 1.0f, 0.9f);
+    g.setColour (Colours::black.withAlpha (0.28f));
+    g.fillPath (shadowNeedle, AffineTransform::rotation (a).translated (pivot.x + shadowOff.x, pivot.y + shadowOff.y));
+
+    // Needle blade
     Path needle;
-    needle.addRoundedRectangle (-0.9f, -(radius + 1.0f), 1.8f, radius - 1.0f, 0.9f);
+    needle.addRoundedRectangle (-0.95f, -(radius + 1.0f), 1.9f, radius - 1.0f, 0.9f);
     g.setColour (pal::needleInk);
     g.fillPath (needle, AffineTransform::rotation (a).translated (pivot.x, pivot.y));
-    g.setColour (Colour (0xff15100a));
-    g.fillEllipse (Rectangle<float> (9.0f, 9.0f).withCentre (pivot));
-    g.setColour (Colours::white.withAlpha (0.35f));
-    g.drawEllipse (Rectangle<float> (9.0f, 9.0f).withCentre (pivot), 0.8f);
+
+    // Needle pivot hub
+    g.setColour (Colours::black.withAlpha (0.55f));
+    g.fillEllipse (Rectangle<float> (11.0f, 11.0f).withCentre (pivot.translated (0.0f, 1.0f)));
+    g.setGradientFill (ColourGradient (Colour (0xff2c2824), pivot.x - 3.0f, pivot.y - 3.0f,
+                                       Colour (0xff0a0806), pivot.x + 3.0f, pivot.y + 3.0f, false));
+    g.fillEllipse (Rectangle<float> (9.5f, 9.5f).withCentre (pivot));
+    g.setColour (Colours::white.withAlpha (0.45f));
+    g.drawEllipse (Rectangle<float> (9.5f, 9.5f).withCentre (pivot), 0.8f);
+
+    // 5. Curved glass dome reflection
+    g.saveState();
+    Path clip;
+    if (isRectangular)
+        clip.addRoundedRectangle (r, 3.0f);
+    else
+        clip.addEllipse (r);
+    g.reduceClipRegion (clip);
+    g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.45f), r.getX() + r.getWidth() * 0.16f, r.getY(),
+                                       Colours::transparentWhite, r.getX() + r.getWidth() * 0.48f, r.getY() + r.getHeight() * 0.65f, false));
+    g.fillRect (r);
+
+    // Lower glass reflection
+    g.setGradientFill (ColourGradient (Colours::transparentBlack, c.x, r.getY() + r.getHeight() * 0.50f,
+                                       Colour (0x35000000), c.x, r.getBottom(), false));
+    g.fillRect (r);
+    g.restoreState();
 }
 
-/** Engraved badge (e.g. model plate). */
+/** Engraved metallic equipment badge. */
 void paintBadge (Graphics& g, Rectangle<float> r, const String& text)
 {
-    g.setColour (Colours::black.withAlpha (0.8f));
+    // Outer drop shadow
+    g.setColour (Colours::black.withAlpha (0.7f));
+    g.fillRoundedRectangle (r.translated (0.0f, 1.5f), 3.0f);
+
+    // Brushed metal badge plate
+    g.setGradientFill (ColourGradient (Colour (0xff24282c), r.getX(), r.getY(),
+                                       Colour (0xff101214), r.getRight(), r.getBottom(), false));
     g.fillRoundedRectangle (r, 3.0f);
-    g.setColour (Colours::white.withAlpha (0.14f));
-    g.drawRoundedRectangle (r, 3.0f, 1.0f);
+
+    // Crisp metallic border
+    g.setColour (Colours::white.withAlpha (0.28f));
+    g.drawRoundedRectangle (r.reduced (0.5f), 3.0f, 1.0f);
+
+    // Engraved lettering
     g.setFont (fnt (r.getHeight() * 0.62f));
-    g.setColour (Colour (0xffe9e2c8));
+    g.setColour (Colours::black.withAlpha (0.8f));
+    g.drawText (text, r.translated (0.0f, 1.0f), Justification::centred);
+    g.setColour (Colour (0xfff0e8d2));
     g.drawText (text, r, Justification::centred);
 }
 
-/** Tall segmented LED ladder. Segments light bottom-up. */
+/** Photorealistic segmented LED ladder with smoked glass window and optical glow. */
 void paintLadder (Graphics& g, Rectangle<float> r, float lit01, Colour low, Colour high, int segments)
 {
-    g.setColour (Colour (0xff0a0c0d));
-    g.fillRoundedRectangle (r.expanded (2.0f), 3.0f);
-    g.setColour (Colours::black.withAlpha (0.9f));
-    g.drawRoundedRectangle (r.expanded (0.5f), 2.0f, 1.0f);
+    // Smoked acrylic bezel housing
+    g.setColour (Colour (0xff080a0b));
+    g.fillRoundedRectangle (r.expanded (2.5f), 3.0f);
+    g.setColour (Colours::black.withAlpha (0.95f));
+    g.drawRoundedRectangle (r.expanded (1.0f), 2.5f, 1.0f);
+    g.setColour (Colours::white.withAlpha (0.12f));
+    g.drawRoundedRectangle (r.expanded (2.5f), 3.0f, 0.7f);
 
     const float h = r.getHeight() / (float) segments;
     const int lit = (int) std::round (jlimit (0.0f, 1.0f, lit01) * (float) segments);
+
     for (int i = 0; i < segments; ++i)
     {
         const float t = (float) i / (float) (segments - 1);
         const auto c = low.interpolatedWith (high, t);
-        const Rectangle<float> seg (r.getX() + 1.0f, r.getBottom() - (float) (i + 1) * h + 0.8f, r.getWidth() - 2.0f, h - 1.6f);
+        const Rectangle<float> seg (r.getX() + 1.2f, r.getBottom() - (float) (i + 1) * h + 0.8f, r.getWidth() - 2.4f, h - 1.6f);
         const bool on = (segments - i) <= lit;
-        g.setColour (on ? c : c.withMultipliedBrightness (0.14f).withAlpha (0.45f));
-        g.fillRoundedRectangle (seg, 1.0f);
+
         if (on)
         {
-            g.setColour (c.withAlpha (0.20f));
-            g.fillRoundedRectangle (seg.expanded (2.0f), 2.0f);
+            // Saturated LED optical glow
+            g.setColour (c.withAlpha (0.35f));
+            g.fillRoundedRectangle (seg.expanded (2.2f, 1.0f), 2.0f);
+
+            // LED core body
+            g.setGradientFill (ColourGradient (c.brighter (0.45f), seg.getX(), seg.getY(),
+                                               c, seg.getX(), seg.getBottom(), false));
+            g.fillRoundedRectangle (seg, 1.0f);
+
+            // Bright center filament line
+            g.setColour (Colours::white.withAlpha (0.65f));
+            g.fillRect (seg.reduced (seg.getWidth() * 0.25f, seg.getHeight() * 0.35f));
+        }
+        else
+        {
+            // Unlit dark phosphor bar
+            g.setColour (c.withMultipliedBrightness (0.15f).withAlpha (0.30f));
+            g.fillRoundedRectangle (seg, 1.0f);
         }
     }
 }
@@ -341,84 +486,106 @@ public:
         const auto c = b.getCentre();
         const auto cap = s.findColour (Slider::rotarySliderFillColourId);
 
-        // Honour the parameter's skew so the pointer agrees with the real value.
-        const float pos = s.valueToProportionOfLength (s.getValue());
+        const float pos = (float) s.valueToProportionOfLength (s.getValue());
         const float angle = a0 + pos * (a1 - a0);
 
-        // ---- skirt: machined dark ring the scale sits on
+        // ---- Skirt: heavy machined ring with scale marks
         const float skirtR = d * 0.50f;
-        g.setColour (Colours::black.withAlpha (0.45f));
-        g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c).translated (0.0f, 1.5f));
-        g.setGradientFill (ColourGradient (Colour (0xff34383b), c.x, c.y - skirtR,
-                                           Colour (0xff0a0b0c), c.x, c.y + skirtR, false));
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c).translated (0.0f, 2.0f));
+
+        g.setGradientFill (ColourGradient (Colour (0xff383d42), c.x, c.y - skirtR,
+                                           Colour (0xff0a0c0e), c.x, c.y + skirtR, false));
         g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c));
-        g.setColour (Colours::white.withAlpha (0.10f));
+        g.setColour (Colours::white.withAlpha (0.15f));
         g.drawEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c), 0.8f);
 
         KnobScale sc; sc.a0 = a0; sc.a1 = a1;
-        paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.80f));
+        paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.85f));
 
-        // ---- body
+        // ---- Knob Body
         const float bodyR = d * 0.355f;
         auto body = Rectangle<float> (bodyR * 2.0f, bodyR * 2.0f).withCentre (c);
 
-        g.setColour (Colours::black.withAlpha (0.60f));
+        g.setColour (Colours::black.withAlpha (0.65f));
         g.fillEllipse (body.expanded (3.0f).translated (0.0f, 3.0f));
 
-        // chrome/metal rim catches the light at the top-left
-        g.setGradientFill (ColourGradient (Colour (0xff6b6f73), body.getX(), body.getY(),
-                                           Colour (0xff0e0f10), body.getRight(), body.getBottom(), false));
+        // Machined chrome collar catching top-left key light
+        g.setGradientFill (ColourGradient (Colour (0xff82878d), body.getX(), body.getY(),
+                                           Colour (0xff0e1012), body.getRight(), body.getBottom(), false));
         g.fillEllipse (body.expanded (2.6f));
 
-        // cap
+        // Knob Face Cap
         auto capBody = body.reduced (bodyR * 0.05f);
-        g.setGradientFill (ColourGradient (cap.brighter (0.50f), capBody.getX() + capBody.getWidth() * 0.30f,
+        g.setGradientFill (ColourGradient (cap.brighter (0.45f), capBody.getX() + capBody.getWidth() * 0.30f,
                                            capBody.getY() + capBody.getHeight() * 0.10f,
-                                           cap.darker (0.72f), capBody.getRight() * 1.0f, capBody.getBottom(), true));
+                                           cap.darker (0.75f), capBody.getRight(), capBody.getBottom(), true));
         g.fillEllipse (capBody);
 
         g.saveState();
         Path clip; clip.addEllipse (capBody); g.reduceClipRegion (clip);
 
-        // broad top sheen
-        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.42f), capBody.getX(), capBody.getY(),
-                                           Colours::transparentWhite, capBody.getX(), capBody.getY() + capBody.getHeight() * 0.62f, false));
-        g.fillRect (capBody.withHeight (capBody.getHeight() * 0.62f));
+        const bool isSilver = (cap == pal::silverCap);
+        if (isSilver)
+        {
+            // 1176 style concentric turned aluminum disc
+            g.setColour (Colours::black.withAlpha (0.12f));
+            for (float rad = capBody.getWidth() * 0.12f; rad < capBody.getWidth() * 0.48f; rad += 2.2f)
+                g.drawEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c), 0.7f);
 
-        // tight specular hot-spot
-        const Point<float> hi (capBody.getX() + capBody.getWidth() * 0.34f, capBody.getY() + capBody.getHeight() * 0.26f);
-        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.55f), hi.x, hi.y,
-                                           Colours::transparentWhite, hi.x + capBody.getWidth() * 0.34f,
-                                           hi.y + capBody.getHeight() * 0.34f, true));
-        g.fillEllipse (Rectangle<float> (capBody.getWidth() * 0.75f, capBody.getHeight() * 0.75f).withCentre (hi));
+            // Anisotropic cross reflections for spun metal
+            Path fan;
+            fan.addPieSegment (capBody, -0.6f, 0.6f, 0.0f);
+            fan.addPieSegment (capBody, MathConstants<float>::pi - 0.6f, MathConstants<float>::pi + 0.6f, 0.0f);
+            g.setColour (Colours::white.withAlpha (0.35f));
+            g.fillPath (fan);
+        }
+        else
+        {
+            // Bakelite / collet cap specular sheen
+            g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.48f), capBody.getX(), capBody.getY(),
+                                               Colours::transparentWhite, capBody.getX(), capBody.getY() + capBody.getHeight() * 0.65f, false));
+            g.fillRect (capBody.withHeight (capBody.getHeight() * 0.65f));
 
-        // bottom bounce light
+            // Hotspot reflection
+            const Point<float> hi (capBody.getX() + capBody.getWidth() * 0.34f, capBody.getY() + capBody.getHeight() * 0.26f);
+            g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.60f), hi.x, hi.y,
+                                               Colours::transparentWhite, hi.x + capBody.getWidth() * 0.35f,
+                                               hi.y + capBody.getHeight() * 0.35f, true));
+            g.fillEllipse (Rectangle<float> (capBody.getWidth() * 0.75f, capBody.getHeight() * 0.75f).withCentre (hi));
+        }
+
+        // Bottom bounce light
         g.setGradientFill (ColourGradient (Colours::transparentWhite, capBody.getCentreX(), capBody.getBottom() - capBody.getHeight() * 0.34f,
-                                           Colours::white.withAlpha (0.16f), capBody.getCentreX(), capBody.getBottom(), false));
+                                           Colours::white.withAlpha (0.18f), capBody.getCentreX(), capBody.getBottom(), false));
         g.fillRect (capBody.withTop (capBody.getBottom() - capBody.getHeight() * 0.34f));
 
-        // knurling
-        g.setColour (Colours::black.withAlpha (0.14f));
+        // Realistic knurling grooves around the skirt
+        g.setColour (Colours::black.withAlpha (0.18f));
         for (int i = 0; i < 56; ++i)
         {
             const float a = MathConstants<float>::twoPi * (float) i / 56.0f;
             const Point<float> dir (std::sin (a), -std::cos (a));
-            g.drawLine (Line<float> (c + dir * (capBody.getWidth() * 0.455f), c + dir * (capBody.getWidth() * 0.50f)), 0.6f);
+            g.drawLine (Line<float> (c + dir * (capBody.getWidth() * 0.455f), c + dir * (capBody.getWidth() * 0.50f)), 0.65f);
         }
         g.restoreState();
 
-        g.setColour (Colours::black.withAlpha (0.70f));
+        g.setColour (Colours::black.withAlpha (0.75f));
         g.drawEllipse (capBody, 1.0f);
-        g.setColour (Colours::white.withAlpha (0.26f));
+        g.setColour (Colours::white.withAlpha (0.30f));
         g.drawEllipse (capBody.reduced (0.9f), 0.8f);
 
-        // ---- indicator with a bevelled highlight
+        // ---- Enamel-inlaid pointer line
         const float indLen = capBody.getHeight() * 0.36f;
         Path ind;
         ind.addRoundedRectangle (-1.5f, -capBody.getHeight() * 0.44f, 3.0f, indLen, 1.5f);
-        g.setColour (Colours::black.withAlpha (0.40f));
-        g.fillPath (ind, AffineTransform::rotation (angle).translated (c.x, c.y + 1.3f));
-        g.setColour (s.findColour (Slider::thumbColourId).withAlpha (0.97f));
+
+        // Pointer groove shadow
+        g.setColour (Colours::black.withAlpha (0.50f));
+        g.fillPath (ind, AffineTransform::rotation (angle).translated (c.x, c.y + 1.2f));
+
+        // Filled enamel line
+        g.setColour (s.findColour (Slider::thumbColourId).withAlpha (0.98f));
         g.fillPath (ind, AffineTransform::rotation (angle).translated (c.x, c.y));
     }
 
@@ -438,149 +605,197 @@ public:
     {
         const float cy = (float) y + (float) h * 0.5f;
         const Rectangle<float> slot ((float) x - 9.0f, cy - 5.0f, (float) w + 18.0f, 10.0f);
-        g.setColour (Colour (0xff050c0b));
-        g.fillRoundedRectangle (slot, 5.0f);
-        g.setColour (Colours::black.withAlpha (0.8f));
-        g.drawRoundedRectangle (slot, 5.0f, 1.0f);
-        g.setColour (Colour (0xff63746e).withAlpha (0.35f));
-        g.drawLine (slot.getX() + 4.0f, slot.getBottom() + 0.5f, slot.getRight() - 4.0f, slot.getBottom() + 0.5f);
 
+        // Recessed milled channel
+        g.setColour (Colour (0xff050a09));
+        g.fillRoundedRectangle (slot, 5.0f);
+        g.setColour (Colours::black.withAlpha (0.85f));
+        g.drawRoundedRectangle (slot, 5.0f, 1.0f);
+
+        // Center felt dust strip
+        g.setColour (Colour (0xff000000));
+        g.drawLine (slot.getX() + 6.0f, cy, slot.getRight() - 6.0f, cy, 1.5f);
+
+        // Metallic bottom lip reflection
+        g.setColour (Colour (0xff70847e).withAlpha (0.40f));
+        g.drawLine (slot.getX() + 4.0f, slot.getBottom() + 0.5f, slot.getRight() - 4.0f, slot.getBottom() + 0.5f, 0.8f);
+
+        // Center detent alignment notch
+        const float midX = slot.getCentreX();
+        g.setColour (Colour (0xff36b8cf).withAlpha (0.75f));
+        g.drawLine (midX, slot.getY() - 3.0f, midX, slot.getY(), 1.0f);
+        g.drawLine (midX, slot.getBottom(), midX, slot.getBottom() + 3.0f, 1.0f);
+
+        // 3D Slider Cap
         const auto cap = s.findColour (Slider::thumbColourId);
-        const Rectangle<float> thumb (pos - 12.0f, cy - 6.0f, 24.0f, 12.0f);
-        g.setColour (Colours::black.withAlpha (0.7f));
-        g.fillEllipse (thumb.expanded (2.0f).translated (0.0f, 1.0f));
-        g.setGradientFill (ColourGradient (cap.brighter (0.25f), thumb.getX(), thumb.getY(),
-                                           cap.darker (0.35f), thumb.getX(), thumb.getBottom(), false));
-        g.fillEllipse (thumb);
-        g.setColour (Colours::white.withAlpha (0.55f));
-        g.drawEllipse (thumb.reduced (0.8f), 0.7f);
+        const Rectangle<float> thumb (pos - 12.0f, cy - 6.5f, 24.0f, 13.0f);
+
+        // Drop shadow into track
+        g.setColour (Colours::black.withAlpha (0.75f));
+        g.fillRoundedRectangle (thumb.translated (0.0f, 1.8f), 3.0f);
+
+        // Main ribbed slider cap body
+        g.setGradientFill (ColourGradient (cap.brighter (0.35f), thumb.getX(), thumb.getY(),
+                                           cap.darker (0.45f), thumb.getX(), thumb.getBottom(), false));
+        g.fillRoundedRectangle (thumb, 2.5f);
+
+        // Grip ribs across cap
+        g.setColour (Colours::black.withAlpha (0.25f));
+        g.drawHorizontalLine ((int) (thumb.getY() + 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
+        g.drawHorizontalLine ((int) (thumb.getBottom() - 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
+
+        // Center white index stripe
+        g.setColour (Colours::white.withAlpha (0.95f));
+        g.fillRect (thumb.getCentreX() - 1.0f, thumb.getY() + 1.0f, 2.0f, thumb.getHeight() - 2.0f);
+
+        // Bevel highlight
+        g.setColour (Colours::white.withAlpha (0.50f));
+        g.drawRoundedRectangle (thumb.reduced (0.5f), 2.5f, 0.8f);
     }
 
     static void drawChromeFader (Graphics& g, int x, int y, int w, int h,
                                  float pos, float minPos, float maxPos, Slider& s)
     {
         const float cx = (float) x + (float) w * 0.5f;
-        const Rectangle<float> track (cx - 4.0f, (float) y, 8.0f, (float) h);
+        const Rectangle<float> track (cx - 4.5f, (float) y, 9.0f, (float) h);
 
-        // recessed slot
-        g.setGradientFill (ColourGradient (Colour (0xff0a0b0c), track.getX(), 0.0f, Colour (0xff1e2123), track.getRight(), 0.0f, false));
+        // Recessed milled channel
+        g.setGradientFill (ColourGradient (Colour (0xff07080a), track.getX(), 0.0f, Colour (0xff1a1d20), track.getRight(), 0.0f, false));
         g.fillRoundedRectangle (track, 4.0f);
-        g.setColour (Colours::black.withAlpha (0.9f));
+        g.setColour (Colours::black.withAlpha (0.95f));
         g.drawRoundedRectangle (track, 4.0f, 1.0f);
-        g.setColour (Colours::white.withAlpha (0.12f));
+        g.setColour (Colours::white.withAlpha (0.15f));
         g.drawLine (track.getX() + 0.5f, track.getY(), track.getX() + 0.5f, track.getBottom(), 1.0f);
 
-        // travel line
-        g.setColour (Colour (0xff0d3a6b));
+        // Felt center travel guide
+        g.setColour (Colour (0xff000000));
         g.fillRect (Rectangle<float> (cx - 1.0f, (float) y + 4.0f, 2.0f, (float) h - 8.0f));
 
-        // tick ladder on both sides
-        g.setColour (Colours::white.withAlpha (0.35f));
+        // Precision tick ladder
+        g.setColour (Colours::white.withAlpha (0.40f));
         for (int i = 0; i <= 20; ++i)
         {
             const float ty = (float) y + (float) h * (float) i / 20.0f;
-            const float len = (i % 5 == 0) ? 7.0f : 4.0f;
+            const float len = (i % 5 == 0) ? 7.5f : 4.0f;
             g.drawLine (track.getX() - 2.0f, ty, track.getX() - 2.0f - len, ty, 1.0f);
             g.drawLine (track.getRight() + 2.0f, ty, track.getRight() + 2.0f + len, ty, 1.0f);
         }
 
-        // chrome cap
+        // Photorealistic sculpted console fader knob (P&G / SSL style)
         const float capH = 46.0f, capW = 30.0f;
         const Rectangle<float> cap (cx - capW * 0.5f, pos - capH * 0.5f, capW, capH);
 
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.fillRoundedRectangle (cap.translated (1.5f, 3.0f), 4.0f);
+        // Deep drop shadow onto channel
+        g.setColour (Colours::black.withAlpha (0.65f));
+        g.fillRoundedRectangle (cap.translated (2.0f, 3.5f), 4.0f);
 
-        g.setGradientFill (ColourGradient (Colour (0xfff4fdff), cap.getX() + 2.0f, cap.getY(),
-                                           Colour (0xff7d9aa9), cap.getRight() - 2.0f, cap.getY(), false));
+        // Machined chrome body
+        g.setGradientFill (ColourGradient (Colour (0xfff6fdff), cap.getX() + 2.0f, cap.getY(),
+                                           Colour (0xff708896), cap.getRight() - 2.0f, cap.getY(), false));
         g.fillRoundedRectangle (cap, 4.0f);
 
-        // bright vertical band
-        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.0f), cap.getCentreX() - 6.0f, 0.0f,
-                                           Colours::white.withAlpha (0.85f), cap.getCentreX(), 0.0f, false));
-        g.fillRect (Rectangle<float> (cap.getCentreX() - 6.0f, cap.getY() + 2.0f, 6.0f, cap.getHeight() - 4.0f));
+        // Ergonomic center finger concave well
+        const Rectangle<float> well (cap.getX() + 4.0f, cap.getY() + 6.0f, cap.getWidth() - 8.0f, cap.getHeight() - 12.0f);
+        g.setGradientFill (ColourGradient (Colour (0xff8ea4b0), well.getX(), well.getY(),
+                                           Colour (0xff485a66), well.getX(), well.getBottom(), false));
+        g.fillRoundedRectangle (well, 3.0f);
 
-        // knurl grooves
-        g.setColour (Colour (0xff20303a).withAlpha (0.45f));
+        // Bright white central index line
+        g.setColour (Colours::white);
+        g.fillRect (Rectangle<float> (cap.getCentreX() - 1.0f, cap.getY() + 2.0f, 2.0f, cap.getHeight() - 4.0f));
+
+        // Knurl grooves on sides
+        g.setColour (Colour (0xff20303a).withAlpha (0.50f));
         for (float gy = cap.getY() + 5.0f; gy < cap.getBottom() - 4.0f; gy += 4.0f)
-            g.drawHorizontalLine ((int) gy, cap.getX() + 3.0f, cap.getRight() - 3.0f);
+            g.drawHorizontalLine ((int) gy, cap.getX() + 2.0f, cap.getX() + 4.0f);
 
-        g.setColour (Colours::white.withAlpha (0.9f));
+        // Outer specular rim
+        g.setColour (Colours::white.withAlpha (0.95f));
         g.drawRoundedRectangle (cap, 4.0f, 1.0f);
-        g.setColour (Colours::black.withAlpha (0.8f));
-        g.drawRoundedRectangle (cap.expanded (0.9f), 5.0f, 1.2f);
+        g.setColour (Colours::black.withAlpha (0.85f));
+        g.drawRoundedRectangle (cap.expanded (0.8f), 5.0f, 1.2f);
         (void) s; (void) minPos; (void) maxPos;
     }
 
     static void drawMasterBar (Graphics& g, int x, int y, int w, int h, float pos, Slider&)
     {
         const Rectangle<float> track ((float) x, (float) y + (float) h * 0.5f - 4.0f, (float) w, 8.0f);
-        g.setColour (Colour (0xff0a0c0d));
+        g.setColour (Colour (0xff080a0b));
         g.fillRoundedRectangle (track, 3.0f);
-        g.setColour (Colours::white.withAlpha (0.12f));
+        g.setColour (Colours::white.withAlpha (0.15f));
         g.drawRoundedRectangle (track, 3.0f, 1.0f);
 
-        // The illuminated track shows the trim position, rather than a decorative output meter.
-        g.setColour (Colour (0xff7598aa));
+        // Illuminated trim position track
+        g.setGradientFill (ColourGradient (Colour (0xff3ba4c7), track.getX(), track.getY(),
+                                           Colour (0xff65d2f0), pos, track.getY(), false));
         g.fillRoundedRectangle (track.withRight (jlimit (track.getX(), track.getRight(), pos)), 3.0f);
 
-        // chrome thumb
+        // Machined metal master knob
         const Rectangle<float> thumb (pos - 9.0f, track.getCentreY() - 11.0f, 18.0f, 22.0f);
-        g.setColour (Colours::black.withAlpha (0.5f));
-        g.fillRoundedRectangle (thumb.translated (1.0f, 1.5f), 3.0f);
+        g.setColour (Colours::black.withAlpha (0.6f));
+        g.fillRoundedRectangle (thumb.translated (1.0f, 2.0f), 3.0f);
+
         g.setGradientFill (ColourGradient (Colour (0xfff6feff), thumb.getX(), thumb.getY(),
-                                           Colour (0xff8ea7b4), thumb.getRight(), thumb.getY(), false));
+                                           Colour (0xff7e96a4), thumb.getRight(), thumb.getY(), false));
         g.fillRoundedRectangle (thumb, 3.0f);
-        g.setColour (Colours::white.withAlpha (0.85f));
+        g.setColour (Colours::white.withAlpha (0.90f));
         g.drawRoundedRectangle (thumb, 3.0f, 1.0f);
-        g.setColour (Colours::black.withAlpha (0.35f));
+
+        // Center line
+        g.setColour (Colours::black.withAlpha (0.45f));
+        g.drawLine (thumb.getCentreX(), thumb.getY() + 3.0f, thumb.getCentreX(), thumb.getBottom() - 3.0f, 1.5f);
+        g.setColour (Colours::white);
         g.drawLine (thumb.getCentreX(), thumb.getY() + 4.0f, thumb.getCentreX(), thumb.getBottom() - 4.0f, 1.0f);
     }
 
-    //-------------------------------------------------------------------- toggles
+    //-------------------------------------------------------------------- toggles / jewel lamps
     void drawToggleButton (Graphics& g, ToggleButton& b, bool highlighted, bool) override
     {
         auto r = b.getLocalBounds().toFloat();
         const bool on = b.getToggleState();
         const auto c = b.findColour (ToggleButton::tickColourId);
 
-        // round LED set in a recessed cup
+        // Realistic jewel indicator lamp with chrome bezel
         const float ledR = jmin (7.0f, r.getHeight() * 0.30f);
         const bool ledFirst = b.getProperties().getWithDefault ("ledFirst", true);
         const Point<float> ledC (ledFirst ? r.getX() + ledR + 5.0f
                                           : r.getRight() - ledR - 5.0f, r.getCentreY());
         const Rectangle<float> cup (ledC.x - ledR - 3.5f, ledC.y - ledR - 3.5f,
-                                   (ledR + 3.5f) * 2.0f, (ledR + 3.5f) * 2.0f);
+                                    (ledR + 3.5f) * 2.0f, (ledR + 3.5f) * 2.0f);
 
+        // Threaded chrome bezel
         g.setColour (Colour (0xff08090a));
         g.fillEllipse (cup);
-        g.setColour (Colours::white.withAlpha (0.14f));
-        g.drawEllipse (cup, 0.9f);
+        g.setColour (Colours::white.withAlpha (0.28f));
+        g.drawEllipse (cup, 1.0f);
 
         const Rectangle<float> led (ledC.x - ledR, ledC.y - ledR, ledR * 2.0f, ledR * 2.0f);
         if (on)
         {
-            const Rectangle<float> glow (ledC.x - ledR * 3.5f, ledC.y - ledR * 3.5f, ledR * 7.0f, ledR * 7.0f);
-            g.setGradientFill (ColourGradient (c.withAlpha (0.55f), ledC.x, ledC.y,
-                                               c.withAlpha (0.0f), ledC.x, ledC.y + ledR * 3.4f, true));
+            // Radiant optical bloom
+            const Rectangle<float> glow (ledC.x - ledR * 3.8f, ledC.y - ledR * 3.8f, ledR * 7.6f, ledR * 7.6f);
+            g.setGradientFill (ColourGradient (c.withAlpha (0.60f), ledC.x, ledC.y,
+                                               c.withAlpha (0.0f), ledC.x, ledC.y + ledR * 3.7f, true));
             g.fillEllipse (glow);
         }
-        g.setGradientFill (ColourGradient (on ? c.brighter (0.65f) : Colour (0xff3a3d40), led.getX() + ledR * 0.6f, led.getY() + ledR * 0.4f,
-                                           on ? c.darker (0.35f) : Colour (0xff131516), led.getX() + ledR * 0.9f, led.getY() + ledR * 1.8f, true));
+
+        // Faceted lens
+        g.setGradientFill (ColourGradient (on ? c.brighter (0.75f) : Colour (0xff42464a), led.getX() + ledR * 0.5f, led.getY() + ledR * 0.4f,
+                                           on ? c.darker (0.35f) : Colour (0xff121415), led.getX() + ledR * 0.9f, led.getY() + ledR * 1.8f, true));
         g.fillEllipse (led);
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.drawEllipse (led, 0.7f);
+        g.setColour (Colours::white.withAlpha (on ? 0.75f : 0.25f));
+        g.drawEllipse (led, 0.8f);
 
         auto textArea = ledFirst ? r.withTrimmedLeft (ledC.x + ledR + 8.0f)
                                  : r.withTrimmedRight (r.getRight() - ledC.x + ledR + 8.0f);
         g.setFont (fnt (12.0f));
-        g.setColour (Colours::black.withAlpha (0.65f));
+        g.setColour (Colours::black.withAlpha (0.75f));
         g.drawText (b.getButtonText(), textArea.translated (0, 1), Justification::centredLeft);
-        g.setColour (b.findColour (ToggleButton::textColourId).withAlpha (highlighted ? 1.0f : 0.9f));
+        g.setColour (b.findColour (ToggleButton::textColourId).withAlpha (highlighted ? 1.0f : 0.92f));
         g.drawText (b.getButtonText(), textArea, Justification::centredLeft);
     }
 
-    //-------------------------------------------------------------------- buttons
+    //-------------------------------------------------------------------- buttons (1176 Shadow switch bank)
     void drawButtonBackground (Graphics& g, Button& b, const Colour&, bool highlighted, bool) override
     {
         auto r = b.getLocalBounds().toFloat().reduced (1.0f);
@@ -588,21 +803,26 @@ public:
         auto base = on ? b.findColour (TextButton::buttonOnColourId) : b.findColour (TextButton::buttonColourId);
         if (highlighted) base = base.brighter (0.12f);
 
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.fillRoundedRectangle (r.translated (0.0f, 1.5f), 3.0f);
+        // Recessed switch well
+        g.setColour (Colours::black.withAlpha (on ? 0.85f : 0.55f));
+        g.fillRoundedRectangle (r.translated (0.0f, on ? 0.5f : 1.8f), 3.0f);
 
-        g.setGradientFill (ColourGradient (base.brighter (on ? 0.55f : 0.30f), 0.0f, r.getY(),
-                                           base.darker (on ? 0.20f : 0.55f), 0.0f, r.getBottom(), false));
+        // Button body
+        g.setGradientFill (ColourGradient (base.brighter (on ? 0.65f : 0.35f), 0.0f, r.getY(),
+                                           base.darker (on ? 0.25f : 0.55f), 0.0f, r.getBottom(), false));
         g.fillRoundedRectangle (r, 3.0f);
 
         if (on)
         {
-            g.setColour (base.brighter (0.75f).withAlpha (0.55f));
-            g.fillRoundedRectangle (r.reduced (1.0f).withHeight (r.getHeight() * 0.42f), 2.0f);
-            g.setColour (base.brighter (0.9f).withAlpha (0.35f));
-            g.drawRoundedRectangle (r.expanded (2.0f), 4.0f, 2.5f);
+            // Backlit inner glow
+            g.setColour (base.brighter (0.85f).withAlpha (0.60f));
+            g.fillRoundedRectangle (r.reduced (1.2f).withHeight (r.getHeight() * 0.45f), 2.0f);
+            g.setColour (base.brighter (0.95f).withAlpha (0.45f));
+            g.drawRoundedRectangle (r.expanded (1.8f), 4.0f, 2.0f);
         }
-        g.setColour (Colours::white.withAlpha (on ? 0.45f : 0.16f));
+
+        // Metallic bevel rim
+        g.setColour (Colours::white.withAlpha (on ? 0.55f : 0.22f));
         g.drawRoundedRectangle (r, 3.0f, 1.0f);
     }
 
@@ -610,7 +830,7 @@ public:
     {
         g.setFont (fnt (14.0f));
         const bool on = b.getToggleState();
-        g.setColour (on ? Colours::white : Colour (0xff9fb6c9));
+        g.setColour (on ? Colours::white : Colour (0xffa0b8cc));
         g.drawText (b.getButtonText(), b.getLocalBounds(), Justification::centred);
     }
 
@@ -658,7 +878,6 @@ public:
     void resized() override
     {
         content = contentBounds();
-        // Top-right of the plate; narrow panels shift it left so it never lands on a legend row.
         bypass.setBounds (content.getRight() - 84, plateBounds().getY() + 6, 80, 22);
         layoutContent (content);
 
@@ -668,8 +887,6 @@ public:
             Graphics fg (faceImage);
             paintFace (fg);
 
-            // Legends are drawn on a separate image and shown through a child component that
-            // sits under the controls, because the controls cover the parent's own rendering.
             Image caps (Image::ARGB, getWidth(), getHeight(), true);
             Graphics cg (caps);
             paintFaceExtra (cg);
@@ -745,14 +962,6 @@ protected:
         k.slider.setBounds (cell);
     }
 
-    /** The drawn knob occupies the top portion of its square; the rest is legend space. */
-    static Rectangle<int> knobCircle (const Slider& sl)
-    {
-        auto b = sl.getBounds();
-        const int d = jmin (b.getWidth(), b.getHeight());
-        return b.withHeight (d);
-    }
-
     Rectangle<int> plateBounds() const
     {
         return getLocalBounds().withTrimmedTop (kGripH).expanded (0, 0);
@@ -775,14 +984,9 @@ protected:
     }
 
     virtual void layoutContent (Rectangle<int>) = 0;
-    virtual void paintFaceBase (Graphics&) {}       // grain / texture only, cached with the plate
-    virtual void paintFaceExtra (Graphics&) {}      // text + legends, cached under the controls
+    virtual void paintFaceBase (Graphics&) {}
+    virtual void paintFaceExtra (Graphics&) {}
     virtual void paintMeter (Graphics&) {}
-
-    void drawKnobCaption (Graphics& g, const Slider& s, const String& text, float size = 13.0f)
-    {
-        caption (g, text, s.getBounds().withY (s.getBottom() - 15).withHeight (18), size);
-    }
 
     RackStripProcessor& proc;
     String prefix;
@@ -801,7 +1005,7 @@ private:
             { plate.getX() + inset, plate.getY() + inset }, { plate.getRight() - inset, plate.getY() + inset },
             { plate.getX() + inset, plate.getBottom() - inset }, { plate.getRight() - inset, plate.getBottom() - inset }
         };
-        const float angles[] { 0.5f, -0.9f, 1.1f, -0.3f };
+        const float angles[] { 0.45f, -0.85f, 1.15f, -0.35f };
         for (int i = 0; i < 4; ++i) paintScrew (g, pts[i], rad, angles[i] + (float) moduleId * 0.4f);
     }
 
@@ -809,7 +1013,6 @@ private:
 
     Image faceImage;
 
-    /** Caption layer: a child that sits under every control so legends are never covered. */
     struct CaptionLayer : public Component
     {
         Image image;
@@ -829,7 +1032,7 @@ class ConsolePanel : public ModulePanel
 public:
     explicit ConsolePanel (RackStripProcessor& p)
         : ModulePanel (p, RackStripProcessor::Console, "con_",
-                       Colour (0xff30413b), Colour (0xff172520), pal::engrave)
+                       Colour (0xff283732), Colour (0xff121d19), pal::engrave)
     {
         const char* ids[] { "eq_16k", "eq_8k", "eq_4k", "eq_2k", "eq_1k", "eq_500", "eq_250", "eq_125", "eq_63", "eq_31" };
         for (size_t i = 0; i < bands.size(); ++i)
@@ -838,7 +1041,7 @@ public:
             band.slider.setSliderStyle (Slider::LinearHorizontal);
             band.slider.setName (prefix + ids[i]);
             band.slider.getProperties().set ("eq560", true);
-            band.slider.setColour (Slider::thumbColourId, i == 5 ? Colour (0xffe6272d) : Colour (0xffe8efdf));
+            band.slider.setColour (Slider::thumbColourId, i == 5 ? Colour (0xffd82a2e) : Colour (0xffe4e8dc));
             band.slider.setTextValueSuffix (" dB");
             band.slider.setPopupDisplayEnabled (true, true, nullptr);
             band.slider.setDoubleClickReturnValue (true, 0.0);
@@ -898,7 +1101,7 @@ protected:
         for (int i = 0; i <= 4; ++i)
         {
             const float x = x0 + travel * (float) i * 0.25f;
-            g.setColour (Colour (0xff36b8cf).withAlpha (i == 2 ? 0.9f : 0.6f));
+            g.setColour (Colour (0xff36b8cf).withAlpha (i == 2 ? 0.9f : 0.55f));
             g.drawLine (x, y0 - 3.0f, x, y1 + 3.0f, i == 2 ? 1.5f : 1.0f);
         }
         for (int i = 0; i < 3; ++i)
@@ -954,7 +1157,6 @@ public:
         setupKnob (gain, "gain", pal::blackCap);
         setupKnob (peak, "peak", pal::blackCap);
 
-        // ON engages the unit's limit position: the ratio switches from ~3:1 to ~12:1.
         onBtn.setButtonText ("ON  (LIMIT)");
         onBtn.setClickingTogglesState (true);
         onBtn.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
@@ -962,7 +1164,6 @@ public:
         onAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "opto_mode", onBtn);
         addAndMakeVisible (onBtn);
 
-        // METER is a faceplate lamp with no audio effect: this unit always displays reduction.
         meterBtn.setButtonText ("METER");
         meterBtn.setClickingTogglesState (true);
         meterBtn.setToggleState (true, dontSendNotification);
@@ -974,7 +1175,6 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Large VU in the upper half (reference: dial ~1/3 of the plate height).
         const int vw = jmin (c.getWidth() - 26, 210);
         vu = { c.getCentreX() - vw / 2, c.getY() + 10, vw, vw * 3 / 4 };
 
@@ -990,7 +1190,7 @@ protected:
 
     void paintFaceBase (Graphics& g) override
     {
-        Random rnd (99);   // fine wrinkle grain over the brushed metal
+        Random rnd (99);
         for (int i = 0; i < 3000; ++i)
         {
             g.setColour ((rnd.nextBool() ? Colours::white : Colours::black).withAlpha (rnd.nextFloat() * 0.07f));
@@ -1012,12 +1212,13 @@ protected:
     void paintMeter (Graphics& g) override
     {
         const auto r = vu.toFloat();
-        g.setGradientFill (ColourGradient (Colour (0x3affd27a), r.getCentreX(), r.getCentreY(),
+        // Warm glow bloom around round VU housing
+        g.setGradientFill (ColourGradient (Colour (0x38ffd27a), r.getCentreX(), r.getCentreY(),
                                            Colour (0x00ffd27a), r.getCentreX(), r.getCentreY() - r.getHeight(), true));
         g.fillEllipse (r.expanded (20.0f));
 
         const float f = jlimit (0.0f, 1.0f, gr / 20.0f);
-        paintVuDial (g, r, f, -0.95f, 0.95f, "", "", 10.0f, "REDUCTION");
+        paintVuDial (g, r, f, -0.95f, 0.95f, "", "", 10.0f, "REDUCTION", false);
     }
 
 private:
@@ -1065,7 +1266,6 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Silver input/output caps sized to the narrower hardware plate.
         const int ky = c.getY() + 34;
         place (input,  { c.getX() + 2,               ky, 88, 88 });
         place (output, { c.getRight() - 90,         ky, 88, 88 });
@@ -1091,24 +1291,24 @@ protected:
         caption (g, "ATTACK", { atk.slider.getBounds().getCentreX() - 50, atk.slider.getY() - 16, 100, 18 }, 13.0f);
         caption (g, "RELEASE",{ rel.slider.getBounds().getCentreX() - 50, rel.slider.getY() - 16, 100, 18 }, 13.0f);
 
-        // UREI-style wordmark in the top centre
+        // Vintage UREI-style wordmark in the top centre
         engraveText (g, "urei", { content.getX(), content.getY() - 6, content.getWidth(), 22 },
                      Justification::centred, 21.0f, Colour (0xffe8e8e8), false);
 
-        paintBadge (g, { content.getCentreX() - 44.0f, (float) content.getBottom() - 30.0f, 88.0f, 26.0f }, "1176");
+        paintBadge (g, { (float) content.getCentreX() - 44.0f, (float) content.getBottom() - 30.0f, 88.0f, 26.0f }, "1176");
     }
 
     void paintMeter (Graphics& g) override
     {
         const auto r = meter.toFloat();
-        g.setColour (Colours::black.withAlpha (0.8f));
-        g.fillRoundedRectangle (r.expanded (4.0f), 3.0f);
-        g.setGradientFill (ColourGradient (Colour (0xfff6eccb), r.getCentreX(), r.getY(),
-                                           Colour (0xffd8c091), r.getCentreX(), r.getBottom(), false));
-        g.fillRoundedRectangle (r, 2.0f);
+        // Rectangular Simpson-style meter with warm backlighting
+        g.setColour (Colours::black.withAlpha (0.85f));
+        g.fillRoundedRectangle (r.expanded (4.0f), 4.0f);
+        g.setColour (Colours::white.withAlpha (0.15f));
+        g.drawRoundedRectangle (r.expanded (4.0f), 4.0f, 1.0f);
 
         const float f = jlimit (0.0f, 1.0f, gr / 20.0f);
-        paintVuDial (g, r.reduced (3.0f), f, -0.95f, 0.95f, "db", "GR", 9.0f);
+        paintVuDial (g, r, f, -0.95f, 0.95f, "dB", "GR", 9.0f, {}, true);
     }
 
 private:
@@ -1173,47 +1373,44 @@ protected:
         caption (g, "RELEASE",   { release.slider.getBounds().getX(), release.slider.getY() - 19, release.slider.getBounds().getWidth(), 17 }, 9.5f);
         caption (g, "ENHANCE", enhanceLabel, 15.0f);
 
-        // dB scale beside the fader
+        // dB scale beside fader
         g.setFont (fnt (10.0f, false));
         for (int i = 0; i <= 6; ++i)
         {
             const float t = (float) i / 6.0f;
             const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * t;
             const int db = (int) std::round (12.0f - 24.0f * t);
-            g.setColour (Colours::black.withAlpha (0.65f));
+            g.setColour (Colours::black.withAlpha (0.75f));
             g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 7.0f, 26.0f, 14.0f), Justification::centredRight);
-            g.setColour (Colours::white.withAlpha (0.5f));
+            g.setColour (Colours::white.withAlpha (0.6f));
             g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 8.0f, 26.0f, 14.0f), Justification::centredRight);
         }
         for (int i = 0; i <= 12; ++i)
         {
             const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * (float) i / 12.0f;
-            g.setColour (Colours::white.withAlpha (0.22f));
+            g.setColour (Colours::white.withAlpha (0.25f));
             g.drawLine ((float) scaleRect.getCentreX() + 14.0f, y, (float) scaleRect.getCentreX() + 22.0f, y, 1.0f);
             g.drawLine ((float) scaleRect.getCentreX() - 22.0f, y, (float) scaleRect.getCentreX() - 14.0f, y, 1.0f);
         }
 
-        // slots beside the ladders
+        // Slots beside ladders
         for (auto s : { Rectangle<int> (ladderA.getX() - 14, ladderA.getY() - 6, 4, ladderA.getHeight() + 12),
                         Rectangle<int> (ladderB.getRight() + 10, ladderB.getY() - 6, 4, ladderB.getHeight() + 12) })
         {
             g.setColour (Colour (0xff080a0b));
             g.fillRoundedRectangle (s.toFloat(), 2.0f);
-            g.setColour (Colours::white.withAlpha (0.16f));
+            g.setColour (Colours::white.withAlpha (0.18f));
             g.drawRoundedRectangle (s.toFloat(), 2.0f, 1.0f);
         }
     }
 
     void paintMeter (Graphics& g) override
     {
-        // Ladder A = gain reduction (amber), ladder B = output level (green→blue). Both always show
-        // activity so the panel reads like the hardware even when nothing is being limited.
         const float red = jlimit (0.0f, 1.0f, gr / 14.0f);
         paintLadder (g, ladderA.toFloat(), red * 0.85f + 0.06f, Colour (0xffc06a10), Colour (0xffffd23a), 28);
         paintLadder (g, ladderB.toFloat(), juce::jlimit (0.0f, 1.0f, 0.30f + red * 0.55f),
                      Colour (0xff17b04a), Colour (0xff5fe1f5), 28);
 
-        // level readout under the ladders
         engraveText (g, "-" + String (gr, 1) + " dB", { ladderA.getX() - 18, ladderA.getBottom() + 8, ladderA.getWidth() + 36, 16 },
                      Justification::centred, 11.0f, labelColour, false);
     }
@@ -1264,7 +1461,7 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
         canvas.addAndMakeVisible (*panel);
     }
 
-    // Host-automatable output trim after the complete module chain.
+    // Host-automatable output trim after the complete module chain
     masterFader.setName ("Master level");
     masterFader.setTextValueSuffix (" dB");
     masterFader.setPopupDisplayEnabled (true, true, this);
@@ -1329,7 +1526,6 @@ void RackStripEditor::resized()
     layoutFor (previewOrder, -1, false);
     masterFader.setBounds (kEditorW - kMargin - 160, kHeaderH / 2 - 12, 148, 24);
 
-    // Transform a child, never AudioProcessorEditor itself: hosts own the editor's DPI transform.
     const float scale = jmax (0.01f, jmin ((float) getWidth() / kEditorW, (float) getHeight() / kEditorH));
     canvasTransform = AffineTransform::scale (scale).translated (
         ((float) getWidth() - kEditorW * scale) * 0.5f,
@@ -1345,60 +1541,108 @@ void RackStripEditor::timerCallback()
 
 void RackStripEditor::paint (Graphics& g)
 {
-    g.fillAll (Colour (0xff08090a));
+    g.fillAll (Colour (0xff060708));
+    g.saveState();
     g.addTransform (canvasTransform);
     const Rectangle<float> full (0.0f, 0.0f, (float) kEditorW, (float) kEditorH);
 
-    // outer chassis
-    g.setColour (Colour (0xff08090a));
-    g.fillRect (full);
+    // 1. Heavy outer 19" rack chassis with powder-coated texture
     g.setGradientFill (ColourGradient (pal::chassisTop, 0.0f, 0.0f, pal::chassisBottom, 0.0f, full.getBottom(), false));
-    g.fillRoundedRectangle (full.reduced (2.0f), 10.0f);
+    g.fillRoundedRectangle (full.reduced (2.0f), 8.0f);
 
-    // inner recess the plates sit in
+    // Subtle rack stippled texture
+    Random rnd (42);
+    for (int i = 0; i < 4000; ++i)
+    {
+        g.setColour ((rnd.nextBool() ? Colours::white : Colours::black).withAlpha (rnd.nextFloat() * 0.025f));
+        g.fillRect (rnd.nextFloat() * full.getWidth(), rnd.nextFloat() * full.getHeight(), 1.2f, 1.2f);
+    }
+
+    // 2. Inner recessed rack bay holding the modules
     const Rectangle<float> inner (4.0f, (float) kHeaderH + 2.0f, full.getWidth() - 8.0f, full.getHeight() - (float) kHeaderH - 8.0f);
-    g.setGradientFill (ColourGradient (Colour (0xff151819), 0.0f, inner.getY(), Colour (0xff050606), 0.0f, inner.getBottom(), false));
-    g.fillRoundedRectangle (inner, 8.0f);
+    g.setGradientFill (ColourGradient (Colour (0xff121517), 0.0f, inner.getY(), Colour (0xff040506), 0.0f, inner.getBottom(), false));
+    g.fillRoundedRectangle (inner, 6.0f);
 
-    // header bar
+    // 3. Machined brushed aluminium header bar
     const Rectangle<float> header (4.0f, 6.0f, full.getWidth() - 8.0f, (float) kHeaderH - 6.0f);
-    g.setGradientFill (ColourGradient (Colour (0xff34393c), 0.0f, header.getY(),
-                                       Colour (0xff1b1e20), 0.0f, header.getBottom(), false));
-    g.fillRoundedRectangle (header, 8.0f);
-    g.setColour (Colours::white.withAlpha (0.10f));
+    g.setGradientFill (ColourGradient (pal::headerBarTop, 0.0f, header.getY(),
+                                       pal::headerBarLow, 0.0f, header.getBottom(), false));
+    g.fillRoundedRectangle (header, 6.0f);
+
+    // Header brushed horizontal streaks
+    for (float y = header.getY() + 1.0f; y < header.getBottom(); y += 1.5f)
+    {
+        g.setColour (Colours::white.withAlpha (0.015f));
+        g.drawHorizontalLine ((int) y, header.getX() + 6.0f, header.getRight() - 6.0f);
+    }
+
+    // Header machined bevels
+    g.setColour (Colours::white.withAlpha (0.16f));
     g.drawLine (header.getX() + 6.0f, header.getY() + 1.0f, header.getRight() - 6.0f, header.getY() + 1.0f, 1.0f);
-    g.setColour (Colours::black.withAlpha (0.55f));
+    g.setColour (Colours::black.withAlpha (0.75f));
     g.drawLine (header.getX() + 6.0f, header.getBottom(), header.getRight() - 6.0f, header.getBottom(), 1.2f);
 
-    // title
-    g.setFont (fnt (21.0f, false));
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.drawText ("MASTERING RACK", header.translated (0.0f, 1.0f), Justification::centred);
-    g.setColour (Colour (0xffdfe2e3));
-    g.drawText ("MASTERING RACK", header, Justification::centred);
+    // 4. Branding on Header: "zychanstrip" + zynamfx-style ZY monogram
+    const float logoX = header.getX() + 16.0f;
+    const float logoY = header.getY() + 7.0f;
 
-    // master caption
-    g.setFont (fnt (13.0f, false));
-    g.setColour (Colour (0xffc9cdcf));
-    g.drawText ("Master", Rectangle<float> (full.getWidth() - 220.0f, 0.0f, 62.0f, (float) kHeaderH),
-                Justification::centredRight);
+    // "zychanstrip" wordmark (matching zynamfx typographic style)
+    g.setFont (fnt (18.0f, true));
+    // Engraved drop shadow
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY + 1.0f, 120.0f, 22.0f), Justification::centredLeft);
+    // Crisp white lettering
+    g.setColour (Colours::white);
+    g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY, 120.0f, 22.0f), Justification::centredLeft);
 
-    // plate shadows so the faces read as raised hardware
+    // Iconic ZY monogram logo (resembling the logo on zynamfx)
+    const Rectangle<float> zyMarkBox (logoX + 118.0f, logoY + 1.0f, 44.0f, 20.0f);
+    drawZyLogo (g, zyMarkBox);
+
+    // Subtitle badge
+    g.setFont (fnt (9.0f, false));
+    g.setColour (pal::engraveDim);
+    g.drawText ("MASTERING & TRACKING STRIP", Rectangle<float> (zyMarkBox.getRight() + 12.0f, logoY + 3.0f, 180.0f, 18.0f), Justification::centredLeft);
+
+    // Power jewel LED on header
+    const Point<float> pwrC (full.getWidth() * 0.5f, header.getCentreY());
+    g.setColour (Colour (0xff08090a));
+    g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC));
+    g.setColour (Colours::white.withAlpha (0.25f));
+    g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC), 0.8f);
+    // Glowing cyan jewel
+    g.setGradientFill (ColourGradient (Colour (0x6057d4c2), pwrC.x, pwrC.y, Colour (0x0057d4c2), pwrC.x + 10.0f, pwrC.y + 10.0f, true));
+    g.fillEllipse (Rectangle<float> (18.0f, 18.0f).withCentre (pwrC));
+    g.setGradientFill (ColourGradient (Colour (0xffc4fff7), pwrC.x - 1.0f, pwrC.y - 1.0f, Colour (0xff28a896), pwrC.x + 2.0f, pwrC.y + 2.0f, false));
+    g.fillEllipse (Rectangle<float> (6.5f, 6.5f).withCentre (pwrC));
+
+    // Master level title + calibrated scale ticks
+    g.setFont (fnt (12.0f, true));
+    g.setColour (Colours::black.withAlpha (0.75f));
+    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, header.getY() + 1.0f, 62.0f, header.getHeight()), Justification::centredRight);
+    g.setColour (Colour (0xffc8ccd0));
+    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, header.getY(), 62.0f, header.getHeight()), Justification::centredRight);
+
+    // 5. Plate shadows so the faceplates read as physically raised hardware
     for (int s = 0; s < 4; ++s)
     {
         const auto r = slotBounds (s);
-        g.setColour (Colours::black.withAlpha (0.55f));
+        g.setColour (Colours::black.withAlpha (0.65f));
         g.fillRoundedRectangle (r.toFloat().withTrimmedTop (kGripH).translated (0.0f, 4.0f), 6.0f);
     }
+    g.restoreState();
 }
 
 void RackStripEditor::paintOverChildren (Graphics& g)
 {
-    // outer bevel last so it sits above the plates
+    g.saveState();
     g.addTransform (canvasTransform);
     const Rectangle<float> full (0.0f, 0.0f, (float) kEditorW, (float) kEditorH);
-    g.setColour (Colours::white.withAlpha (0.12f));
-    g.drawRoundedRectangle (full.reduced (2.5f), 9.0f, 1.2f);
-    g.setColour (Colours::black.withAlpha (0.9f));
-    g.drawRoundedRectangle (full.reduced (0.5f), 10.0f, 1.5f);
+
+    // Outer 19" rack ears bevel
+    g.setColour (Colours::white.withAlpha (0.15f));
+    g.drawRoundedRectangle (full.reduced (2.0f), 8.0f, 1.2f);
+    g.setColour (Colours::black.withAlpha (0.95f));
+    g.drawRoundedRectangle (full.reduced (0.5f), 9.0f, 1.5f);
+    g.restoreState();
 }

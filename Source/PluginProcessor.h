@@ -53,7 +53,9 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
     std::array<std::unique_ptr<rack::Module>, NumModules> modules;
-    std::atomic<uint32_t> packedOrder { 0x03020100u };
+    // Default rack order is 560 EQ -> 1176 FET -> LA-2A opto -> Enhance.
+    // ModuleId is Console=0, Opto=1, Fet=2, Limiter=3, so the slots are [0,2,1,3].
+    std::atomic<uint32_t> packedOrder { 0x03010200u };
     RackMeters meters;
     juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
     std::atomic<float>* mixAmount = nullptr;

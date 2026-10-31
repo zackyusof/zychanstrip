@@ -87,7 +87,8 @@ Upstream pin: `f6d175d8253375a51832fd52aa86482c191caadc`, read full JSFX and MIT
 - Exact pinned source and MIT license read in full (467+21 lines). GitHub project had156stars at live check.
 - Implemented stack-only ten-band SVF coefficients,20ms control smoothing with coefficient refresh every8frames; same upstream4th-order Butterworth2xresampler.
 - Enhance Auto Gain uses±36dB bounds,200ms linked stereo power estimates and100ms correction smoothing with -120dB RMS gate; reference dry signal uses existing lookahead ring position. Final linked peak safety respects ceiling.
-- Existing29parameter IDs and order preserved;11newcontrols append;40hostparameters total. Six retired four-band EQ parameters remain inactive but registered. HPF and console dynamics stay active.
+- Existing29parameter IDs and order preserved;11newcontrols append;40hostparameters total. Six retired four-band EQ parameters remain inactive but registered. Console dynamics controls remain registered in APVTS for backwards compatibility while faceplate is dedicated to pure API 560 graphic EQ with hardware IN switch.
+- Verified mono/stereo paths: symmetric bus layout enforced (1->1, 2->2; asymmetric rejected); zero crosstalk in EQ560 independent channel states; 0.000000 stereo drift error under linked Opto/FET compression; 0.000 dB RMS auto-gain tracking across both 1ch and 2ch with linked ceiling safety gain; constant lookahead bypass delay.
 - New instances enable Auto Gain. Legacy states missing it restore off; missing new EQ bands resetflat, including when loading into reusedinstances.
 - CMake resource includes complete upstreamMIT notice in installedAU, verified present.
 

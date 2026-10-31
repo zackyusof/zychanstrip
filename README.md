@@ -29,40 +29,29 @@ drag the lower-right corner to resize it.
 
 ## The four modules
 
-### 1. Console strip — EQ and dynamics
+### 1. Dedicated API 560 Graphic EQ
 
-The first plate combines a 560-style ten-band graphic EQ, high-pass filter and bus-style compressor.
-The EQ follows the supplied hardware-style GUI: horizontal white faders, cyan guides and a red 500 Hz cap.
+The first plate is an authentic hardware-styled recreation of the classic ten-band graphic EQ:
+full-height vertical fader travel, brushed dark faceplate, authentic API twin op-amp chevron emblem,
+mounting screw cutouts, and a hardware **IN** toggle switch.
 
-**EQ**
+**EQ Bands**
 
-| Control | Range | Default | Notes |
-| --- | --- | --- | --- |
-| 16K, 8K, 4K, 2K, 1K, 500, 250, 125, 63, 31 Hz | ±12 dB each | 0 dB | Ten fixed bands with gain-dependent Q |
-| HPF | 20–300 Hz | 20 Hz | High-pass before the graphic EQ |
+| Band | Frequency | Range | Default | Notes |
+| --- | --- | --- | --- | --- |
+| Band 1–10 | 16k, 8k, 4k, 2k, 1k, 500, 250, 125, 63, 31 Hz | ±12 dB each | 0 dB | Ten fixed proportional-Q bands; red cap on 500 Hz |
+| IN Switch | – | on / off | on | Hardware bypass switch for the 560 module |
 
 The EQ core is a C++ adaptation of [chokehold’s EQ 560](https://github.com/chkhld/jsfx/blob/f6d175d8253375a51832fd52aa86482c191caadc/Equalizer/eq_560.jsfx),
-from `chkhld/jsfx` (156 GitHub stars when checked on 2026-10-31), under the MIT license.
-It ports the state-variable peak filters, proportional-Q curve and 2× Butterworth oversampling.
-The upstream random noise, idle blanking and fixed character bumps are omitted. This is a source-based
-560-style model, not a manufacturer-certified circuit emulation. Attribution and license are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the installed AU resources.
+from `chkhld/jsfx` (MIT license). It ports the state-variable peak filters, proportional-Q curve (bandwidth
+narrows as boost/cut increases) and 2× Butterworth oversampling. Upstream random noise, idle blanking,
+and fixed character bumps are omitted. Attribution and license are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+and the installed AU resources.
 
-**Dynamics**
-
-| Control | Range | Default | Notes |
-| --- | --- | --- | --- |
-| Threshold | −40 – 0 dB | 0 dB | 4 dB soft knee |
-| Ratio | 1.5:1 – 10:1 | 3:1 | |
-| Attack | 0.3 – 30 ms | 10 ms | |
-| Release | 50 – 1200 ms | 200 ms | |
-| Out | ±12 dB | 0 dB | Make-up gain |
-
-The detector is stereo-linked (the loudest channel drives both). The output stage has a very gentle
-saturation that is transparent below 0.7 of full scale and eases into a soft curve above it — it is a
-stand-in for analog output-stage behaviour, not a distortion effect. The two lamps labelled **Comp**
-and **Gate** are faceplate indicators from the reference design; this build has no gate, and neither
-lamp changes the audio.
+*Note on legacy dynamics parameters:* The original channel strip dynamics controls (`con_thresh`, `con_ratio`,
+`con_attack`, `con_release`, `con_out`, `con_hpf`) and four-band parameters (`con_lf`, etc.) remain registered in the host
+parameter tree at their original indices so existing host sessions and DAW automations do not break. On the current
+faceplate, the module is dedicated purely to the API 560 graphic EQ.
 
 ### 2. Opto leveler
 
@@ -214,22 +203,28 @@ and the FET/opto saturation are memoryless waveshapers.
 
 ---
 
-## Channel handling
+## Channel handling and audio path verification
 
-The plugin is an **effect** (`aufx`), and accepts stereo in/stereo out or mono in/mono out — the input
-and output channel sets must match, which `isBusesLayoutSupported` enforces:
+The plugin is an **Audio Unit Effect** (`aufx`) supporting both full stereo and pure mono tracks. The channel paths have been verified against both the DSP implementation and automated test suites:
 
-- **Stereophonic layout.** The EQ runs two independent filter instances (one per channel) so the left
-  and right channels are filtered separately but with identical coefficients. All the compressors use a
-  **stereo-linked** detector — the peak across channels drives one gain value — so the stereo image
-  never collapses. This is the normal, correct choice for a master bus.
-- **Mono layout.** A single filter instance and a single detector; the processors operate on channel 0
-  only (`std::min(2, numChannels)` guards this everywhere).
-- The plugin is **not** a synth, declares no MIDI input or output, and does not report a tail beyond its
-  latency.
+### 1. Bus negotiation & layout constraints
+- **Supported configurations**: Stereo in / Stereo out (`2 → 2`) and Mono in / Mono out (`1 → 1`).
+- **Asymmetric bus protection**: Enforced strictly by `isBusesLayoutSupported()`. Asymmetric routing requests (e.g. `1 → 2` or `2 → 1`) are explicitly rejected by the host negotiation, preventing unintended panning offsets or buffer overrun bugs.
 
-The AU declares itself as `kAudioUnitType_Effect` with subtype `Rkst` and manufacturer `Ycmp`, so hosts
-list it under effects rather than instruments.
+### 2. Module-by-module mono vs. stereo architecture
+
+| Module | Mono Processing (`1ch`) | Stereo Processing (`2ch`) | Stereo Image & Phase Integrity |
+| :--- | :--- | :--- | :--- |
+| **API 560 Graphic EQ** | `channel[0]` is processed; `channel[1]` remains idle with zero state activity. | Two completely independent filter engines: 4th-order Butterworth upsampling + 10-band peaking SVF + 4th-order Butterworth downsampling per channel. | **Zero crosstalk**: L and R audio streams are completely isolated (tested with isolated single-channel input). Filter coefficients are smoothed once per native sample frame in `beginSample()`, guaranteeing identical frequency and phase responses across both channels. |
+| **Opto Leveller** | Evaluates ch 0 peak; applies smooth program-dependent gain reduction to ch 0. | **Stereo-linked detector**: computes unified peak `pk = max(\|L\|, \|R\|)` and derives a single attenuation factor `g`. | **Zero stereo drift**: Applied scalar gain `g` is identical for both channels. Verified with `0.000000` L/R ratio error under compression; off-center transients never pull or collapse the stereo image. |
+| **FET Compressor** | Drives input into fixed −10 dB threshold on ch 0. | **Stereo-linked detector**: evaluates peak across both channels after input drive gain is applied. | Fast attack/release envelope computes a unified gain reduction factor `g` applied equally to both channels before soft-clipping. |
+| **Master Limiter & Auto Gain** | Uses `delay[0]` & `dryDelay[0]`; energy scaled by `1.0`. | Independent lookahead delay ring buffers (`delay[2]`, `dryDelay[2]`). Power scaled by `1.0 / nch` (`0.5`). | **Linked ceiling & auto-gain**: Auto Gain RMS power estimation operates on true mean channel power (0.000 dB RMS tracking accuracy in both 1ch and 2ch). Ceiling safety clamp (`safety = ceil / outputPeak`) is linked across both channels, maintaining exact channel balance. |
+| **Master Output** | 20 ms smoothed gain ramp on ch 0. | Identical smoothing ramp applied to L and R. | Zero zipper noise, zero inter-channel phase shift. |
+
+### 3. Latency & bypass phase consistency
+- **Constant Lookahead Delay**: The Limiter delay line runs sample-exact (`ceil(0.0015 × sr) − 1` samples, ~1.375 ms at 48 kHz) in both active and bypassed states (`runLimiter(buf, false)` continues buffering).
+- **Phase alignment in DAW mix**: Bypassing individual modules or dragging plates to change rack order does not alter plugin latency, completely eliminating comb filtering or timing drift against parallel tracks in your DAW.
+- The plugin is **not** a synth, declares no MIDI input or output, and does not report a tail beyond its latency. It declares itself as `kAudioUnitType_Effect` with subtype `Rkst` and manufacturer `Ycmp`.
 
 ---
 

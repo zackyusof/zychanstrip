@@ -2,7 +2,6 @@
 
 using namespace juce;
 
-
 //==============================================================================
 //  Palette + photorealistic drawing helpers
 //==============================================================================
@@ -34,8 +33,8 @@ const Colour faceLightTop   { 0xffe2e4e1 };
 const Colour faceLightLow   { 0xffafb2ae };
 const Colour fetTop         { 0xff181a1c };
 const Colour fetLow         { 0xff0b0d0e };
-const Colour limTop         { 0xff415462 };
-const Colour limLow         { 0xff1f2a33 };
+const Colour limTop         { 0xff12182b };
+const Colour limLow         { 0xff0a0d16 };
 const Colour cream          { 0xfffcf5dc };
 const Colour creamLow       { 0xffd9c798 };
 const Colour needleInk      { 0xff18120c };
@@ -50,30 +49,6 @@ const Colour blackCap       { 0xff222428 };
 const Colour silverCap      { 0xffc8ccd1 };
 const Colour btnOff         { 0xff182028 };
 const Colour btnOn          { 0xff296eb4 };
-}
-
-/** Sonnox Oxford inspired palette for the limiter face (spec enhance-module-redesign). */
-namespace oxf
-{
-const Colour navyTop     { 0xff12182b };
-const Colour navyBottom  { 0xff0a0d16 };
-const Colour block       { 0xff182035 };
-const Colour blockEdge   { 0xff080c14 };
-const Colour track       { 0xff0a0e18 };
-const Colour trackAxis   { 0xff1a2234 };
-const Colour faderWell   { 0xff222c4a };
-const Colour teal        { 0xff3a8cb8 };
-const Colour headerText  { 0xff82b8d8 };
-const Colour labelText   { 0xffd4dae0 };
-const Colour alertRed    { 0xffc82828 };
-const Colour ledGreen    { 0xff20e060 };
-const Colour ledYellow   { 0xffffb018 };
-const Colour ledRed      { 0xffff2020 };
-const Colour meterYellow { 0xffffc020 };
-const Colour readoutWell { 0xff06080c };
-const Colour readoutLime { 0xff45f065 };
-const Colour readoutYellow { 0xffffd030 };
-const int    wellWidth  = 56;   // standard inset readout well (px)
 }
 
 void drawZyLogo (Graphics& g, Rectangle<float> bounds)
@@ -755,177 +730,50 @@ void paintBadge (Graphics& g, Rectangle<float> r, const String& text)
     g.setColour (Colour (0xfff0e8d2));
     g.drawText (text, r, Justification::centred);
 }
-} // namespace
 
-//==============================================================================
-//  Oxford-style limiter primitives (spec: docs/specs/enhance-module-redesign.md)
-//==============================================================================
-namespace
+/** Photorealistic segmented LED ladder with smoked glass window and optical glow. */
+void paintLadder (Graphics& g, Rectangle<float> r, float lit01, Colour low, Colour high, int segments)
 {
-void oxfRecess (Graphics& g, Rectangle<float> r, float corner, Colour fill)
-{
-    g.setColour (fill);
-    g.fillRoundedRectangle (r, corner);
-    // Inner shadow across the top half, fading over 4 px
-    g.setGradientFill (ColourGradient (Colour (0x60000000), r.getX(), r.getY(),
-                                       Colours::transparentBlack, r.getX(), r.getY() + 4.0f, false));
-    g.fillRoundedRectangle (r, corner);
-    g.setColour (Colours::black.withAlpha (0.85f));
-    g.drawRoundedRectangle (r, corner, 1.0f);
-    g.setColour (Colours::white.withAlpha (0.10f));
-    g.drawHorizontalLine ((int) r.getBottom(), r.getX() + corner, r.getRight() - corner);
-}
+    // Smoked acrylic bezel housing
+    g.setColour (Colour (0xff080a0b));
+    g.fillRoundedRectangle (r.expanded (2.5f), 3.0f);
+    g.setColour (Colours::black.withAlpha (0.95f));
+    g.drawRoundedRectangle (r.expanded (1.0f), 2.5f, 1.0f);
+    g.setColour (Colours::white.withAlpha (0.12f));
+    g.drawRoundedRectangle (r.expanded (2.5f), 3.0f, 0.7f);
 
-/** Bordered sub-container with a tracked all-caps header (DES-6, REQ-1, REQ-4). */
-void oxfSection (Graphics& g, Rectangle<int> area, const String& header)
-{
-    const auto r = area.toFloat();
-    g.setColour (Colours::black.withAlpha (0.35f));
-    g.fillRoundedRectangle (r.translated (0.0f, 2.0f), 3.0f);
-    g.setGradientFill (ColourGradient (oxf::block.brighter (0.10f), r.getX(), r.getY(),
-                                       oxf::block.darker (0.45f), r.getX(), r.getBottom(), false));
-    g.fillRoundedRectangle (r, 3.0f);
-    g.setColour (oxf::blockEdge);
-    g.drawRoundedRectangle (r, 3.0f, 1.0f);
-    g.setColour (Colours::white.withAlpha (0.14f));
-    g.drawHorizontalLine ((int) r.getY() + 1, r.getX() + 3.0f, r.getRight() - 3.0f);
+    const float h = r.getHeight() / (float) segments;
+    const int lit = (int) std::round (jlimit (0.0f, 1.0f, lit01) * (float) segments);
 
-    if (header.isNotEmpty())
+    for (int i = 0; i < segments; ++i)
     {
-        g.setFont (Font (FontOptions (11.0f, Font::bold)));
-        g.setColour (oxf::headerText);
-        g.drawText (header, area.removeFromTop (16).translated (0, -1), Justification::centred, true);
+        const float t = (float) i / (float) (segments - 1);
+        const auto c = low.interpolatedWith (high, t);
+        const Rectangle<float> seg (r.getX() + 1.2f, r.getBottom() - (float) (i + 1) * h + 0.8f, r.getWidth() - 2.4f, h - 1.6f);
+        const bool on = (segments - i) <= lit;
+
+        if (on)
+        {
+            // Saturated LED optical glow
+            g.setColour (c.withAlpha (0.35f));
+            g.fillRoundedRectangle (seg.expanded (2.2f, 1.0f), 2.0f);
+
+            // LED core body
+            g.setGradientFill (ColourGradient (c.brighter (0.45f), seg.getX(), seg.getY(),
+                                               c, seg.getX(), seg.getBottom(), false));
+            g.fillRoundedRectangle (seg, 1.0f);
+
+            // Bright center filament line
+            g.setColour (Colours::white.withAlpha (0.65f));
+            g.fillRect (seg.reduced (seg.getWidth() * 0.25f, seg.getHeight() * 0.35f));
+        }
+        else
+        {
+            // Unlit dark phosphor bar
+            g.setColour (c.withMultipliedBrightness (0.15f).withAlpha (0.30f));
+            g.fillRoundedRectangle (seg, 1.0f);
+        }
     }
-}
-
-/** Text width via GlyphArrangement (Font::getStringWidthFloat is deprecated in JUCE 8). */
-float textWidth (const Font& f, const String& text)
-{
-    GlyphArrangement ga;
-    ga.addLineOfText (f, text, 0.0f, 0.0f);
-    return ga.getBoundingBox (0, -1, true).getWidth();
-}
-
-/** Inset digital readout well with luminous digits (DES-4, REQ-4). */
-void oxfReadout (Graphics& g, Rectangle<int> box, const String& text, Colour ink)
-{
-    oxfRecess (g, box.toFloat(), 2.0f, oxf::readoutWell);
-
-    // Fit the value inside the well: shrink the type before clipping any glyph.
-    float size = 9.5f;
-    Font f (FontOptions (size, Font::bold));
-    while (size > 6.5f && textWidth (f, text) > (float) box.getWidth() - 4.0f)
-    {
-        size -= 0.5f;
-        f = Font (FontOptions (size, Font::bold));
-    }
-    g.setFont (f);
-    g.setColour (ink.withAlpha (0.30f));
-    g.drawText (text, box, Justification::centred);
-    g.setColour (ink);
-    g.drawText (text, box.translated (0, -1), Justification::centred);
-}
-
-/** Segmented LED column. Segments run bottom (index 0) to top; ON from the bottom up. */
-void oxfSegLed (Graphics& g, Rectangle<float> area, const std::vector<float>& segDb,
-                float litDb, float floorDb, float ceilDb, Colour onColour, bool fromTop=false)
-{
-    const int n = (int) segDb.size();
-    if (n == 0 || area.getWidth() < 2.0f || area.getHeight() < 6.0f) return;
-
-    // Housing
-    g.setColour (Colour (0xff05080d));
-    g.fillRoundedRectangle (area.expanded (2.0f), 2.5f);
-    g.setColour (Colours::black.withAlpha (0.9f));
-    g.drawRoundedRectangle (area.expanded (1.0f), 2.0f, 1.0f);
-
-    const float pitch = area.getHeight() / (float) n;
-    const float segH = jmax (1.0f, pitch - 1.5f);
-
-    auto rowOf = [&] (int i)
-    {
-        const float rowTop = fromTop ? area.getY() + (float) i * pitch
-                                    : area.getBottom() - (float) (i + 1) * pitch;
-        return Rectangle<float> (area.getX(), rowTop + 0.75f, area.getWidth(), segH);
-    };
-
-    // Unlit column: one dark slab plus faint separators (cheap to repaint while resizing).
-    g.setColour (onColour.withMultipliedBrightness (0.10f).withAlpha (0.40f));
-    g.fillRect (area);
-
-    // Lit segments with the full glow treatment.
-    for (int i = 0; i < n; ++i)
-    {
-        const float seg = segDb[(size_t) i];
-        if (litDb < seg) continue;
-
-        const float t = jlimit (0.0f, 1.0f, (seg - floorDb) / jmax (1.0e-6f, ceilDb - floorDb));
-        const auto c = onColour.withMultipliedBrightness (0.55f + 0.45f * t);
-        const Rectangle<float> r = rowOf (i);
-
-        g.setColour (c.withAlpha (0.30f));
-        g.fillRoundedRectangle (r.expanded (1.8f, 0.6f), 1.0f);
-        g.setGradientFill (ColourGradient (c.brighter (0.45f), r.getX(), r.getY(),
-                                           c.darker (0.10f), r.getX(), r.getBottom(), false));
-        g.fillRect (r);
-    }
-}
-
-/** Recessed vertical fader track with metallic 5-rib thumb cap (DES-2, REQ-2). */
-void oxfFader (Graphics& g, int x, int y, int w, int h, float pos, Slider& s)
-{
-    const float cx = (float) x + (float) w * 0.5f;
-    const Rectangle<float> track (cx - 7.0f, (float) y, 14.0f, (float) h);
-
-    oxfRecess (g, track, 4.0f, oxf::track);
-
-    // Thin centered travel axis
-    g.setColour (oxf::trackAxis);
-    g.fillRect (Rectangle<float> (cx - 0.75f, track.getY() + 5.0f, 1.5f, track.getHeight() - 10.0f));
-
-    // Muted blue-grey channel around the slot
-    g.setColour (oxf::faderWell.withAlpha (0.55f));
-    g.drawVerticalLine ((int) track.getX() - 1, track.getY(), track.getBottom());
-    g.drawVerticalLine ((int) track.getRight() + 1, track.getY(), track.getBottom());
-
-    // Thumb cap
-    const float capW = 24.0f, capH = 36.0f;
-    const Rectangle<float> cap (cx - capW * 0.5f, pos - capH * 0.5f, capW, capH);
-
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.fillRoundedRectangle (cap.translated (1.5f, 3.0f), 3.5f);
-
-    g.setGradientFill (ColourGradient (Colour (0xffe8eef4), cap.getX(), cap.getY(),
-                                       Colour (0xff8d9aa8), cap.getX(), cap.getBottom(), false));
-    g.fillRoundedRectangle (cap, 3.5f);
-
-    // Convex cylinder: bright specular band in the middle, darkened brushed edges
-    g.setGradientFill (ColourGradient (Colour (0x00ffffff), cap.getX(), cap.getY(),
-                                       Colour (0xffffffff), cap.getCentreX(), cap.getY(), false));
-    g.fillRoundedRectangle (cap, 3.5f);
-    g.setGradientFill (ColourGradient (Colour (0x00ffffff), cap.getCentreX(), cap.getY(),
-                                       Colour (0x66ffffff), cap.getRight(), cap.getY(), false));
-    g.fillRoundedRectangle (cap, 3.5f);
-    g.setColour (Colour (0xff5d6874).withAlpha (0.55f));
-    g.fillRect (Rectangle<float> (cap.getX() + 1.5f, cap.getY() + 4.0f, 3.0f, cap.getHeight() - 8.0f));
-    g.setColour (Colour (0xff5d6874).withAlpha (0.55f));
-    g.fillRect (Rectangle<float> (cap.getRight() - 4.5f, cap.getY() + 4.0f, 3.0f, cap.getHeight() - 8.0f));
-
-    // Exactly five indented grip ribs, 3.5 px apart
-    for (int i = 0; i < 5; ++i)
-    {
-        const float ry = cap.getCentreY() - 7.0f + (float) i * 3.5f;
-        g.setColour (Colour (0xff10141a));
-        g.fillRect (cap.getX() + 5.0f, ry, cap.getWidth() - 10.0f, 1.3f);
-        g.setColour (Colours::white.withAlpha (0.55f));
-        g.fillRect (cap.getX() + 5.0f, ry + 1.3f, cap.getWidth() - 10.0f, 0.7f);
-    }
-
-    g.setColour (Colours::white.withAlpha (0.75f));
-    g.drawRoundedRectangle (cap.reduced (0.5f), 3.5f, 0.8f);
-    g.setColour (Colours::black.withAlpha (0.55f));
-    g.drawRoundedRectangle (cap, 3.5f, 1.0f);
-    (void) s;
 }
 } // namespace
 
@@ -1066,8 +914,6 @@ public:
     {
         if (style == Slider::LinearHorizontal && (bool) s.getProperties()["eq560"])
             drawGraphicEqFader (g, x, y, w, h, pos, s);
-        else if (style == Slider::LinearVertical && (bool) s.getProperties()["oxfordFader"])
-            oxfFader (g, x, y, w, h, pos, s);
         else if (style == Slider::LinearVertical) drawChromeFader (g, x, y, w, h, pos, minPos, maxPos, s);
         else if (style == Slider::LinearHorizontal) drawMasterBar (g, x, y, w, h, pos, s);
         else LookAndFeel_V4::drawLinearSlider (g, x, y, w, h, pos, minPos, maxPos, style, s);
@@ -1897,197 +1743,82 @@ class LimiterPanel : public ModulePanel
 public:
     explicit LimiterPanel (RackStripProcessor& p)
         : ModulePanel (p, RackStripProcessor::Limiter, "lim_",
-                       oxf::navyTop, oxf::navyBottom, oxf::labelText)
+                       pal::limTop, pal::limLow, pal::engrave)
     {
-        labelColour = oxf::labelText;
-        bypass.setColour (ToggleButton::textColourId, labelColour);
+        setupKnob (gain,    "gain",    pal::blackCap, Colour (0xffffb000));
+        setupKnob (ceiling, "ceiling", pal::blackCap, Colour (0xffffb000));
+        setupKnob (release, "release", pal::blackCap, Colour (0xffffb000));
 
-        // The face is painted procedurally onto the plate; the base metal pipeline is skipped.
-        setOpaque (false);
-
-        setupFader (gain,    "gain");
-        setupFader (ceiling, "ceiling");
-        setupFader (release, "release");
-        setupFader (enhance, "enhance");
-
+        fader.setSliderStyle (Slider::LinearVertical);
+        fader.setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
+        fader.setNumDecimalPlacesToDisplay (1);
+        fader.setPopupDisplayEnabled (true, true, nullptr);
+        faderAtt = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "lim_enhance", fader);
+        addAndMakeVisible (fader);
         autoGain.setName ("Auto Gain");
         autoGain.setButtonText ("AUTO GAIN");
-        autoGain.setColour (ToggleButton::tickColourId, oxf::ledGreen);
-        autoGain.setColour (ToggleButton::textColourId, Colour (0xff0d1a10));
+        autoGain.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
+        autoGain.setColour (ToggleButton::textColourId, labelColour);
         autoGainAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "lim_auto_gain", autoGain);
         addAndMakeVisible (autoGain);
-
-        // 32 segments, bottom = -42 dB, top = +18 dB (reference geometry)
-        const float outSegs[] { -42, -36, -30, -26, -24, -22, -20, -18, -16, -14, -12, -10, -9, -8, -7.5f, -7,
-                                -6, -5, -4, -3.5f, -3, -2.5f, -2, -1, 0, 0.5f, 1, 3, 6, 9, 12, 18 };
-        outSegDb.assign (std::begin (outSegs), std::end (outSegs));
-
-        // GR column: 18 segments covering 0 .. -18 dB of reduction
-        for (int i = 0; i < 18; ++i) grSegDb.push_back (-(float) i);
     }
 
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // contentBounds() trims 14 px below the plate; reclaim it so the blocks reach the plate edge
-        auto full = c.withBottom (plateBounds().getBottom() - 14);
+        const int kh = 70;
+        const int kw = c.getWidth() / 3;
+        const int ky = c.getY() + 26;
+        place (gain,    { c.getX(),                ky, kw, kh });
+        place (ceiling, { c.getX() + kw,           ky, kw, kh });
+        place (release, { c.getX() + kw * 2,       ky, kw, kh });
 
-        // ---- three containers side by side, visible gutters
-        const int gut = 4;
-        const int colW = (full.getWidth() - gut * 2) / 3;
-        blockA = { full.getX(),                full.getY(), colW, full.getHeight() };
-        blockB = { full.getX() + colW + gut,   full.getY(), colW, full.getHeight() };
-        blockC = { blockB.getRight() + gut,    full.getY(), full.getWidth() - 2 * (colW + gut), full.getHeight() };
-
-        const int pad = 7;
-        const int headH = 15;   // tracked section header
-        const int roH = 18;     // readout well
-        const int labH = 11;    // control name
-        const int topRow = headH + 5;
-
-        // ---- a readout well + label centred above each fader, inside equal thirds of the block
-        auto columnLayout = [&] (Rectangle<int> area, const char* n0, Rectangle<int>& r0, Rectangle<int>& l0,
-                                 Rectangle<int>& f0, const char* n1, Rectangle<int>& r1, Rectangle<int>& l1,
-                                 Rectangle<int>& f1, int faderH)
-        {
-            const Font labFont (FontOptions (8.5f, Font::bold));
-            const char* nms[2] { n0, n1 };
-            Rectangle<int>* ros[2] { &r0, &r1 };
-            Rectangle<int>* las[2] { &l0, &l1 };
-            Rectangle<int>* fss[2] { &f0, &f1 };
-            for (int i = 0; i < 2; ++i)
-            {
-                const int cx = area.getX() + area.getWidth() * (2 * i + 1) / 4;   // centres of each half
-                const int wellW = jmin (oxf::wellWidth, area.getWidth() / 2 - 4);
-                const int labW  = jmin (area.getWidth() / 2 - 2, (int) textWidth (labFont, nms[i]) + 4);
-                *ros[i] = { cx - wellW / 2, area.getY() + topRow, wellW, roH };
-                *las[i] = { cx - labW / 2, ros[i]->getBottom() + 1, labW, labH };
-                fss[i]->setBounds (cx - 10, area.getY() + topRow + 30, 20, faderH);
-            }
-        };
-
-        // ---- Block A: GAIN + CEILING faders, AUTO GAIN across the bottom
-        auto a = blockA.reduced (pad);
-        const int aFaderTop = a.getY() + topRow + 30;
-        const int aFaderH = a.getBottom() - 26 - aFaderTop;
-        columnLayout (a, "GAIN", readoutA[0], labelA[0], faderA, "CEILING", readoutA[1], labelA[1], faderB, aFaderH);
-        autoGain.setBounds (a.getX() + 6, a.getBottom() - 20, a.getWidth() - 12, 18);
-
-        // ---- Block B: RELEASE + ENHANCE faders, GAIN REDUCTION column at the right
-        auto b = blockB.reduced (pad);
-        auto bForFaders = b;
-        const int bFaderTop = b.getY() + topRow + 30;
-        const int bFaderLen = b.getBottom() - 14 - bFaderTop;
-        columnLayout (bForFaders, "RELEASE", readoutB[0], labelB[0], faderC, "ENHANCE", readoutB[1], labelB[1], faderD, bFaderLen);
-        // ---- Block C: output ladder + GR ladder side by side, stacked readouts on the right
-        auto cc = blockC.reduced (pad);
-        const int ladderH = cc.getHeight() - headH - 28;
-        const int outW = 14, grWdt = 10;
-        outMeter = { cc.getX() + 1, cc.getY() + headH + 14, outW, ladderH };
-        grMeter  = { outMeter.getRight() + 7, cc.getY() + headH + 14, grWdt, ladderH };
-        const int rx = grMeter.getRight() + 5;
-        const int rw = cc.getRight() - rx;
-        readoutC[0] = { rx, cc.getY() + headH + 4, rw, roH };
-        labelC[0]   = { rx, readoutC[0].getBottom() + 1, rw, labH };
-        readoutC[1] = { rx, labelC[0].getBottom() + 16, rw, roH };
-        labelC[1]   = { rx, readoutC[1].getBottom() + 1, rw, labH };
-
-        // ---- the hardware bypass button lives in the panel top-right, inside the plate
-        bypass.setBounds (plateBounds().getRight() - 90, plateBounds().getY() + 5, 82, 20);
-
-        placeFader (gain,    faderA);
-        placeFader (ceiling, faderB);
-        placeFader (release, faderC);
-        placeFader (enhance, faderD);
-    }
-
-    void paintFaceBase (Graphics& g) override
-    {
-        const auto plate = plateBounds().toFloat();
-
-        // Navy chassis gradient (REQ-1)
-        g.setGradientFill (ColourGradient (oxf::navyTop, plate.getX(), plate.getY(),
-                                           oxf::navyBottom, plate.getX(), plate.getBottom(), false));
-        g.fillRoundedRectangle (plate, 5.0f);
-
-        // Subtle horizontal brushed micro-texture
-        Random rnd (77);
-        g.setColour (Colours::white.withAlpha (0.020f));
-        for (int i = 0; i < 220; ++i)
-            g.drawHorizontalLine ((int) (plate.getY() + 4.0f + rnd.nextFloat() * (plate.getHeight() - 8.0f)),
-                                  plate.getX() + 6.0f, plate.getRight() - 6.0f);
-
-        // Top specular + bottom occlusion (DES-5)
-        g.setColour (Colours::white.withAlpha (0.16f));
-        g.drawHorizontalLine ((int) plate.getY() + 1, plate.getX() + 6.0f, plate.getRight() - 6.0f);
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.drawRoundedRectangle (plate.reduced (0.5f), 5.0f, 1.2f);
-
-        // Corner screws keep the hardware feel of the other plates
-        const float inset = 13.0f;
-        const Point<float> pts[] {
-            { plate.getX() + inset, plate.getY() + inset }, { plate.getRight() - inset, plate.getY() + inset },
-            { plate.getX() + inset, plate.getBottom() - inset }, { plate.getRight() - inset, plate.getBottom() - inset }
-        };
-        for (int i = 0; i < 4; ++i) paintScrew (g, pts[i], 5.0f, 0.45f - 0.3f * (float) i);
+        autoGain.setBounds (c.getCentreX() - 58, ky + kh + 10, 116, 24);
+        const int fy = ky + kh + 52;
+        const int fh = c.getBottom() - fy - 52;
+        ladderA = { c.getX() + 24, fy + 22, 26, fh };
+        ladderB = { c.getRight() - 50, fy + 22, 26, fh };
+        fader.setBounds (c.getCentreX() - 26, fy, 52, fh + 22);
+        scaleRect = { c.getCentreX() - 62, fy + 22, 124, fh };
+        enhanceLabel = { c.getX(), fader.getBottom() + 2, c.getWidth(), 20 };
     }
 
     void paintFaceExtra (Graphics& g) override
     {
-        oxfSection (g, blockA, "INPUT");
-        oxfSection (g, blockB, "PRE-PROCESS");
-        oxfSection (g, blockC, "OUTPUT");
+        caption (g, "THRESHOLD", { gain.slider.getBounds().getX(), gain.slider.getY() - 19, gain.slider.getBounds().getWidth(), 17 }, 9.5f);
+        caption (g, "CEILING",   { ceiling.slider.getBounds().getX(), ceiling.slider.getY() - 19, ceiling.slider.getBounds().getWidth(), 17 }, 9.5f);
+        caption (g, "RELEASE",   { release.slider.getBounds().getX(), release.slider.getY() - 19, release.slider.getBounds().getWidth(), 17 }, 9.5f);
+        caption (g, "ENHANCE", enhanceLabel, 15.0f);
 
-        // Period-accurate module header (TRACK LIMITING AMPLIFIER), ASCII only for glyph safety
-        const auto plate = plateBounds();
-        const Rectangle<int> strip (plate.getX() + 20, plate.getY() + 18, plate.getWidth() - 124, 12);
-        g.setFont (Font (FontOptions (8.0f, Font::bold)));
-        g.setColour (Colour (0x80ffffff));
-        g.drawText ("TRACK LIMITING AMPLIFIER", strip, Justification::centredLeft, false);
-
-        g.setFont (Font (FontOptions (8.5f, Font::bold)));
-        g.setColour (oxf::labelText);
-        g.drawText ("GAIN",        labelA[0], Justification::centred, false);
-        g.drawText ("CEIL",        labelA[1], Justification::centred, false);
-        g.drawText ("RELEASE",     labelB[0], Justification::centred, false);
-        g.drawText ("ENH",         labelB[1], Justification::centred, false);
-        g.drawText ("OUT",         labelC[0], Justification::centred, false);
-        g.drawText ("GR",          labelC[1], Justification::centred, false);
-
-        // Ladder legends
-        g.setFont (Font (FontOptions (7.0f, Font::bold)));
-        g.setColour (Colour (0xff9fb4c8));
-        g.drawText ("+18", Rectangle<int> (outMeter.getX() - 4, outMeter.getY() - 10, 24, 9),
-                    Justification::centredLeft, false);
-        g.drawText ("-42", Rectangle<int> (outMeter.getX() - 4, outMeter.getBottom() - 1, 24, 9),
-                    Justification::centredLeft, false);
-        g.drawText ("GR", Rectangle<int> (grMeter.getX() - 6, grMeter.getY() - 10, 24, 9),
-                    Justification::centredLeft, false);
-
-        // Hardware IN (bypass) indicator, third row of the OUTPUT block (button sits above)
-        const bool inChain = proc.apvts.getRawParameterValue (prefix + "bypass")->load() < 0.5f;
-        const Point<float> led ((float) readoutC[0].getX() + 16.0f,
-                                (float) labelC[1].getBottom() + 18.0f);
-        g.setColour (Colour (0xff05080d));
-        g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (led));
-        if (inChain)
+        // dB scale beside fader
+        g.setFont (fnt (10.0f, false));
+        for (int i = 0; i <= 6; ++i)
         {
-            g.setGradientFill (ColourGradient (Colour (0x70ff8a2a), led.x, led.y,
-                                               Colours::transparentBlack, led.x + 13.0f, led.y + 13.0f, true));
-            g.fillEllipse (Rectangle<float> (26.0f, 26.0f).withCentre (led));
-            g.setGradientFill (ColourGradient (Colour (0xffffd060), led.x - 1.5f, led.y - 1.5f,
-                                               Colour (0xffc86010), led.x + 2.0f, led.y + 2.0f, false));
+            const float t = (float) i / 6.0f;
+            const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * t;
+            const int db = (int) std::round (12.0f - 24.0f * t);
+            g.setColour (Colours::black.withAlpha (0.75f));
+            g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 7.0f, 26.0f, 14.0f), Justification::centredRight);
+            g.setColour (Colours::white.withAlpha (0.6f));
+            g.drawText (String (db), Rectangle<float> ((float) scaleRect.getX(), y - 8.0f, 26.0f, 14.0f), Justification::centredRight);
         }
-        else
+        for (int i = 0; i <= 12; ++i)
         {
-            g.setColour (Colour (0xff241a12));
+            const float y = (float) scaleRect.getY() + (float) scaleRect.getHeight() * (float) i / 12.0f;
+            g.setColour (Colours::white.withAlpha (0.25f));
+            g.drawLine ((float) scaleRect.getCentreX() + 14.0f, y, (float) scaleRect.getCentreX() + 22.0f, y, 1.0f);
+            g.drawLine ((float) scaleRect.getCentreX() - 22.0f, y, (float) scaleRect.getCentreX() - 14.0f, y, 1.0f);
         }
-        g.fillEllipse (Rectangle<float> (7.0f, 7.0f).withCentre (led));
-        g.setColour (Colours::white.withAlpha (0.25f));
-        g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (led), 0.8f);
-        g.setFont (Font (FontOptions (8.0f, Font::bold)));
-        g.setColour (oxf::labelText);
-        g.drawText ("IN", Rectangle<int> ((int) led.x + 12, (int) led.y - 6, 34, 12), Justification::centredLeft, false);
+
+        // Slots beside ladders
+        for (auto s : { Rectangle<int> (ladderA.getX() - 14, ladderA.getY() - 6, 4, ladderA.getHeight() + 12),
+                        Rectangle<int> (ladderB.getRight() + 10, ladderB.getY() - 6, 4, ladderB.getHeight() + 12) })
+        {
+            g.setColour (Colour (0xff080a0b));
+            g.fillRoundedRectangle (s.toFloat(), 2.0f);
+            g.setColour (Colours::white.withAlpha (0.18f));
+            g.drawRoundedRectangle (s.toFloat(), 2.0f, 1.0f);
+        }
     }
 
     void tick() override
@@ -2097,64 +1828,32 @@ protected:
         outLevel += (targetOut - outLevel) * 0.35f;
         if (std::abs (targetOut - outLevel) < 0.001f) outLevel = targetOut;
         if (outLevel < 0.001f) outLevel = 0.0f;
-        autoGain.setToggleState (proc.apvts.getRawParameterValue ("lim_auto_gain")->load() > 0.5f,
-                                 dontSendNotification);
-        repaint();   // triggers paintOverChildren only; the captioned face image is untouched
-    }
-
-    void paintOverChildren (Graphics& g) override
-    {
-        // The plate, containers, captions and readouts are pre-rendered into the caption image,
-        // so the live layer only repaints itself every tick (avoids a 30 Hz full-face redraw).
-        paintMeter (g);
     }
 
     void paintMeter (Graphics& g) override
     {
+        // Enhance module meter fix: display nothing when not processing
+        const float red = gr > 0.05f ? jlimit (0.0f, 1.0f, gr / 14.0f) : 0.0f;
         const float outDb = outLevel > 1.0e-5f ? Decibels::gainToDecibels (outLevel) : -100.0f;
-        oxfSegLed (g, outMeter.toFloat(), outSegDb, outDb, -42.0f, 18.0f, oxf::ledGreen);
+        const float outNorm = outDb > -48.0f ? jlimit (0.0f, 1.0f, (outDb + 48.0f) / 48.0f) : 0.0f;
 
-        // GR ladder: 0 dB segment at the TOP (silent), light grows DOWNWARD with reduction.
-        // Idle-blanked below ~0.5 dB so a resting limiter reads as silence.
-        const float grLit = gr > 0.5f ? -jlimit (0.0f, 18.0f, gr) : 18.0f;
-        oxfSegLed (g, grMeter.toFloat(), grSegDb, grLit, -18.0f, 0.0f, oxf::meterYellow, true);
+        paintLadder (g, ladderA.toFloat(), red, Colour (0xffc06a10), Colour (0xffffd23a), 28);
+        paintLadder (g, ladderB.toFloat(), outNorm, Colour (0xff17b04a), Colour (0xff5fe1f5), 28);
 
-        // Live digital readouts (REQ-4): luminous lime for levels, warm yellow for make-up
-        auto clamped = [this] (const char* id) { return proc.apvts.getRawParameterValue (id)->load(); };
-        oxfReadout (g, readoutA[0], String (clamped ("lim_gain"), 1), oxf::readoutYellow);
-        oxfReadout (g, readoutA[1], String (clamped ("lim_ceiling"), 1), oxf::readoutLime);
-        oxfReadout (g, readoutB[0], String (clamped ("lim_release"), 0) + "ms", oxf::readoutLime);
-        oxfReadout (g, readoutB[1], String (clamped ("lim_enhance"), 0) + "%", oxf::readoutLime);
-        oxfReadout (g, readoutC[0], outDb > -100.0f ? String (outDb, 1) : String ("-inf"), oxf::readoutLime);
-        oxfReadout (g, readoutC[1], "-" + String (jmax (0.0f, gr), 1), oxf::readoutYellow);
+        if (gr >= 0.1f)
+        {
+            engraveText (g, "-" + String (gr, 1) + " dB", { ladderA.getX() - 18, ladderA.getBottom() + 8, ladderA.getWidth() + 36, 16 },
+                         Justification::centred, 11.0f, labelColour, false);
+        }
     }
 
 private:
-    void setupFader (Slider& s, const String& id)
-    {
-        s.setSliderStyle (Slider::LinearVertical);
-        s.setTextBoxStyle (Slider::NoTextBox, true, 0, 0);
-        s.setNumDecimalPlacesToDisplay (1);
-        s.setPopupDisplayEnabled (true, true, nullptr);
-        s.getProperties().set ("oxfordFader", true);
-        s.setName (prefix + id);
-        attachments.push_back (std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + id, s));
-        addAndMakeVisible (s);
-    }
-
-    static void placeFader (Slider& s, Rectangle<int> r) { s.setBounds (r.expanded (10, 0)); }
-
-    std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
-    Slider gain, ceiling, release, enhance;
+    Knob gain, ceiling, release;
+    Slider fader;
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
-
-    Rectangle<int> blockA, blockB, blockC;
-    Rectangle<int> faderA, faderB, faderC, faderD;
-    Rectangle<int> readoutA[2], readoutB[2], readoutC[2];
-    Rectangle<int> labelA[2], labelB[2], labelC[2];
-    Rectangle<int> outMeter, grMeter;
-    std::vector<float> outSegDb, grSegDb;
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> faderAtt;
+    Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
     float outLevel = 0.0f;
 };
 

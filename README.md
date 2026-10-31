@@ -290,3 +290,30 @@ Executes **195 automated tests** covering:
   * Real-time stereo-linked RMS input/output compensation inside the mastering limiter stage.
 * **Active Idle Meter Blanking**:
   * Segmented LED ladders extinguish to zero during audio pauses for an uncluttered visual display.
+
+---
+
+## Roadmap & Next Build: Enhance & Master Limiter Redesign (Oxford Style)
+
+The fourth module is scheduled for a comprehensive aesthetic and tactile redesign modeled after the classic **Sonnox Oxford Limiter** hardware/plugin layout. The complete architectural and UI specification is documented in [`docs/specs/enhance-module-redesign.md`](docs/specs/enhance-module-redesign.md) with visual reference in [`docs/screenshots/oxford-limiter-reference.webp`](docs/screenshots/oxford-limiter-reference.webp).
+
+### Planned Features & Design Specifications
+
+1. **Background & Color Palette**:
+   - Deep dark navy/slate blue chassis gradient (`#12182b` to `#0a0d16`).
+   - Modular container blocks framed with sharp, dark borders.
+   - Muted blue/grey recessed fader tracks (`#222c4a`), vibrant metallic teal headers, warning red alert buttons, and operational green indicators.
+2. **Precision Sliders & Faders**:
+   - Dark recessed grooves (`#0a0e18`) with inner depth shadows and thin travel axis lines.
+   - Convex metallic thumb caps with 5 horizontal tactile grip ribs and soft drop shadows.
+3. **Tri-Color Segmented LED Metering**:
+   - Discrete rectangular LED segments with authentic color thresholds:
+     - Green: −42 dB to −6 dB
+     - Amber/Yellow: −6 dB to 0 dB
+     - Saturated Red: +3 dB to +18 dB overload zone
+   - Dedicated central vertical Gain Reduction meter column (0 dB down to −18 dB) in luminous yellow/orange.
+4. **Typography & Inset Digital Readouts**:
+   - Geometric sans-serif type with wide letter-spaced all-caps headers (`INPUT`, `PRE-PROCESS`, `OUTPUT`).
+   - Dark recessed digital readout boxes displaying high-contrast glowing lime-green/yellow values (`-1.02 dB`, `100 %`).
+5. **Top-Down Directional Lighting**:
+   - Physically motivated directional highlights on top edges of caps, buttons, and dividers, with dark occlusion drop shadows underneath.

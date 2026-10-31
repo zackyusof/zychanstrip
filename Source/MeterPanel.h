@@ -20,6 +20,7 @@ public:
 
     void setScale (int index);                 // 0 linear, 1 K-20, 2 K-14, 3 K-12
     int  getScale() const { return scale; }
+    void setRtaAveraging (int index);
     static const char* scaleName (int index);
 
 private:
@@ -27,6 +28,7 @@ private:
     void paintMeters (juce::Graphics&);
     void paintScope (juce::Graphics&);
     void paintCorrelation (juce::Graphics&);
+    void paintRta (juce::Graphics&);
 
     /** Map dBFS to 0..1 for the active metering scale. */
     float normForScale (float db) const;
@@ -34,7 +36,10 @@ private:
     RackStripProcessor& proc;
 
     int scale = 0;
-    juce::Rectangle<int> resetBtn, scaleBtn, headerBar, meterArea, footerArea, scopeArea, corrArea;
+    juce::Rectangle<int> resetBtn, scaleBtn, headerBar, meterArea, footerArea, scopeArea, corrArea, rtaArea;
+    std::array<float, RackMeters::kBands> bandDb {};
+    std::array<float, RackMeters::kBands> bandHoldDb {};
+    int rtaAverage = 0;                        // 0 fast .. 3 slow (visual smoothing)
     std::vector<RackMeters::ScopePoint> scopePoints;
     float corrSmoothed = 0.0f;
     std::array<float, 2> displayPeakDb { -100.0f, -100.0f };

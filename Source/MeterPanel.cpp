@@ -98,6 +98,13 @@ void MeterPanel::tick()
         displayRmsDb[(size_t) c]  = m.rmsDb (c);
     }
     m.copyScope (scopePoints);
+    const auto& bd = m.bands();
+    const auto& bh = m.bandHolds();
+    for (int i = 0; i < RackMeters::kBands && i < (int) bd.size(); ++i)
+    {
+        bandDb[(size_t) i] = bd[(size_t) i];
+        bandHoldDb[(size_t) i] = (i < (int) bh.size()) ? bh[(size_t) i] : -100.0f;
+    }
     const float c = m.correlation();
     corrSmoothed += (c - corrSmoothed) * 0.4f;
     repaint();
@@ -113,9 +120,12 @@ void MeterPanel::resized()
     footerArea = left.removeFromBottom (18);
     meterArea = left;
     r.removeFromLeft (12);
-    scopeArea = r.removeFromTop (r.getHeight() * 3 / 4);
-    r.removeFromTop (10);
-    corrArea = r;
+    // Right column: phase scope on top, correlation, then the 31-band analyser.
+    scopeArea = r.removeFromTop (r.getHeight() * 55 / 100);
+    r.removeFromTop (8);
+    corrArea = r.removeFromTop (58);
+    r.removeFromTop (6);
+    rtaArea = r;
 
     const auto hb = headerBar;
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
@@ -152,6 +162,89 @@ void MeterPanel::paint (Graphics& g)
     paintMeters (g);
     paintScope (g);
     paintCorrelation (g);
+    paintRta (g);
+}
+
+void MeterPanel::setRtaAveraging (int index)
+{
+    rtaAverage = jlimit (0, 3, index);
+    repaint();
+}
+
+void MeterPanel::paintRta (Graphics& g)
+{
+    auto area = rtaArea;
+    if (area.getHeight() < 30) return;
+
+    sectionRule (g, area.removeFromTop (14), "31-BAND ANALYSER");
+
+    auto plot = area.reduced (2, 2);
+    // Reserve a label strip at the bottom for frequency markings.
+    auto labels = plot.removeFromBottom (10);
+    plot.removeFromRight (2);
+
+    // Inset well with dB grid
+    g.setColour (bgInset);
+    g.fillRect (plot);
+    g.setColour (Colour (0xff242424));
+    g.drawRect (plot, 1.0f);
+
+    const float topDb = 0.0f, bottomDb = -72.0f;
+    const int gridLines[] = { -6, -12, -24, -36, -48, -60 };
+    g.setFont (sslSans (7.0f, true));
+    for (int dbv : gridLines)
+    {
+        const float t = ((float) dbv - bottomDb) / (topDb - bottomDb);
+        const float y = (float) plot.getBottom() - (float) plot.getHeight() * t;
+        g.setColour (Colour (0xff1e1e1e));
+        g.drawHorizontalLine ((int) y, (float) plot.getX(), (float) plot.getRight());
+        g.setColour (inkDim.withAlpha (0.6f));
+        g.drawText (String (dbv), Rectangle<float> ((float) plot.getX() + 1.0f, y - 5.0f, 18.0f, 9.0f),
+                    Justification::centredLeft, false);
+    }
+
+    const int n = RackMeters::kBands;
+    const float barW = (float) plot.getWidth() / (float) n;
+    for (int i = 0; i < n; ++i)
+    {
+        const float db = bandDb[(size_t) i];
+        const float t = jlimit (0.0f, 1.0f, (db - bottomDb) / (topDb - bottomDb));
+        const float x = (float) plot.getX() + (float) i * barW;
+        const float h = (float) plot.getHeight() * t;
+        const Rectangle<float> bar (x + 0.6f, (float) plot.getBottom() - h, jmax (1.0f, barW - 1.2f), h);
+
+        // Colour by band position: lows green, mids amber, highs orange
+        const Colour c = db > -6.0f ? meterRed
+                       : (db > -18.0f ? meterOrange : meterGreen);
+        g.setColour (c.withAlpha (0.92f));
+        g.fillRect (bar);
+
+        // Peak-hold cap
+        const float ht = jlimit (0.0f, 1.0f, (bandHoldDb[(size_t) i] - bottomDb) / (topDb - bottomDb));
+        const float hy = (float) plot.getBottom() - (float) plot.getHeight() * ht;
+        g.setColour (inkWhite.withAlpha (0.85f));
+        g.fillRect (x + 0.6f, hy - 1.0f, jmax (1.0f, barW - 1.2f), 1.4f);
+    }
+
+    // Frequency marks at octave centres
+    const struct { const char* txt; int band; } marks[]
+        { { "20", 0 }, { "100", 7 }, { "1k", 19 }, { "10k", 29 } };
+    g.setFont (sslSans (7.0f, true));
+    g.setColour (inkDim);
+    for (auto& mk : marks)
+    {
+        const float x = (float) plot.getX() + ((float) mk.band + 0.5f) * barW;
+        g.drawText (mk.txt, Rectangle<float> (x - 12.0f, (float) labels.getY(), 24.0f, 9.0f),
+                    Justification::centred, false);
+    }
+
+    // Averaging indicator on the right of the section rule
+    g.setFont (sslSans (7.5f, true));
+    g.setColour (bronze);
+    const char* avgName[] { "FAST", "MED", "SLOW", "AVG" };
+    g.drawText (avgName[jlimit (0, 3, rtaAverage)],
+                Rectangle<float> ((float) area.getRight() - 70.0f, (float) rtaArea.getY(), 42.0f, 12.0f),
+                Justification::centredRight, false);
 }
 
 void MeterPanel::paintHeader (Graphics& g)
@@ -295,7 +388,7 @@ void MeterPanel::paintCorrelation (Graphics& g)
     auto area = corrArea;
     sectionRule (g, area.removeFromTop (16), "CORRELATION");
 
-    auto bar = area.reduced (10, 0).withHeight (10).withY (area.getY() + 8);
+    auto bar = area.reduced (10, 0).withHeight (10).withY (area.getY() + 2);
     g.setColour (bgInset);
     g.fillRoundedRectangle (bar.toFloat(), 2.0f);
     g.setColour (Colour (0xff2a2a2a));
@@ -321,5 +414,5 @@ void MeterPanel::paintCorrelation (Graphics& g)
     g.setColour (corrSmoothed < 0.0f ? meterRed : meterGreen);
     g.setFont (Font (FontOptions (11.0f, Font::bold)));
     g.setFont (Font (FontOptions (11.0f, Font::bold)));
-    g.drawText (String (corrSmoothed, 2), Rectangle<float> ((float) bar.getX(), tickY + 12.0f, 60.0f, 14.0f), Justification::centredLeft, false);
+    g.drawText (String (corrSmoothed, 2), Rectangle<float> ((float) bar.getRight() - 60.0f, tickY, 60.0f, 12.0f), Justification::centredRight, false);
 }

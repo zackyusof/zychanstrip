@@ -125,6 +125,24 @@ public:
         else                         process (buf);
     }
 
+    /** Order-independent auto-gain reference, supplied by the processor each block.
+        `chainInputRaw` is the block's per-sample input energy measured at the very start of the
+        whole chain (before any module runs), so a correction derived from it cannot depend on
+        where this module sits in the rack. */
+    virtual void setChainReference (const float* chainInputRaw, int numSamples)
+    {
+        juce::ignoreUnused (chainInputRaw, numSamples);
+    }
+
+    /** True output of the whole chain (post master gain, post dry/wet) for this block.
+        Auto Gain divides the chain input by THIS, never by its own output, so the correction is
+        identical no matter where the module sits in the rack. Called once per block, after every
+        module has run. */
+    virtual void setFinalOutputReference (const float* finalOutEnergy, int numSamples)
+    {
+        juce::ignoreUnused (finalOutEnergy, numSamples);
+    }
+
     std::atomic<float> grDb { 0.0f };   // gain reduction for the UI meter
     std::atomic<float> gainCompDb { 0.0f }; // Enhance Auto Gain correction, stereo linked
     std::atomic<float> outPeak { 0.0f }; // Output peak level for UI meters
@@ -344,6 +362,18 @@ public:
 
     int getLatencySamples() const override { return la - 1; }
 
+    void setChainReference (const float* chainInputRaw, int numSamples) override
+    {
+        chainInput = chainInputRaw;
+        chainInputSamples = numSamples;
+    }
+
+    void setFinalOutputReference (const float* finalOutEnergy, int numSamples) override
+    {
+        finalOut = finalOutEnergy;
+        finalOutSamples = numSamples;
+    }
+
 protected:
     void process (juce::AudioBuffer<float>& buf) override         { runLimiter (buf, true); }
     void processBypassed (juce::AudioBuffer<float>& buf) override { runLimiter (buf, false); }
@@ -400,8 +430,16 @@ private:
                 wetPower += (double) wet[ch] * wet[ch];
             }
             const double channelScale = nch > 0 ? 1.0 / nch : 1.0;
-            dryEnergy = energyCoef * dryEnergy + (1.0 - energyCoef) * dryPower * channelScale;
-            wetEnergy = energyCoef * wetEnergy + (1.0 - energyCoef) * wetPower * channelScale;
+            // Reference the TRUE chain input (measured before any module) against the TRUE chain
+            // output (measured after master + mix), so upstream Console/FET/Opto gain and any
+            // module downstream of the limiter cannot skew the correction. Falls back to the
+            // module's own dry/wet pair when the processor supplies no reference (unit use).
+            const bool haveChainRef = chainInput != nullptr && i < chainInputSamples;
+            const double refPower = haveChainRef ? (double) chainInput[i] : dryPower * channelScale;
+            dryEnergy = energyCoef * dryEnergy + (1.0 - energyCoef) * refPower;
+            const bool haveFinal = finalOut != nullptr && i < finalOutSamples;
+            const double outPower = haveFinal ? (double) finalOut[i] : wetPower * channelScale;
+            wetEnergy = energyCoef * wetEnergy + (1.0 - energyCoef) * outPower;
             float targetDb = 0.0f;
             if (autoGain && dryEnergy > 1.0e-12 && wetEnergy > 1.0e-16)
                 targetDb = juce::jlimit (-36.0f, 36.0f, (float) (10.0 * std::log10 (dryEnergy / wetEnergy)));
@@ -426,6 +464,10 @@ private:
     }
 
     std::atomic<float>* autoGainParameter;
+    const float* chainInput = nullptr;   // block input energy from the chain start
+    int chainInputSamples = 0;
+    const float* finalOut = nullptr;     // true chain output energy, post master + mix
+    int finalOutSamples = 0;
     std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
     int la = 64, wp = 0;
     double sum = 64.0;

@@ -65,6 +65,21 @@ private:
     std::atomic<bool> resetRequested { false };
     RackMeters meters;
     juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
+    // Latency compensation for the dry path: the wet signal is delayed by the rack's reported
+    // latency, so summing a raw dry copy against it combs (or cancels) partial mixes. This ring
+    // holds the most recent `latencySamples` frames of the dry signal.
+    std::array<std::vector<float>, 2> dryDelay;
+    int dryDelayLen = 0;
+    int dryWp = 0;
+    // Auto-gain reference: chain input energy, captured before any module runs.
+    std::vector<float> chainInputRef;   // per-sample linear input energy (stereo mean of squares)
+    std::vector<float> finalOutRef;     // per-sample linear output energy (post master + mix)
+    std::vector<float> prevChainInput;  // input energy paired with the output of the previous block
+    std::vector<float> prevFinalOut;    // output energy of the previous block
+    void publishAutoGainPair (int numSamples);
+    static void measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples);
+    void feedChainReference (const juce::AudioBuffer<float>& in, int numSamples);
+    void feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples);
     std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };

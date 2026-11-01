@@ -105,6 +105,16 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
     }
     setLatencySamples (latency);   // constant regardless of order or bypass
     dryBuffer.setSize (2, juce::jmax (1, block), false, false, true);
+    // Dry-path delay, sized once for the reported latency. `rd = wp + 1` already supplies one
+    // sample of delay, so the ring needs `latency + 1` slots to shift the dry path by exactly the
+    // reported latency. A zero-latency rack keeps len 0 and the blend falls back to the plain copy.
+    dryDelayLen = latency > 0 ? (int) latency + 1 : 0;
+    for (auto& d : dryDelay) d.assign ((size_t) juce::jmax (1, dryDelayLen), 0.0f);
+    dryWp = 0;
+    chainInputRef.assign ((size_t) juce::jmax (1, block), 0.0f);
+    finalOutRef.assign ((size_t) juce::jmax (1, block), 0.0f);
+    prevChainInput.assign ((size_t) juce::jmax (1, block), 0.0f);
+    prevFinalOut.assign ((size_t) juce::jmax (1, block), 0.0f);
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     meters.prepare (sr, block);
@@ -134,8 +144,17 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     for (int c = 0; c < buffer.getNumChannels(); ++c)
         dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
 
+    // Auto-gain reference: measure the whole chain's input BEFORE any module runs, so the
+    // correction cannot depend on where the limiter sits in the rack.
+    feedChainReference (buffer, numSamples);
+
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
+
+    // Auto-gain output reference: the rack output (after every module, before master gain and the
+    // dry/wet mix). Auto Gain normalises the rack to its own input, so the reference must not
+    // include the operator's master level — otherwise the correction chases its own attenuation.
+    measureEnergy(finalOutRef, buffer, numSamples);
 
     // The master always follows the complete rack, independently of module order.
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
@@ -147,15 +166,91 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     if (wet < 0.9999f)
     {
         const float dry = 1.0f - wet;
-        for (int c = 0; c < buffer.getNumChannels(); ++c)
+        const int nch = buffer.getNumChannels();
+
+        if (dryDelayLen <= 0 || wet <= 0.0f)
         {
-            buffer.applyGain (c, 0, numSamples, wet);
-            buffer.addFrom (c, 0, dryBuffer, c, 0, numSamples, dry);
+            // No rack latency, or fully dry: the untouched copy is already the whole answer and
+            // must not be pushed through the alignment ring (that would add frozen-frame garbage).
+            for (int c = 0; c < nch; ++c)
+            {
+                buffer.applyGain (c, 0, numSamples, wet);
+                buffer.addFrom (c, 0, dryBuffer, c, 0, numSamples, dry);
+            }
+        }
+        else
+        {
+            // Delay the dry path by exactly the reported latency before summing, otherwise a
+            // partial mix combs against the wet path (a 1 kHz tone used to cancel ~24 dB at 50 %).
+            for (int c = 0; c < nch; ++c)
+                if ((int) dryDelay[(size_t) c].size() != dryDelayLen)
+                    dryDelay[(size_t) c].assign ((size_t) dryDelayLen, 0.0f);
+
+            int wp = dryWp;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const int rd = (wp + 1) % dryDelayLen;
+                for (int c = 0; c < nch; ++c)
+                {
+                    auto& ring = dryDelay[(size_t) juce::jmin (c, 1)];
+                    ring[(size_t) wp] = dryBuffer.getSample (c, i);
+                    const float aligned = ring[(size_t) rd];
+                    buffer.setSample (c, i, buffer.getSample (c, i) * wet + aligned * dry);
+                }
+                wp = rd;
+            }
+            dryWp = wp;
         }
     }
 
     // Metering tap sits AFTER the master and the mix, so the meters show what actually leaves.
     meters.process (buffer);
+
+    // Publish the pair the limiter divides next block: the PREVIOUS block's chain input and rack
+    // output, captured together, so both sides describe one signal and nothing depends on order.
+    publishAutoGainPair (numSamples);
+}
+
+void RackStripProcessor::publishAutoGainPair (int numSamples)
+{
+    // Publish a stable copy: the limiter must never read buffers this block mutates later.
+    prevChainInput.assign (chainInputRef.begin(), chainInputRef.end());
+    prevFinalOut.assign (finalOutRef.begin(), finalOutRef.end());
+    modules[Limiter]->setChainReference (prevChainInput.data(), numSamples);
+    modules[Limiter]->setFinalOutputReference (prevFinalOut.data(), numSamples);
+}
+
+//==============================================================================
+void RackStripProcessor::feedChainReference (const juce::AudioBuffer<float>& in, int numSamples)
+{
+    measureEnergy (chainInputRef, in, numSamples);
+}
+
+void RackStripProcessor::measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples)
+{
+    if ((int) dest.size() < numSamples)
+        dest.assign ((size_t) juce::jmax (numSamples, (int) dest.size()), 0.0f);
+
+    const int nch = juce::jmin (2, in.getNumChannels());
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float e = 0.0f;
+        for (int c = 0; c < nch; ++c)
+        {
+            const float x = in.getSample (c, i);
+            e += x * x;
+        }
+        dest[(size_t) i] = nch > 0 ? e / (float) nch : 0.0f;
+    }
+}
+
+void RackStripProcessor::feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples)
+{
+    measureEnergy (finalOutRef, out, numSamples);
+    modules[Limiter]->setFinalOutputReference (finalOutRef.data(), numSamples);
+    // Roll the pair forward: this block's input + this block's output become the pair the limiter
+    // will divide on the next block, so both sides always describe the same signal.
+    prevChainInput.assign (chainInputRef.begin(), chainInputRef.end());
 }
 
 //==============================================================================

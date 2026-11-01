@@ -1776,28 +1776,46 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Left: a bank of four vertical sliders. Right: both meters side by side.
+        // Two zones: the control area (left) holds a 2x2 fader grid, the metering area (right)
+        // keeps both vertical ladders running the full height beside it.
         const int meterZone = 66;                      // reserves room for the two ladders
         const int bankW = c.getWidth() - meterZone;
-        const int cellW = bankW / 4;
 
         const int top = c.getY() + 24;                 // room for the captions above
         autoGain.setBounds (c.getX() + 2, top, bankW - 8, 24);
-        const int fy = top + 34;
-        const int fh = c.getBottom() - fy - 26;
+
+        // Control area below the AUTO GAIN switch, split into two equal rows.
+        const int gridTop = top + 34;
+        const int bottomReserve = 26;
+        const int gridH = c.getBottom() - gridTop - bottomReserve;
+
+        // Leave room for the per-row captions above each fader cell.
+        const int captionH = 16;
+        const int rowH = gridH / 2;
+        const int cellW = bankW / 2;
 
         Slider* all[4] { &gain, &ceiling, &release, &fader };
         for (int i = 0; i < 4; ++i)
         {
-            const int cx = c.getX() + cellW * i + cellW / 2;
-            all[i]->setBounds (cx - 13, fy, 26, fh);
+            const int row = i / 2;                     // 0 = THRESHOLD / CEILING, 1 = RELEASE / ENHANCE
+            const int col = i % 2;
+            const int cellX = c.getX() + cellW * col;
+            const int cellY = gridTop + rowH * row;
+            const int faderH = juce::jmax (24, rowH - captionH - 4);
+
+            // Remember the cell so captions can span it (a caption clipped to the 26 px fader
+            // would truncate "THRESHOLD").
+            gridCell ((size_t) col) = { cellX, cellY, cellW, rowH };
+
+            // Centre the narrow fader inside its cell.
+            all[i]->setBounds (cellX + cellW / 2 - 13, cellY + captionH, 26, faderH);
         }
 
-        // Both meters together on the right edge, GR then output.
+        // Both meters together on the right edge, GR then output, spanning both grid rows.
         const int mx = c.getRight() - meterZone + 8;
-        ladderA = { mx,           fy + 22, 22, fh - 22 };
-        ladderB = { mx + 34,      fy + 22, 22, fh - 22 };
-        scaleRect = { mx - 2, fy + 22, meterZone - 6, fh - 22 };
+        ladderA = { mx,      gridTop + 22, 22, gridH - 22 };
+        ladderB = { mx + 34, gridTop + 22, 22, gridH - 22 };
+        scaleRect = { mx - 2, gridTop + 22, meterZone - 6, gridH - 22 };
         enhanceLabel = { c.getX(), c.getBottom() - 20, c.getWidth(), 18 };
     }
 
@@ -1807,8 +1825,11 @@ protected:
         Slider* all[4] { &gain, &ceiling, &release, &fader };
         for (int i = 0; i < 4; ++i)
         {
+            // Span the whole grid cell, not just the narrow fader, so long captions are not clipped.
+            const int col = i % 2;
+            const auto& cell = gridCell ((size_t) col);
             const auto b = all[i]->getBounds();
-            caption (g, names[i], Rectangle<int> (b.getX() - 8, b.getY() - 18, b.getWidth() + 16, 16), 8.5f);
+            caption (g, names[i], Rectangle<int> (cell.getX(), b.getY() - 18, cell.getWidth(), 16), 8.5f);
         }
 
         // dB scale beside the meters
@@ -1895,6 +1916,8 @@ private:
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
     Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
+    std::array<Rectangle<int>, 2> gridCells {};     // column cells, shared by layout and captions
+    Rectangle<int>& gridCell (size_t col) { return gridCells[col < 2 ? col : 0]; }
     float outLevel = 0.0f;
 };
 
@@ -1980,8 +2003,27 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
 
 RackStripEditor::~RackStripEditor()
 {
+    // Order matters: the timer is the last thing that can reach into the editor, so it goes
+    // first; the animations hold component pointers; then the LookAndFeel is unhung before the
+    // LookAndFeel object itself is destroyed. The meter page is a member declared AFTER the
+    // destructor body runs, so any callback it still holds (onBack/onReset capture `this`) would
+    // fire against a half-destroyed editor — clear them before it is released.
     stopTimer();
     animator.cancelAllAnimations (false);
+    if (meterPanel != nullptr)
+    {
+        meterPanel->onBack = nullptr;
+        meterPanel->onReset = nullptr;
+    }
+    pageToggle.onChanged = nullptr;
+    resetButton.onReset = nullptr;
+    for (auto& panel : panels)
+        if (panel != nullptr)
+        {
+            panel->onDragStart = nullptr;
+            panel->onDragMove  = nullptr;
+            panel->onDragEnd   = nullptr;
+        }
     setLookAndFeel (nullptr);
 }
 

@@ -559,76 +559,47 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     auto angleForT = [&] (float t) { return a0 + (a1 - a0) * t; };
     auto dirForA = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
 
-    // Upper VU arc: black from -20 to 0 VU (t=0.08..0.90)
+    const float tMin = vuDeflectionForDb (-20.0f);
+    const float tZero = vuDeflectionForDb (0.0f);
+
+    // Black curved arc scale starting at -20 dB and ending precisely at 0
     Path blackArc;
-    blackArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
+    blackArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (tMin), angleForT (tZero), true);
     g.setColour (pal::needleInk);
     g.strokePath (blackArc, PathStrokeType (1.3f));
 
-    // Upper VU arc: RED overload section from 0 to +3 VU (t=0.90..1.00)
-    Path redArc;
-    redArc.addCentredArc (pivot.x, pivot.y, R, R, 0.0f, angleForT (0.90f), angleForT (1.00f), true);
-    g.setColour (Colour (0xffc82418));
-    g.strokePath (redArc, PathStrokeType (3.0f));
-
-    // Secondary modulation percentage arc below
-    const float R_sec = R - 9.5f;
-    Path secArc;
-    secArc.addCentredArc (pivot.x, pivot.y, R_sec, R_sec, 0.0f, angleForT (0.08f), angleForT (0.90f), true);
-    g.setColour (pal::needleInk.withAlpha (0.65f));
-    g.strokePath (secArc, PathStrokeType (0.85f));
-
-    // Major VU markings
+    // Major VU markings (-20 dB to 0 dB, no positive numbers or red zone)
     const struct { float db; const char* txt; } majorVu[] =
     {
         { -20.0f, "-20" }, { -10.0f, "-10" }, { -7.0f, "-7" }, { -5.0f, "-5" },
-        { -3.0f, "-3" },   { -2.0f, "-2" },   { -1.0f, "-1" }, { 0.0f, "0" },
-        { 1.0f, "+1" },    { 2.0f, "+2" },    { 3.0f, "+3" }
+        { -3.0f, "-3" },   { -2.0f, "-2" },   { -1.0f, "-1" }, { 0.0f, "0" }
     };
     for (const auto& m : majorVu)
     {
         const float t = vuDeflectionForDb (m.db);
         const float a = angleForT (t);
         const auto d = dirForA (a);
-        const bool isRed = (m.db > 0.0f);
 
         // Tick mark
-        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk);
-        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + (isRed ? 6.0f : 5.0f))), isRed ? 1.6f : 1.2f);
+        g.setColour (pal::needleInk);
+        g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + 5.0f)), 1.2f);
 
-        // Numerals: the overload group fans radially outward so +1/+2/+3 stay legible
-        const float labelR = R + 10.5f + (isRed ? m.db * 10.0f : 0.0f);
-        g.setFont (fnt (isRed ? 7.0f : 7.5f, true));
+        // Numerals
+        const float labelR = R + 10.5f;
+        g.setFont (fnt (7.5f, true));
         const Point<float> labelPos = pivot + d * labelR;
         g.drawText (m.txt, Rectangle<float> (22.0f, 10.0f).withCentre (labelPos), Justification::centred, false);
     }
 
-    // Minor intermediate VU ticks
-    const float minorVu[] = { -15.0f, -9.0f, -8.0f, -6.0f, -4.0f, -2.5f, -1.5f, -0.5f, 0.5f, 1.5f, 2.5f };
+    // Minor intermediate VU ticks (-20 dB to 0 dB)
+    const float minorVu[] = { -15.0f, -9.0f, -8.0f, -6.0f, -4.0f, -2.5f, -1.5f, -0.5f };
     for (float db : minorVu)
     {
         const float t = vuDeflectionForDb (db);
         const float a = angleForT (t);
         const auto d = dirForA (a);
-        const bool isRed = (db > 0.0f);
-        g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk.withAlpha (0.70f));
+        g.setColour (pal::needleInk.withAlpha (0.70f));
         g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + 2.8f)), 0.8f);
-    }
-
-    // Lower modulation percentage scale (0 to 100%)
-    const int pcts[] = { 0, 20, 40, 60, 80, 100 };
-    for (int p : pcts)
-    {
-        const float t = ((float) p / 100.0f) * 0.90f;
-        const float a = angleForT (t);
-        const auto d = dirForA (a);
-
-        g.setColour (pal::needleInk.withAlpha (0.75f));
-        g.drawLine (Line<float> (pivot + d * (R_sec - 3.0f), pivot + d * R_sec), 0.85f);
-
-        g.setFont (fnt (6.5f, false));
-        const Point<float> pPos = pivot + d * (R_sec - 8.0f);
-        g.drawText (String (p), Rectangle<float> (18.0f, 8.0f).withCentre (pPos), Justification::centred, false);
     }
 
     // Typography: positioned clearly in the visible window above the mask

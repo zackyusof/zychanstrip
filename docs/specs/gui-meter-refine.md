@@ -318,3 +318,7 @@ A visual regression in a future snapshot becomes a new REQ against this track.
 | 2026-11-01 | Test | `./build/snapshot/snapshot <dir>` | `RESULT 246/246 passed` (before and after) |
 | 2026-11-01 | Test | pixel measure, `before` vs `after` rack-1080x760 | FET paper bbox 202→210 px wide inside a 215 px housing (black border 6.5→1.5 px); FET knob skirt 76→60.8 px (0.800), centre (318,357)/(474,357) unchanged; LA-2A housing 214→182 px (0.850), centre (673,159) unchanged; arc sweep 84.8°→108.8°, apex 0.26H→0.33H; TELETRONIX 7→9.5 pt, VU 15→20 pt (same visual mass), REDUCTION 8.5→11 pt |
 | 2026-11-01 | Deploy | `codesign -v`, `PlistBuddy`, AU factory probe | codesign PASS; factory probe `COMPONENT NOT FOUND` (root-domain copy stale, needs sudo) |
+| 2026-11-01 | Refine | 1176 VU meter face | Scale replaced: black curved arc starting at -20 dB and ending precisely at 0 dB. Positive numbers (+1, +2, +3), red overload arc, positive ticks, and secondary modulation scale removed. Idle needle resting position clamped to 0 dB on right. |
+| 2026-11-01 | Build & Test | `ninja -C build && python3 tools/build_snapshot.py` | Built cleanly, `RESULT 246/246 passed` |
+| 2026-11-01 | Deploy (System) | `sudo cp -R build/.../zychanstrip.component /Library/Audio/Plug-Ins/Components/` | System-wide install complete (md5 9b7006db57acdf3e0baa4ae34c628ebf), ad-hoc signed |
+| 2026-11-01 | Deploy (Gitea) | POST /releases/27/assets | Uploaded `zychanstrip-1.0.1-macos-arm64-au.zip` (2.45 MB) to Gitea release v1.0.1 with User-Agent header; git commit 070ce6d pushed to main |

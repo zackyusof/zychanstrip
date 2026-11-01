@@ -224,6 +224,61 @@ void audioTests()
             prevResidual = residual;
         }
         check (monotonic, "wet amount increases monotonically with the mix percentage");
+
+        // ---- Latency compensation (rackstrip-mix-phase).
+        // The rack delays the wet path by the reported latency; with a bypassed rack that delay is
+        // a pure shift, so the aligned dry sample IS the wet sample. A 50 % blend must therefore
+        // equal the wet signal exactly (0.5*wet + 0.5*alignedDry). Before the fix the raw dry copy
+        // combed against it and cancelled the tone.
+        {
+            juce::AudioBuffer<float> half50 (2, 512), zero50 (2, 512), wet50 (2, 512);
+            render (50.0f, 0.0f, half50);
+            render (0.0f, 0.0f, zero50);
+            render (100.0f, 0.0f, wet50);
+
+            RackStripProcessor probe;
+            probe.setPlayConfigDetails (2, 2, 48000.0, 512);
+            probe.prepareToPlay (48000.0, 512);
+            // `render` processes a full block before returning; the delay ring is only populated
+            // once audio has flowed, so do the same here before reading the latency.
+            juce::AudioBuffer<float> probeBuf (2, 512);
+            juce::MidiBuffer probeMidi;
+            probe.processBlock (probeBuf, probeMidi);
+            const int lat = juce::jmax (0, probe.getLatencySamples());
+            check (lat > 0, "rack reports look-ahead latency (" + juce::String (lat) + " samples)");
+
+            double maxErr = 0.0;
+            int compared = 0;
+            for (int i = lat + 32; i < 512; ++i)
+            {
+                maxErr = juce::jmax (maxErr, (double) std::abs (half50.getSample (0, i) - wet50.getSample (0, i)));
+                ++compared;
+            }
+            check (compared > 100 && maxErr < 1.0e-5,
+                   "50% mix sums latency-aligned dry (max err " + juce::String (maxErr, 8) + ")");
+
+            // The old bug cancelled the tone: prove the 50 % level is full, not a comb null.
+            auto rmsRange = [] (const juce::AudioBuffer<float>& b, int from)
+            {
+                double s = 0.0;
+                for (int i = from; i < b.getNumSamples(); ++i) s += (double) b.getSample (0, i) * b.getSample (0, i);
+                return std::sqrt (s / (double) juce::jmax (1, b.getNumSamples() - from));
+            };
+            const double halfRms = rmsRange (half50, lat + 32);
+            const double wetRmsAligned = rmsRange (wet50, lat + 32);
+            check (halfRms > 0.95 * wetRmsAligned,
+                   "50% mix does not cancel the wet path (" + juce::String (halfRms, 4) + " vs "
+                     + juce::String (wetRmsAligned, 4) + ")");
+
+            // Fully dry must still return the untouched input with no latency added.
+            bool dryExact = true;
+            for (int i = 0; i < 512; ++i)
+            {
+                const float in = 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f);
+                dryExact &= std::abs (zero50.getSample (0, i) - in) < 1.0e-6f;
+            }
+            check (dryExact, "0% mix still returns the untouched input (dry path not delayed)");
+        }
     }
 
     juce::AudioBuffer<float> empty (2, 0);
@@ -233,6 +288,77 @@ void audioTests()
 }
 // RESET must be a full restore: every parameter back to its declared default, the factory rack
 // order, cleared meters and no stale DSP state left in the chain.
+// Auto Gain must not depend on where the limiter sits in the rack (rackstrip-autogain-order):
+// measure the same settings across every permutation and require a tight spread.
+void autoGainOrderTests()
+{
+    auto rmsOf = [] (const juce::AudioBuffer<float>& b)
+    {
+        double s = 0.0;
+        for (int i = 0; i < b.getNumSamples(); ++i) s += (double) b.getSample (0, i) * b.getSample (0, i);
+        return std::sqrt (s / (double) b.getNumSamples());
+    };
+
+    std::array<std::array<int, 4>, 24> orders {};
+    int count = 0;
+    for (int a = 0; a < 4; ++a)
+        for (int b = 0; b < 4; ++b)
+            for (int c = 0; c < 4; ++c)
+                for (int d = 0; d < 4; ++d)
+                    if (a != b && a != c && a != d && b != c && b != d && c != d)
+                        orders[(size_t) count++] = { a, b, c, d };
+    check (count == 24, "all 24 rack permutations enumerated");
+
+    double lo = 1.0e9, hi = -1.0e9;
+    for (int k = 0; k < count; ++k)
+    {
+        RackStripProcessor p;
+        // Only the limiter is active, driven hard so Auto Gain has real work to do.
+        for (auto id : { "con_bypass", "opto_bypass", "fet_bypass" })
+            setParam (p, id, 1.0f);
+        setParam (p, "lim_bypass", 0.0f);
+        setParam (p, "lim_gain", 12.0f);
+        setParam (p, "lim_auto_gain", 1.0f);
+        setParam (p, "master_level", 0.0f);
+        p.setPlayConfigDetails (2, 2, 48000.0, 512);
+        p.prepareToPlay (48000.0, 512);
+        p.setOrder (orders[(size_t) k]);
+
+        juce::AudioBuffer<float> b (2, 512);
+        for (int blk = 0; blk < 40; ++blk)
+        {
+            for (int i = 0; i < 512; ++i)
+                for (int c = 0; c < 2; ++c)
+                    b.setSample (c, i, 0.5f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f
+                                                        * (float) (blk * 512 + i) / 48000.0f));
+            juce::MidiBuffer midi;
+            p.processBlock (b, midi);
+        }
+        const double r = rmsOf (b);
+        lo = juce::jmin (lo, r);
+        hi = juce::jmax (hi, r);
+    }
+    const double spreadDb = 20.0 * std::log10 (hi / juce::jmax (1.0e-12, lo));
+    check (spreadDb < 0.5, "Auto Gain is order-independent across 24 permutations (spread "
+                             + juce::String (spreadDb, 3) + " dB)");
+
+    // Master level must not feed the Auto Gain correction (it normalises the rack, not the output
+    // trim): two instances differing only in master level must apply the same compensation.
+    RackStripProcessor unity, attenuated;
+    setParam (attenuated, "master_level", -6.0f);
+    for (auto* p : { &unity, &attenuated })
+    {
+        setParam (*p, "lim_gain", 9.0f);
+        setParam (*p, "lim_auto_gain", 1.0f);
+        p->setPlayConfigDetails (2, 2, 48000.0, 512);
+        p->prepareToPlay (48000.0, 512);
+    }
+    juce::AudioBuffer<float> u (2, 512), v (2, 512);
+    for (int i = 0; i < 12; ++i) { processConstant (unity, u); processConstant (attenuated, v); }
+    check (std::abs (unity.getAutoGainCompensation() - attenuated.getAutoGainCompensation()) < 0.01f,
+           "Auto Gain correction ignores master level");
+}
+
 void resetTests()
 {
     RackStripProcessor proc;
@@ -503,6 +629,32 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
                         contained &= panel->getLocalBounds().contains (child->getBounds());
                 check (contained, juce::String (name) + " controls stay inside panel");
             }
+
+            // Limiter fader bank is a 2x2 grid: THRESHOLD/CEILING above RELEASE/ENHANCE, with the
+            // two metering ladders beside the grid rather than inside it.
+            if (auto* limiter = findNamed (*canvas, "Limiter"))
+            {
+                auto* p0 = findNamed (*limiter, "limiter gain");
+                auto* p1 = findNamed (*limiter, "limiter ceiling");
+                auto* p2 = findNamed (*limiter, "limiter release");
+                auto* p3 = findNamed (*limiter, "limiter enhance");
+                check (p0 && p1 && p2 && p3, "limiter exposes four faders");
+                if (p0 && p1 && p2 && p3)
+                {
+                    const auto a = p0->getBounds(), b = p1->getBounds();
+                    const auto c2 = p2->getBounds(), d = p3->getBounds();
+                    const bool topRow = std::abs (a.getY() - b.getY()) <= 1 && a.getX() < b.getX();
+                    const bool bottomRow = std::abs (c2.getY() - d.getY()) <= 1 && c2.getX() < d.getX();
+                    const bool stacked = c2.getY() > a.getBottom() - 1 && d.getY() > b.getBottom() - 1;
+                    const bool columns = std::abs (a.getX() - c2.getX()) <= 1 && std::abs (b.getX() - d.getX()) <= 1;
+                    check (topRow && bottomRow && stacked && columns,
+                           "limiter faders form a 2x2 grid (threshold/ceiling over release/enhance)");
+
+                    // Both rows share one height, so the grid is visually balanced.
+                    check (std::abs (a.getHeight() - c2.getHeight()) <= 2,
+                           "limiter grid rows are equal height");
+                }
+            }
             auto* panel = findNamed (*canvas, "Console");
             if (panel != nullptr)
             {
@@ -551,6 +703,7 @@ public:
         eqTests();
         limiterTests();
         audioTests();
+        autoGainOrderTests();
         resetTests();
         RackStripProcessor proc;
         auto editor = std::unique_ptr<RackStripEditor> (static_cast<RackStripEditor*> (proc.createEditor()));

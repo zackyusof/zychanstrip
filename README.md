@@ -56,7 +56,7 @@ Verify:
 ```bash
 python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reuses Ninja flags)
 ./build/snapshot/snapshot /tmp/shots # runs all tests, writes PNGs
-# expect: RESULT 230/230 passed
+# expect: RESULT 246/246 passed
 ```
 
 **Where the code lives**
@@ -74,7 +74,7 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 **Before you change anything**
 
 1. `git pull` — work from the latest `main`, not a stale copy.
-2. Run the harness first and confirm 230/230 so you know your baseline.
+2. Run the harness first and confirm 246/246 so you know your baseline.
 3. After ANY change: `ninja -C build` then re-run the harness. The build auto-installs,
    so a passing harness means the installed plugin is the code you just wrote.
 4. Commit and push.
@@ -127,13 +127,14 @@ Its four fader channels (threshold, ceiling, release, enhance) are recessed blac
 
 Both RESET pills, and the metering page `BACK`, share one look (`Source/UiStyle.h`): the RACK/METER teal gradient at rest and matte black while held, so the momentary action visibly bottoms out.
 
-* the rack order returns to `[0,2,1,3]` and the faceplates animate back to those slots;
-* all metering (peaks, holds, RTA, scope, correlation) is cleared.
-
 Parameter values are written on the message thread with real gestures, so host automation follows the reset. Module DSP state (EQ biquads, compressor envelopes, limiter delay and energy rings) is cleared at the start of the next audio block via a single atomic request, so the reset is real-time safe and leaves no stale look-ahead tail. `RackStripProcessor::resetToDefaults()` is the one implementation; both buttons call it through `RackStripEditor::resetRackToDefaults()`.
 
 ### Parallel dry/wet
 `master_mix` (0–100 %, default 100) blends the untouched input against the finished master output for parallel processing. It is applied **after** master volume.
+
+The dry copy is **latency-compensated**: it passes through a ring sized to `getLatencySamples() + 1` before
+the blend, so partial mixes sum in phase instead of comb-filtering. At 100 % wet the dry path is not summed
+at all, and at 0 % it bypasses the ring, so both extremes are bit-exact against the pre-fix behaviour.
 
 ---
 
@@ -272,6 +273,20 @@ It runs **230 checks** and writes PNGs to `<output-dir>`:
 
 **When you add a feature, add a check.** A test that only asserts "it did something" is how real bugs ship: the dry/wet phase inversion and the auto-gain order dependence both passed the suite as originally written.
 
+### Limiter 2×2 fader bank
+
+The Enhance/Limiter panel (slot 3) splits its content into a **control area** (left) and a **metering area**
+(right). The control area is a 2×2 grid:
+
+| | left | right |
+| --- | --- | --- |
+| **top row** | THRESHOLD (`lim_gain`) | CEILING (`lim_ceiling`) |
+| **bottom row** | RELEASE (`lim_release`) | ENHANCE (`lim_enhance`) |
+
+The two vertical LED ladders (GR, OUT) keep the full panel height beside the grid, never inside it.
+Captions span the whole grid cell, so long names are not clipped. The harness asserts the grid geometry at
+864×608, 1080×760 and 1620×1140.
+
 ### Teardown check (important)
 
 The harness does **not** exercise editor destruction, which is where crashes live. Use this pattern manually when touching UI lifecycle:
@@ -288,9 +303,9 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `rackstrip-mix-phase` | **Dry/wet has a phase error** | The dry copy is not delayed to match the wet path's 71 samples. At 50 % mix a 1 kHz tone cancels by ~24 dB (measured RMS 0.023 vs 0.353). Fix: delay the dry copy by the reported latency before summing. |
-| `rackstrip-autogain-order` | **Auto-gain is order-dependent** | It measures inside the limiter, so it cannot see upstream gain: the same settings give 0.691 vs 0.289 RMS depending on whether the limiter is last or first (7.6 dB spread), while the correction only moves 0.3 dB. Fix: measure chain input vs final output in `processBlock` and share one compensated reference with the mix. |
-| `rackstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. Awaiting repro steps. |
+| `rackstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
+| `rackstrip-autogain-order` | ~~**Auto-gain is order-dependent**~~ **FIXED** | Auto Gain now divides the energy of the **chain input** (measured before any module) by the **rack output** (after every module, before master gain), both captured as one pair from the previous block. Measured spread across all 24 permutations: **0.000 dB** (was 7.6 dB). Harness: *"Auto Gain is order-independent across 24 permutations"*. |
+| `rackstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. The editor destructor now also clears every `this`-capturing callback (`MeterPanel::onBack/onReset`, page toggle, reset button, panel drag hooks) before those members are released. Still awaiting repro steps. |
 | `rackstrip-rta-averaging` | RTA averaging is cosmetic | The label changes but the FFT smoothing factor is hard-coded (`0.28` in `Meters.h`). |
 | `rackstrip-vu-ppm` | Missing panel | The spec's analog VU/PPM pair with needle ballistics is not built. |
 | `rackstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01** | Policy is now one copy, system-wide; the user-level copy was removed. |

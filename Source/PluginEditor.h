@@ -7,11 +7,11 @@ class RackLookAndFeel;
 class MeterPanel;
 
 /** Master rack editor: photo-real hardware chassis holding four re-orderable module face plates. */
-class RackStripEditor : public juce::AudioProcessorEditor, private juce::Timer
+class ZychanStripEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    explicit RackStripEditor (RackStripProcessor&);
-    ~RackStripEditor() override;
+    explicit ZychanStripEditor (ZychanStripProcessor&);
+    ~ZychanStripEditor() override;
 
     void paint (juce::Graphics&) override;
     void paintOverChildren (juce::Graphics&) override;
@@ -38,7 +38,7 @@ private:
     /** RESET: every module back to its default control values, factory rack order, meters cleared. */
     void resetRackToDefaults();
 
-    RackStripProcessor& proc;
+    ZychanStripProcessor& proc;
     std::unique_ptr<RackLookAndFeel> laf;
     juce::Component canvas { "Rack canvas" };
     std::array<std::unique_ptr<ModulePanel>, 4> panels;
@@ -86,5 +86,5 @@ private:
     };
     ResetButton resetButton;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZychanStripEditor)
 };

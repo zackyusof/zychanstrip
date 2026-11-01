@@ -1,6 +1,6 @@
 # LANE C BRIEF — Limiter/Enhance module and the chain-level path (order, latency, master, mix, meters)
 
-You are a DSP analyst. Repo: `/root/projects/rackstrip` (branch `main`, commit `51a0927`).
+You are a DSP analyst. Repo: `/root/projects/zychanstrip` (branch `main`, commit `51a0927`).
 Your deliverable is ONE file: `docs/dsp/research/lane-C-limiter-chain.md`.
 
 ## Rules
@@ -44,7 +44,7 @@ expressions:
 - Auto-gain: dry/wet **energy** comparison with a 200 ms exponential (`energyCoef`), a
   100 ms smoothing on the dB correction, clamp ±36 dB, then the safety limiter. Explain
   exactly what reference it uses — and why that makes it **order-dependent** (this is
-  known issue `rackstrip-autogain-order`). State the mechanism precisely: it compares
+  known issue `zychanstrip-autogain-order`). State the mechanism precisely: it compares
   the limiter's own input (post-upstream-modules) to its own output, so upstream gain
   changes are inside the reference, but any module *after* the limiter is outside it.
 - `processBypassed` still runs the limiter in "inactive" mode: say exactly what still
@@ -64,7 +64,7 @@ expressions:
   a saved session has a malformed/duplicate order (`setOrder` returns silently → order
   stays whatever it was). Is that a real hazard? Say plainly.
 - **Dry/wet**: applied after master, wet<0.9999 branch, and the **missing latency
-  compensation** on `dryBuffer` (known issue `rackstrip-mix-phase`). Quantify the
+  compensation** on `dryBuffer` (known issue `zychanstrip-mix-phase`). Quantify the
   comb-filter notch: with 71 samples at 48 kHz, give the first notch frequency and the
   expected cancellation at 1 kHz for a 50 % mix. Show the arithmetic.
 - **Metering tap** (`Source/Meters.h`): list each measurement, the window/smoothing

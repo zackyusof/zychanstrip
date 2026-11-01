@@ -1,6 +1,6 @@
 # LANE B BRIEF — Opto (LA-2A style) and FET (1176 style) dynamics modules
 
-You are a DSP analyst. Repo: `/root/projects/rackstrip` (branch `main`, commit `51a0927`).
+You are a DSP analyst. Repo: `/root/projects/zychanstrip` (branch `main`, commit `51a0927`).
 Your deliverable is ONE file: `docs/dsp/research/lane-B-dynamics.md`.
 
 ## Rules

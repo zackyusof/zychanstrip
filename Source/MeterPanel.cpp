@@ -49,7 +49,7 @@ void digital (Graphics& g, Rectangle<int> r, const String& value, Colour ink, fl
 }
 } // namespace
 
-MeterPanel::MeterPanel (RackStripProcessor& p) : proc (p)
+MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
 {
     setOpaque (true);
 }

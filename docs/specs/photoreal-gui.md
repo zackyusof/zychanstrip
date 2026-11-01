@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Slug | `photoreal-gui` |
-| Repo | `/Users/zack/Desktop/RackStrip` |
+| Repo | `git.zyusof.net/zack/zychanstrip` (then `/Users/zack/Desktop/rackstrip` working copy) |
 | Track | photoreal-gui |
 | Owner | zack |
 | Created | 2026-10-31 |
@@ -141,8 +141,8 @@ binding is proven by `auval` plus a programmatic check that all 22 attachments e
 ### Rollback
 
 `Source/PluginEditor.*` is a single-file pair; `git`-less tree, so keep a `.orig` copy in
-`~/.config/opencode/temp/rackstrip/` until the build passes, and reinstall the previous `.component`
-from the existing `build/RackStrip_artefacts` if needed.
+`~/.config/opencode/temp/zychanstrip/` until the build passes, and reinstall the previous `.component`
+from the existing `build/zychanstrip_artefacts` if needed.
 
 ### Deploy topology
 
@@ -152,7 +152,7 @@ Build AU to `~/Library/Audio/Plug-Ins/Components/Rack Strip.component` (existing
 ### Observability
 
 Headless snapshot PNG + `auval` parameter dump; both written under
-`~/.config/opencode/temp/rackstrip/`.
+`~/.config/opencode/temp/zychanstrip/`.
 
 ### Design decisions
 

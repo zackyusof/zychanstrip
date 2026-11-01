@@ -1,6 +1,6 @@
 # LANE A BRIEF — Console / API 560 graphic EQ module
 
-You are a DSP analyst. Repo: `/root/projects/rackstrip` (branch `main`, commit `51a0927`).
+You are a DSP analyst. Repo: `/root/projects/zychanstrip` (branch `main`, commit `51a0927`).
 Your deliverable is ONE file: `docs/dsp/research/lane-A-console.md`.
 
 ## Rules

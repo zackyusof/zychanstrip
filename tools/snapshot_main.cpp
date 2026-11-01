@@ -15,18 +15,18 @@ void check (bool ok, const juce::String& label)
     (ok ? passed : failed)++;
     std::cout << (ok ? "PASS " : "FAIL ") << label << std::endl;
 }
-void setParam (RackStripProcessor& proc, const juce::String& id, float value)
+void setParam (ZychanStripProcessor& proc, const juce::String& id, float value)
 {
     auto* p = proc.apvts.getParameter (id);
     if (p != nullptr) p->setValueNotifyingHost (p->convertTo0to1 (value));
     else check (false, "missing parameter " + id);
 }
-void bypassAll (RackStripProcessor& proc)
+void bypassAll (ZychanStripProcessor& proc)
 {
     for (auto id : { "con_bypass", "opto_bypass", "fet_bypass", "lim_bypass" })
         setParam (proc, id, 1.0f);
 }
-void prepare (RackStripProcessor& proc, int channels, double sr = 48000.0)
+void prepare (ZychanStripProcessor& proc, int channels, double sr = 48000.0)
 {
     proc.setPlayConfigDetails (channels, channels, sr, 512);
     check (proc.getTotalNumInputChannels() == channels && proc.getTotalNumOutputChannels() == channels,
@@ -61,7 +61,7 @@ double tealFraction (const juce::Image& img, juce::Rectangle<int> area)
         }
     return total > 0 ? (double) teal / (double) total : 0.0;
 }
-void processConstant (RackStripProcessor& proc, juce::AudioBuffer<float>& buffer)
+void processConstant (ZychanStripProcessor& proc, juce::AudioBuffer<float>& buffer)
 {
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         juce::FloatVectorOperations::fill (buffer.getWritePointer (ch), 0.1f * (float) (ch + 1), buffer.getNumSamples());
@@ -80,7 +80,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 
 void audioTests()
 {
-    RackStripProcessor proc;
+    ZychanStripProcessor proc;
     auto* master = proc.apvts.getParameter ("master_level");
     check (master != nullptr, "master parameter exists");
     if (master == nullptr) return;
@@ -124,7 +124,7 @@ void audioTests()
     proc.setOrder ({ 3, 1, 0, 2 });
     juce::MemoryBlock state;
     proc.getStateInformation (state);
-    RackStripProcessor restored;
+    ZychanStripProcessor restored;
     restored.setStateInformation (state.getData(), (int) state.getSize());
     check (std::abs (restored.apvts.getRawParameterValue ("master_level")->load() + 9.0f) < 0.001f,
            "master survives state roundtrip");
@@ -140,7 +140,7 @@ void audioTests()
            "legacy session resets prior master level to unity");
 
     // Compare two identical active chains: only the final master setting differs.
-    RackStripProcessor reference, attenuated;
+    ZychanStripProcessor reference, attenuated;
     setParam (attenuated, "master_level", -6);
     prepare (reference, 2);
     prepare (attenuated, 2);
@@ -154,7 +154,7 @@ void audioTests()
     {
         auto render = [] (float mixPct, float masterDb, juce::AudioBuffer<float>& out)
         {
-            RackStripProcessor p;
+            ZychanStripProcessor p;
             setParam (p, "master_mix", mixPct);
             setParam (p, "master_level", masterDb);
             for (auto id : { "con_bypass", "opto_bypass", "fet_bypass", "lim_bypass" })
@@ -225,7 +225,7 @@ void audioTests()
         }
         check (monotonic, "wet amount increases monotonically with the mix percentage");
 
-        // ---- Latency compensation (rackstrip-mix-phase).
+        // ---- Latency compensation (zychanstrip-mix-phase).
         // The rack delays the wet path by the reported latency; with a bypassed rack that delay is
         // a pure shift, so the aligned dry sample IS the wet sample. A 50 % blend must therefore
         // equal the wet signal exactly (0.5*wet + 0.5*alignedDry). Before the fix the raw dry copy
@@ -236,7 +236,7 @@ void audioTests()
             render (0.0f, 0.0f, zero50);
             render (100.0f, 0.0f, wet50);
 
-            RackStripProcessor probe;
+            ZychanStripProcessor probe;
             probe.setPlayConfigDetails (2, 2, 48000.0, 512);
             probe.prepareToPlay (48000.0, 512);
             // `render` processes a full block before returning; the delay ring is only populated
@@ -288,7 +288,7 @@ void audioTests()
 }
 // RESET must be a full restore: every parameter back to its declared default, the factory rack
 // order, cleared meters and no stale DSP state left in the chain.
-// Auto Gain must not depend on where the limiter sits in the rack (rackstrip-autogain-order):
+// Auto Gain must not depend on where the limiter sits in the rack (zychanstrip-autogain-order):
 // measure the same settings across every permutation and require a tight spread.
 void autoGainOrderTests()
 {
@@ -312,7 +312,7 @@ void autoGainOrderTests()
     double lo = 1.0e9, hi = -1.0e9;
     for (int k = 0; k < count; ++k)
     {
-        RackStripProcessor p;
+        ZychanStripProcessor p;
         // Only the limiter is active, driven hard so Auto Gain has real work to do.
         for (auto id : { "con_bypass", "opto_bypass", "fet_bypass" })
             setParam (p, id, 1.0f);
@@ -344,7 +344,7 @@ void autoGainOrderTests()
 
     // Master level must not feed the Auto Gain correction (it normalises the rack, not the output
     // trim): two instances differing only in master level must apply the same compensation.
-    RackStripProcessor unity, attenuated;
+    ZychanStripProcessor unity, attenuated;
     setParam (attenuated, "master_level", -6.0f);
     for (auto* p : { &unity, &attenuated })
     {
@@ -361,7 +361,7 @@ void autoGainOrderTests()
 
 void resetTests()
 {
-    RackStripProcessor proc;
+    ZychanStripProcessor proc;
     prepare (proc, 2);
 
     setParam (proc, "con_bypass", 1.0f);
@@ -378,7 +378,7 @@ void resetTests()
     setParam (proc, "master_level", -12.0f);
     setParam (proc, "master_mix", 40.0f);
     proc.setOrder ({ 3, 1, 2, 0 });
-    check (proc.getOrder() != RackStripProcessor::getDefaultOrder(), "custom settings applied before reset");
+    check (proc.getOrder() != ZychanStripProcessor::getDefaultOrder(), "custom settings applied before reset");
 
     proc.resetToDefaults();
 
@@ -393,7 +393,7 @@ void resetTests()
         }
     }
     check (everyParameterDefault, "reset returns every parameter to its default " + drifted);
-    check (proc.getOrder() == RackStripProcessor::getDefaultOrder(), "reset restores the factory rack order");
+    check (proc.getOrder() == ZychanStripProcessor::getDefaultOrder(), "reset restores the factory rack order");
 
     // A loud block just before the reset must not leak through the limiter's look-ahead delay
     // afterwards: the reset is consumed at the start of the next block.
@@ -417,7 +417,7 @@ void resetTests()
 
 // Renders the SSL-style metering page with real audio pushed through the chain so the
 // meters, scope and correlation show genuine measurements rather than resting values.
-void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
+void meterPageTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const juce::File& output)
 {
     const juce::Point<int> sizes[] { { 1080, 760 }, { 864, 608 } };
     int pass = 0;
@@ -491,7 +491,7 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
             auto heldReset = meter->createComponentSnapshot (meter->getLocalBounds());
             check (blackFraction (heldReset, resetSample) > 0.5, "meter page RESET is black while pressed");
             meter->mouseUp (meterEvent (resetPoint));
-            check (proc.getOrder() == RackStripProcessor::getDefaultOrder(),
+            check (proc.getOrder() == ZychanStripProcessor::getDefaultOrder(),
                    "meter page RESET fires the full defaults restore");
 
             // BACK goes black while held and returns to the rack on release.
@@ -531,7 +531,7 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
     editor.setSize (1080, 760);
 }
 
-void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
+void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const juce::File& output)
 {
     // RESET button: the header button must restore module defaults, not just the meters.
     auto* reset = findNamed (editor, "Reset");
@@ -559,7 +559,7 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
         reset->mouseUp (ev);
         check (std::abs (proc.apvts.getRawParameterValue ("con_eq_1k")->load()) < 1.0e-6f,
                "RESET button restores module parameters");
-        check (proc.getOrder() == RackStripProcessor::getDefaultOrder(),
+        check (proc.getOrder() == ZychanStripProcessor::getDefaultOrder(),
                "RESET button restores the rack order");
     }
 
@@ -669,7 +669,7 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
                 panel->mouseDown (event (down, false));
                 panel->mouseDrag (event ({ down.x + 900.0f, down.y }, true));
                 panel->mouseUp (event (down, true));
-                check (proc.getOrder().back() == RackStripProcessor::Console,
+                check (proc.getOrder().back() == ZychanStripProcessor::Console,
                        "scaled grip drag reorders Console to last slot");
                 proc.setOrder (startOrder);
                 editor.resized();
@@ -691,7 +691,7 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
 class SnapshotApp : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override { return "RackStripSnapshot"; }
+    const juce::String getApplicationName() override { return "ZychanStripSnapshot"; }
     const juce::String getApplicationVersion() override { return "1.0"; }
     bool moreThanOneInstanceAllowed() override { return true; }
     void initialise (const juce::String& commandLine) override
@@ -705,8 +705,8 @@ public:
         audioTests();
         autoGainOrderTests();
         resetTests();
-        RackStripProcessor proc;
-        auto editor = std::unique_ptr<RackStripEditor> (static_cast<RackStripEditor*> (proc.createEditor()));
+        ZychanStripProcessor proc;
+        auto editor = std::unique_ptr<ZychanStripEditor> (static_cast<ZychanStripEditor*> (proc.createEditor()));
         newEditorTests (proc, *editor);
         meterPageTests (proc, *editor, output);
         editorTests (proc, *editor, output);

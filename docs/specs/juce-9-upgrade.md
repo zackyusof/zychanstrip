@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Slug | `juce-9-upgrade` |
-| Repo | `/Users/zack/projects/rackstrip` |
+| Repo | `/Users/zack/projects/zychanstrip` |
 | Track | juce-9-upgrade |
 | Owner | zack |
 | Created | 2026-11-01 |
@@ -91,7 +91,7 @@ Only one JUCE API is removed that this plugin touches:
 | --- | --- | --- |
 | DES-1 | Pin `GIT_TAG 9.0.4` | latest release; the only blocker was one API call |
 | DES-2 | Replace the SVG call with `Drawable::createFromSVGString (kZyMarkSvg)` | removes the `XmlDocument` round-trip; returns null on bad markup, identical to the old guard |
-| DES-3 | Install system-wide, delete the user copy | one registered subtype; closes `rackstrip-dupe-au` |
+| DES-3 | Install system-wide, delete the user copy | one registered subtype; closes `zychanstrip-dupe-au` |
 | DES-4 | Leave the version at 1.0.0 | version/tag/release is the user's decision |
 
 | JUCE 8 | JUCE 9 |
@@ -185,6 +185,6 @@ would; the user confirms in their host.
 - **Docs**: README badge + requirements + install policy updated; AGENTS.md updated; this spec.
 - **Host caveat recorded**: third-party AU registration is broken on this Mac — if a DAW cannot see the
   plugin, that is the first thing to check, not the plugin.
-- **Open follow-ups**: `rackstrip-mix-phase`, `rackstrip-autogain-order`, `rackstrip-rta-averaging`,
-  `rackstrip-vu-ppm`, `rackstrip-dsp-docs`, `rackstrip-verify-quit-crash` (unchanged, see task ledger).
+- **Open follow-ups**: `zychanstrip-mix-phase`, `zychanstrip-autogain-order`, `zychanstrip-rta-averaging`,
+  `zychanstrip-vu-ppm`, `zychanstrip-dsp-docs`, `zychanstrip-verify-quit-crash` (unchanged, see task ledger).
 - **Review date**: next framework bump.

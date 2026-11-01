@@ -133,7 +133,7 @@ Sample rate 48000 Hz, block 256, 3.0 s per run, first 1.0 s discarded.
 | 23 | LIM > FET > EQ > OPTO | -12.35 | -1.63 | -16.0 | 0.0 | 2.8 | 12.0 | 8.3 | -2.54 |
 | 24 | LIM > FET > OPTO > EQ | -12.41 | -2.69 | -15.6 | 0.0 | 2.2 | 12.0 | 8.3 | -2.54 |
 
-## 3. Dry/wet phase (`rackstrip-mix-phase`)
+## 3. Dry/wet phase (`zychanstrip-mix-phase`)
 
 Reported chain latency: **71 samples** (1.479 ms at 48000 Hz).
 
@@ -147,7 +147,7 @@ Reported chain latency: **71 samples** (1.479 ms at 48000 Hz).
 
 First comb notch for an uncompensated 71-sample dry path: **338.0 Hz** (and every odd multiple).
 
-## 4. Auto-gain reference (`rackstrip-autogain-order`)
+## 4. Auto-gain reference (`zychanstrip-autogain-order`)
 
 | preset | order | RMS dBFS | limiter auto-gain dB |
 | --- | --- | --- | --- |

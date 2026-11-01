@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Slug | `rackstrip-five-fixes` |
-| Repo | `/Users/zack/projects/rackstrip` |
+| Slug | `zychanstrip-five-fixes` |
+| Repo | `/Users/zack/projects/zychanstrip` |
 | Owner | zack |
 | Created | 2026-11-01 |
 | Classification | bug fix + layout change (pre-existing defects; not a release regression) |
@@ -88,7 +88,7 @@ Fix #1, #2, #3(hazard only), #4. Record #5 as not-reproducing rather than churn 
 | dsp | `Source/Modules.h` | orchestrator | limiter reference input |
 | editor | `Source/PluginEditor.{h,cpp}` | orchestrator | teardown hazard |
 | harness | `tools/snapshot_main.cpp`, `tools/dsp_checks.h` | orchestrator | new checks |
-| docs | `README.md`, `docs/specs/rackstrip-five-fixes.md` | orchestrator | |
+| docs | `README.md`, `docs/specs/zychanstrip-five-fixes.md` | orchestrator | |
 
 One repo, four modules, one commit per fix — the work is sequential and the modules are coupled through
 the DSP contract, so a fleet would add coordination cost without parallelism.
@@ -100,7 +100,7 @@ the DSP contract, so a fleet would add coordination cost without parallelism.
 | DES-1 | Delay the dry path with a **pre-sized stereo ring buffer** (`dryDelay[2]` + write index) written in chunks, not per sample | Keeps `processBlock` allocation-free and branch-light; `juce::dsp::DelayLine` would also work but adds a dependency and per-sample calls |
 | DES-2 | Compensate only when `latency > 0`; at 100 % wet the dry path is **not even summed** (existing `wet < 0.9999f` branch) | REQ-1b: 100 % wet stays bit-identical |
 | DES-3 | Auto-gain reference = **chain input energy** captured at `processBlock` entry, handed to the limiter as a linear-domain input, and completed with the limiter's measurement of the **final** output (post mix) | Order-independent by construction: input is order-invariant and output is the real output |
-| DES-4 | Clear `meterPanel->onBack`/`onReset` in `~RackStripEditor` before the panel is released | The callbacks capture `this`; the panel is a member that is destroyed *after* the destructor body, so a timer/tick reaching it would call into a partially destroyed editor |
+| DES-4 | Clear `meterPanel->onBack`/`onReset` in `~ZychanStripEditor` before the panel is released | The callbacks capture `this`; the panel is a member that is destroyed *after* the destructor body, so a timer/tick reaching it would call into a partially destroyed editor |
 | DES-5 | No change for badges | Evidence: HTTP 200 + valid SVG |
 | DES-6 | New harness checks + reset of module state between order permutations | REQ-1, REQ-1b, REQ-2 must be measured, not argued |
 

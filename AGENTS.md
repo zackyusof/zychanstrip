@@ -1,4 +1,4 @@
-# AGENTS.md — zychanstrip (rackstrip)
+# AGENTS.md — zychanstrip (zychanstrip)
 
 Project-level instructions for any agent working in this repository.
 The top-level `README.md` is the handover document; read it first.
@@ -22,7 +22,7 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
 5. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
    `RESULT 246/246`). The Linux container can compile the DSP research harness in
    `tools/research/` but cannot build the AU.
-6. Commit and push every change (`main` on `https://git.zyusof.net/zack/rackstrip`).
+6. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
    Keep the harness green before pushing; record what you could not verify.
 
 ## Documentation duties

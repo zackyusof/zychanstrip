@@ -2,13 +2,13 @@
 #include "Modules.h"
 #include "Meters.h"
 
-class RackStripProcessor : public juce::AudioProcessor
+class ZychanStripProcessor : public juce::AudioProcessor
 {
 public:
     enum ModuleId { Console = 0, Opto, Fet, Limiter, NumModules };
 
-    RackStripProcessor();
-    ~RackStripProcessor() override = default;
+    ZychanStripProcessor();
+    ~ZychanStripProcessor() override = default;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -84,5 +84,5 @@ private:
     std::atomic<float>* masterLevel = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZychanStripProcessor)
 };

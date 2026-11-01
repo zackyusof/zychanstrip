@@ -179,7 +179,7 @@ LimiterMeasurement measureLimiter (rack::LimiterModule& limiter, double sr, int 
 }
 void limiterTests()
 {
-    RackStripProcessor proc;
+    ZychanStripProcessor proc;
     check (proc.apvts.getRawParameterValue ("lim_auto_gain") != nullptr, "Auto Gain parameter exists");
     if (proc.apvts.getRawParameterValue ("lim_auto_gain") == nullptr) return;
     check (proc.apvts.getRawParameterValue ("lim_auto_gain")->load() > 0.5f, "new instances enable Enhance Auto Gain");
@@ -247,7 +247,7 @@ void limiterTests()
     auto state = proc.apvts.copyState();
     juce::MemoryBlock blob;
     juce::AudioProcessor::copyXmlToBinary (*state.createXml(), blob);
-    RackStripProcessor restored;
+    ZychanStripProcessor restored;
     restored.setStateInformation (blob.getData(), (int) blob.getSize());
     check (restored.apvts.getRawParameterValue ("lim_auto_gain")->load() > 0.5f
            && std::abs (restored.apvts.getRawParameterValue ("con_eq_500")->load() - 7.5f) < 0.001f,
@@ -259,7 +259,7 @@ void limiterTests()
     check (restored.apvts.getRawParameterValue ("lim_auto_gain")->load() < 0.5f,
            "legacy sessions restore Auto Gain off");
 }
-void newEditorTests (RackStripProcessor& proc, RackStripEditor& editor)
+void newEditorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor)
 {
     for (auto id : eqIds)
     {

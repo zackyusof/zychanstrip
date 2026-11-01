@@ -50,7 +50,7 @@ Three conclusions, all measured:
 
 ---
 
-## 2. Dry/wet comb filtering (`rackstrip-mix-phase`)
+## 2. Dry/wet comb filtering (`zychanstrip-mix-phase`)
 
 Chain latency is **71 samples** at 48 kHz (1.479 ms), all of it from the limiter.
 The dry copy is not delayed before the blend (`Source/PluginProcessor.cpp:138-146`), so
@@ -68,7 +68,7 @@ the mix is a comb filter with the wet path.
   (1014 Hz, 1690 Hz, …). This is why a 50 % mix thins the low-mid instead of halving it.
 * Delaying the dry copy by the reported latency restores the expected `wet + dry` sum
   (+1.68 dB rather than −13.20 dB at 1 kHz) — the arithmetic fix proposed for
-  `rackstrip-mix-phase`.
+  `zychanstrip-mix-phase`.
 * Note the *level* consequence too: at 25 % the shipped path is 1.66 dB **below** the wet
   signal, i.e. the mix control currently behaves as a low-mid scoop, not as a blend.
 
@@ -94,7 +94,7 @@ ceiling.**
 
 ---
 
-## 4. Auto-gain reference (`rackstrip-autogain-order`)
+## 4. Auto-gain reference (`zychanstrip-autogain-order`)
 
 | preset | order | RMS dBFS | limiter auto-gain correction |
 | --- | --- | --- | --- |
@@ -114,7 +114,7 @@ The correction is computed from the limiter's **own** input vs its **own** outpu
 * The correction is not a null test: turning auto-gain on changes the absolute level by
   ~1.9 dB for the same programme. It matches the module's input, not the rack's input.
 
-The README's `rackstrip-autogain-order` row describes the same defect from the user's
+The README's `zychanstrip-autogain-order` row describes the same defect from the user's
 side (0.691 vs 0.289 RMS across orders). The measured spread above (6.96 dB with AG off)
 is consistent with it; the fix remains "measure chain input vs final output in
 `processBlock` and share one reference with the mix".

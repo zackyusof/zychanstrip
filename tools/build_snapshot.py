@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a headless GUI snapshot tool reusing the exact flags Ninja uses for the plugin.
 
-Renders the RackStrip editor to snapshot.png so the GUI can be reviewed without a DAW
+Renders the ZychanStrip editor to snapshot.png so the GUI can be reviewed without a DAW
 (and without a working AudioComponentRegistrar).
 """
 import argparse
@@ -42,7 +42,7 @@ cmd = [cxx] + flags + defines + includes + ["-isysroot", sdk, "-c", src, "-o", o
 print("compile:", " ".join(cmd[:6]), "...")
 subprocess.check_call(cmd)
 
-target_name = "zychanstrip" if os.path.exists(os.path.join(BUILD, "CMakeFiles", "zychanstrip.dir")) else "RackStrip"
+target_name = "zychanstrip"
 objs = []
 for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")):
     for f in files:

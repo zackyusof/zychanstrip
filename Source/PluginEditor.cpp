@@ -1232,7 +1232,7 @@ struct InButtonLookAndFeel : public LookAndFeel_V4
 class ModulePanel : public Component
 {
 public:
-    ModulePanel (RackStripProcessor& p, int id, const String& prefixText,
+    ModulePanel (ZychanStripProcessor& p, int id, const String& prefixText,
                  Colour top, Colour bottom, Colour engraving)
         : moduleId (id), proc (p), prefix (prefixText), plateTop (top), plateLow (bottom), labelColour (engraving)
     {
@@ -1268,7 +1268,7 @@ public:
     void resized() override
     {
         content = contentBounds();
-        if (moduleId != RackStripProcessor::Console)
+        if (moduleId != ZychanStripProcessor::Console)
             bypass.setBounds (content.getRight() - 84, plateBounds().getY() + 6, 80, 22);
         layoutContent (content);
 
@@ -1380,7 +1380,7 @@ protected:
     virtual void paintFaceExtra (Graphics&) {}
     virtual void paintMeter (Graphics&) {}
 
-    RackStripProcessor& proc;
+    ZychanStripProcessor& proc;
     String prefix;
     Colour plateTop, plateLow, labelColour;
     Rectangle<int> content;
@@ -1392,7 +1392,7 @@ private:
 
     void paintScrewsAndBadge (Graphics& g, Rectangle<float> plate)
     {
-        if (moduleId == RackStripProcessor::Console)
+        if (moduleId == ZychanStripProcessor::Console)
             return; // Console panel has custom screws & holes matching the real API 560 unit
 
         const float inset = 13.0f, rad = 5.0f;
@@ -1425,8 +1425,8 @@ private:
 class ConsolePanel : public ModulePanel
 {
 public:
-    explicit ConsolePanel (RackStripProcessor& p)
-        : ModulePanel (p, RackStripProcessor::Console, "con_",
+    explicit ConsolePanel (ZychanStripProcessor& p)
+        : ModulePanel (p, ZychanStripProcessor::Console, "con_",
                        Colour (0xff141517), Colour (0xff08090a), pal::engrave)
     {
         const char* ids[] { "eq_16k", "eq_8k", "eq_4k", "eq_2k", "eq_1k", "eq_500", "eq_250", "eq_125", "eq_63", "eq_31" };
@@ -1554,8 +1554,8 @@ private:
 class OptoPanel : public ModulePanel
 {
 public:
-    explicit OptoPanel (RackStripProcessor& p)
-        : ModulePanel (p, RackStripProcessor::Opto, "opto_",
+    explicit OptoPanel (ZychanStripProcessor& p)
+        : ModulePanel (p, ZychanStripProcessor::Opto, "opto_",
                        pal::faceLightTop, pal::faceLightLow, Colour (0xff141414))
     {
         labelColour = Colour (0xff141414);
@@ -1651,8 +1651,8 @@ private:
 class FetPanel : public ModulePanel
 {
 public:
-    explicit FetPanel (RackStripProcessor& p)
-        : ModulePanel (p, RackStripProcessor::Fet, "fet_",
+    explicit FetPanel (ZychanStripProcessor& p)
+        : ModulePanel (p, ZychanStripProcessor::Fet, "fet_",
                        pal::fetTop, pal::fetLow, pal::engrave)
     {
         setupKnob (input,  "input",  pal::silverCap, Colour (0xff202020));
@@ -1753,8 +1753,8 @@ private:
 class LimiterPanel : public ModulePanel
 {
 public:
-    explicit LimiterPanel (RackStripProcessor& p)
-        : ModulePanel (p, RackStripProcessor::Limiter, "lim_",
+    explicit LimiterPanel (ZychanStripProcessor& p)
+        : ModulePanel (p, ZychanStripProcessor::Limiter, "lim_",
                        pal::limTop, pal::limLow, pal::engrave)
     {
         // All four controls are vertical sliders so they read as one bank, matching ENHANCE.
@@ -1924,7 +1924,7 @@ private:
 //==============================================================================
 //  Editor
 //==============================================================================
-RackStripEditor::RackStripEditor (RackStripProcessor& p)
+ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     : AudioProcessorEditor (p), proc (p), laf (std::make_unique<RackLookAndFeel>())
 {
     setLookAndFeel (laf.get());
@@ -1938,10 +1938,10 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     addAndMakeVisible (canvas);
     canvas.setBounds (0, 0, kEditorW, kEditorH);
 
-    panels[RackStripProcessor::Console] = std::make_unique<ConsolePanel> (proc);
-    panels[RackStripProcessor::Opto]    = std::make_unique<OptoPanel> (proc);
-    panels[RackStripProcessor::Fet]     = std::make_unique<FetPanel> (proc);
-    panels[RackStripProcessor::Limiter] = std::make_unique<LimiterPanel> (proc);
+    panels[ZychanStripProcessor::Console] = std::make_unique<ConsolePanel> (proc);
+    panels[ZychanStripProcessor::Opto]    = std::make_unique<OptoPanel> (proc);
+    panels[ZychanStripProcessor::Fet]     = std::make_unique<FetPanel> (proc);
+    panels[ZychanStripProcessor::Limiter] = std::make_unique<LimiterPanel> (proc);
 
     for (auto& panel : panels)
     {
@@ -2001,7 +2001,7 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     startTimerHz (30);
 }
 
-RackStripEditor::~RackStripEditor()
+ZychanStripEditor::~ZychanStripEditor()
 {
     // Order matters: the timer is the last thing that can reach into the editor, so it goes
     // first; the animations hold component pointers; then the LookAndFeel is unhung before the
@@ -2027,20 +2027,20 @@ RackStripEditor::~RackStripEditor()
     setLookAndFeel (nullptr);
 }
 
-Rectangle<int> RackStripEditor::slotBounds (int slot) const
+Rectangle<int> ZychanStripEditor::slotBounds (int slot) const
 {
     const int pw = (kEditorW - kMargin * 2 - kGap * 3) / 4;
     const int top = kHeaderH + 4;
     return { kMargin + slot * (pw + kGap), top, pw, kEditorH - top - kMargin };
 }
 
-int RackStripEditor::slotForCentreX (int x) const
+int ZychanStripEditor::slotForCentreX (int x) const
 {
     const int pw = (kEditorW - kMargin * 2 - kGap * 3) / 4;
     return jlimit (0, 3, (x - kMargin) / (pw + kGap));
 }
 
-std::array<int, 4> RackStripEditor::orderWithDragged (int id, int slot) const
+std::array<int, 4> ZychanStripEditor::orderWithDragged (int id, int slot) const
 {
     std::vector<int> v;
     for (int m : proc.getOrder()) if (m != id) v.push_back (m);
@@ -2048,7 +2048,7 @@ std::array<int, 4> RackStripEditor::orderWithDragged (int id, int slot) const
     return { v[0], v[1], v[2], v[3] };
 }
 
-void RackStripEditor::layoutFor (const std::array<int, 4>& order, int skipId, bool animate)
+void ZychanStripEditor::layoutFor (const std::array<int, 4>& order, int skipId, bool animate)
 {
     for (int s = 0; s < 4; ++s)
     {
@@ -2060,7 +2060,7 @@ void RackStripEditor::layoutFor (const std::array<int, 4>& order, int skipId, bo
     }
 }
 
-void RackStripEditor::resized()
+void ZychanStripEditor::resized()
 {
     animator.cancelAllAnimations (false);
     draggingId = -1;
@@ -2083,7 +2083,7 @@ void RackStripEditor::resized()
     repaint();
 }
 
-void RackStripEditor::timerCallback()
+void ZychanStripEditor::timerCallback()
 {
     if (metersShown)
     {
@@ -2093,7 +2093,7 @@ void RackStripEditor::timerCallback()
     for (auto& p : panels) p->tick();
 }
 
-void RackStripEditor::showPage (bool meters)
+void ZychanStripEditor::showPage (bool meters)
 {
     metersShown = meters;
     pageToggle.setMeters (meters);
@@ -2103,7 +2103,7 @@ void RackStripEditor::showPage (bool meters)
     repaint();
 }
 
-void RackStripEditor::resetRackToDefaults()
+void ZychanStripEditor::resetRackToDefaults()
 {
     proc.resetToDefaults();
 
@@ -2122,7 +2122,7 @@ void RackStripEditor::resetRackToDefaults()
 //==============================================================================
 //  Page toggle (child of the canvas: the canvas consumes editor-level clicks)
 //==============================================================================
-void RackStripEditor::PageToggle::paint (Graphics& g)
+void ZychanStripEditor::PageToggle::paint (Graphics& g)
 {
     auto t = getLocalBounds().toFloat();
     g.setColour (Colour (0xff0b0d0e));
@@ -2152,26 +2152,26 @@ void RackStripEditor::PageToggle::paint (Graphics& g)
     g.drawText ("METER", meterBtn, Justification::centred, false);
 }
 
-void RackStripEditor::PageToggle::mouseDown (const MouseEvent&)
+void ZychanStripEditor::PageToggle::mouseDown (const MouseEvent&)
 {
     meters = ! meters;
     repaint();
     if (onChanged) onChanged (meters);
 }
 
-void RackStripEditor::ResetButton::paint (Graphics& g)
+void ZychanStripEditor::ResetButton::paint (Graphics& g)
 {
     // Teal at rest like RACK/METER, matte black while held.
     rackui::paintPill (g, getLocalBounds().toFloat(), armed, "RESET");
 }
 
-void RackStripEditor::ResetButton::mouseDown (const MouseEvent&)
+void ZychanStripEditor::ResetButton::mouseDown (const MouseEvent&)
 {
     armed = true;
     repaint();
 }
 
-void RackStripEditor::ResetButton::mouseUp (const MouseEvent& e)
+void ZychanStripEditor::ResetButton::mouseUp (const MouseEvent& e)
 {
     if (armed && getLocalBounds().contains (e.getPosition()))
     {
@@ -2184,7 +2184,7 @@ void RackStripEditor::ResetButton::mouseUp (const MouseEvent& e)
     repaint();
 }
 
-void RackStripEditor::paint (Graphics& g)
+void ZychanStripEditor::paint (Graphics& g)
 {
     g.fillAll (Colour (0xff060708));
     g.saveState();
@@ -2283,7 +2283,7 @@ void RackStripEditor::paint (Graphics& g)
     g.restoreState();
 }
 
-void RackStripEditor::paintOverChildren (Graphics& g)
+void ZychanStripEditor::paintOverChildren (Graphics& g)
 {
     g.saveState();
     g.addTransform (canvasTransform);

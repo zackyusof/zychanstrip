@@ -2,7 +2,7 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout ZychanStripProcessor::createLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
@@ -74,7 +74,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout RackStripProcessor::createLa
 }
 
 //==============================================================================
-RackStripProcessor::RackStripProcessor()
+ZychanStripProcessor::ZychanStripProcessor()
     : AudioProcessor (BusesProperties()
                           .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -88,14 +88,14 @@ RackStripProcessor::RackStripProcessor()
     mixAmount   = apvts.getRawParameterValue ("master_mix");
 }
 
-bool RackStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
+bool ZychanStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 {
     const auto out = l.getMainOutputChannelSet();
     return (out == juce::AudioChannelSet::stereo() || out == juce::AudioChannelSet::mono())
            && out == l.getMainInputChannelSet();
 }
 
-void RackStripProcessor::prepareToPlay (double sr, int block)
+void ZychanStripProcessor::prepareToPlay (double sr, int block)
 {
     int latency = 0;
     for (auto& m : modules)
@@ -120,7 +120,7 @@ void RackStripProcessor::prepareToPlay (double sr, int block)
     meters.prepare (sr, block);
 }
 
-void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
     const int numSamples = buffer.getNumSamples();
@@ -211,7 +211,7 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     publishAutoGainPair (numSamples);
 }
 
-void RackStripProcessor::publishAutoGainPair (int numSamples)
+void ZychanStripProcessor::publishAutoGainPair (int numSamples)
 {
     // Publish a stable copy: the limiter must never read buffers this block mutates later.
     prevChainInput.assign (chainInputRef.begin(), chainInputRef.end());
@@ -221,12 +221,12 @@ void RackStripProcessor::publishAutoGainPair (int numSamples)
 }
 
 //==============================================================================
-void RackStripProcessor::feedChainReference (const juce::AudioBuffer<float>& in, int numSamples)
+void ZychanStripProcessor::feedChainReference (const juce::AudioBuffer<float>& in, int numSamples)
 {
     measureEnergy (chainInputRef, in, numSamples);
 }
 
-void RackStripProcessor::measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples)
+void ZychanStripProcessor::measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples)
 {
     if ((int) dest.size() < numSamples)
         dest.assign ((size_t) juce::jmax (numSamples, (int) dest.size()), 0.0f);
@@ -244,7 +244,7 @@ void RackStripProcessor::measureEnergy (std::vector<float>& dest, const juce::Au
     }
 }
 
-void RackStripProcessor::feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples)
+void ZychanStripProcessor::feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples)
 {
     measureEnergy (finalOutRef, out, numSamples);
     modules[Limiter]->setFinalOutputReference (finalOutRef.data(), numSamples);
@@ -254,7 +254,7 @@ void RackStripProcessor::feedFinalOutputReference (const juce::AudioBuffer<float
 }
 
 //==============================================================================
-std::array<int, RackStripProcessor::NumModules> RackStripProcessor::getOrder() const
+std::array<int, ZychanStripProcessor::NumModules> ZychanStripProcessor::getOrder() const
 {
     const uint32_t p = packedOrder.load();
     std::array<int, NumModules> o {};
@@ -262,7 +262,7 @@ std::array<int, RackStripProcessor::NumModules> RackStripProcessor::getOrder() c
     return o;
 }
 
-void RackStripProcessor::setOrder (const std::array<int, NumModules>& o)
+void ZychanStripProcessor::setOrder (const std::array<int, NumModules>& o)
 {
     std::array<bool, NumModules> seen {};
     uint32_t p = 0;
@@ -277,7 +277,7 @@ void RackStripProcessor::setOrder (const std::array<int, NumModules>& o)
 }
 
 //==============================================================================
-void RackStripProcessor::resetToDefaults()
+void ZychanStripProcessor::resetToDefaults()
 {
     // Every registered parameter (module controls, master level and mix) returns to the
     // default declared in createLayout(). Host automation sees real gestures.
@@ -298,7 +298,7 @@ void RackStripProcessor::resetToDefaults()
 }
 
 //==============================================================================
-void RackStripProcessor::getStateInformation (juce::MemoryBlock& dest)
+void ZychanStripProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     auto state = apvts.copyState();
     juce::StringArray ids;
@@ -309,7 +309,7 @@ void RackStripProcessor::getStateInformation (juce::MemoryBlock& dest)
         copyXmlToBinary (*xml, dest);
 }
 
-void RackStripProcessor::setStateInformation (const void* data, int size)
+void ZychanStripProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
     {
@@ -351,6 +351,6 @@ void RackStripProcessor::setStateInformation (const void* data, int size)
 }
 
 //==============================================================================
-juce::AudioProcessorEditor* RackStripProcessor::createEditor() { return new RackStripEditor (*this); }
+juce::AudioProcessorEditor* ZychanStripProcessor::createEditor() { return new ZychanStripEditor (*this); }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new RackStripProcessor(); }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new ZychanStripProcessor(); }

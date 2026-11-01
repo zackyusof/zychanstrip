@@ -1,6 +1,6 @@
 # LANE C BRIEF — Limiter/Enhance module and the chain-level path (order, latency, master, mix, meters)
 
-You are a DSP analyst. Repo: `/root/projects/rackstrip` (branch `main`, commit `51a0927`).
+You are a DSP analyst. Repo: `/root/projects/zychanstrip` (branch `main`, commit `51a0927`).
 Your deliverable is ONE file: `docs/dsp/research/lane-C-limiter-chain.md`.
 
 ## Rules
@@ -38,7 +38,7 @@ expressions:
 - `req = (active && pk > ceil) ? ceil / pk : 1.0f` (line 329)
 - `reqRing[wp] = req` (line 330)
 - `mn = 1.0f; for (float r : reqRing) mn = std::min(mn, r)` (lines 331-332)
-- This per-sample scan is O(n·la) per sample (known issue `rackstrip-mix-phase`)
+- This per-sample scan is O(n·la) per sample (known issue `zychanstrip-mix-phase`)
 - `sum += (double)mn - (double)avgRing[wp]` (line 334)
 - `avgRing[wp] = mn` (line 335)
 - `avg = (float)(sum / la)` (line 336)
@@ -104,7 +104,7 @@ expressions:
 - **Clamped:** `-36 dB` to `+36 dB` (limiter ceiling limits beyond).
 - **Reference usage:** the limiter compares its **own** input (post upstream) to its **own** output, ignoring any modules after the limiter.
 - **Why order-dependent:** if the limiter is not last in the rack, modules after it are outside the reference, so changes in those modules affect the output without the auto-gain seeing them as upstream gain. Conversely, if the limiter is last, its own input includes all upstream processing, giving a closed-loop reference.
-- **Known issue `rackstrip-autogain-order`:** measured 7.6 dB spread (0.691 vs 0.289 RMS) between limiter-last vs limiter-first; correction only moves 0.3 dB because the limiter's own reference can't see outside.
+- **Known issue `zychanstrip-autogain-order`:** measured 7.6 dB spread (0.691 vs 0.289 RMS) between limiter-last vs limiter-first; correction only moves 0.3 dB because the limiter's own reference can't see outside.
 
 #### `processBypassed` operation
 - **Limiter inactive mode:** `active = false` (line 311), `drive = 1.0f` (line 308)
@@ -121,7 +121,7 @@ expressions:
   - Limiter: `la - 1`, others: 0. Sum is reported via `setLatencySamples()` (line 106).
   - **Constant regardless of order or bypass:** each module's `getLatencySamples()` is fixed; bypass doesn't change it.
 - **Dry buffer allocation:** `dryBuffer.setSize (2, juce::jmax (1, block), false, false, true)` (PluginProcessor.cpp:107)
-  - Grows only if host sends larger block (lines 122-125). Allocation occurs on audio thread (potential known issue `rackstrip-mix-phase`).
+  - Grows only if host sends larger block (lines 122-125). Allocation occurs on audio thread (potential known issue `zychanstrip-mix-phase`).
 - **Master smoother:** `masterGain.reset (sr, 0.02)` then `masterGain.setCurrentAndTargetValue(...)` (PluginProcessor.cpp:108-109)
 - **Meters:** `meters.prepare (sr, block)` (PluginProcessor.cpp:110) — initializes RTA, peak hold, etc. (Meters.h:27-57)
 
@@ -197,7 +197,7 @@ meters.process (buffer);  // line 149
   - Auto-gain sees the full upstream signal as reference, giving the intended loudness stabilization.
   - Colour before ceiling; any EQ/opto/fet harmonic stacking is limited by ceiling.
   - Meter reference (limiter output) includes all upstream processing; meters show final result.
-  - Auto-gain correction moves 0.691→0.289 RMS spread reduced (fix `rackstrip-autogain-order` focuses on this).
+  - Auto-gain correction moves 0.691→0.289 RMS spread reduced (fix `zychanstrip-autogain-order` focuses on this).
 - **Limiter first (`[3,0,2,1]` etc.):**
   - Auto-gain reference is limiter's own input (pre‑EQ), so it cannot compensate upstream colour changes.
   - Ceiling acts first; any colour added later (EQ, opto, fet) can exceed 0 dBFS and be unclipped.
@@ -209,10 +209,10 @@ meters.process (buffer);  // line 149
 
 Ranked with citations:
 
-1. **Missing dry‑path latency compensation** (PluginProcessor.cpp:122-125, README known issue `rackstrip-mix-phase`)
+1. **Missing dry‑path latency compensation** (PluginProcessor.cpp:122-125, README known issue `zychanstrip-mix-phase`)
    - Dry buffer contains input before the limiter; wet has look‑ahead. Comb filter notch at `sr / la` samples.
    - Mitigation: store `dryBuffer` as delayed copy (ring buffer) by `limiter->getLatencySamples()` before mixing.
-2. **Auto-gain reference inside the module** (Modules.h:311, README known issue `rackstrip-autogain-order`)
+2. **Auto-gain reference inside the module** (Modules.h:311, README known issue `zychanstrip-autogain-order`)
    - Limiter measures its own input vs output, ignoring any modules after it.
    - Mitigation: share chain‑input vs chain‑output reference computed once in `processBlock` and expose a compensated gain to limiter.
 3. **`sum`/`avgRing` initialisation** (Modules.h:290, 334-336)
@@ -232,15 +232,15 @@ Ranked with citations:
 
 ## Sources checked
 
-- `/root/projects/rackstrip/Source/Modules.h:273-387` (LimiterModule)
-- `/root/projects/rackstrip/Source/Modules.h:87-97` (analogMasterSaturation)
-- `/root/projects/rackstrip/Source/PluginProcessor.h:1-66` (RackStripProcessor, order packing)
-- `/root/projects/rackstrip/Source/PluginProcessor.cpp:1-231` (processor flow)
-- `/root/projects/rackstrip/Source/Meters.h:1-283` (meter implementation)
-- `/root/projects/rackstrip/README.md:143-166` (signal flow, latency, phase)
-- `/root/projects/rackstrip/README.md:248-259` (known issues summary)
-- `/root/projects/rackstrip/Source/Modules.h:100-132` (Module base)
-- `/root/projects/rackstrip/Source/Modules.h:315-374` (runLimiter per‑sample loop)
+- `/root/projects/zychanstrip/Source/Modules.h:273-387` (LimiterModule)
+- `/root/projects/zychanstrip/Source/Modules.h:87-97` (analogMasterSaturation)
+- `/root/projects/zychanstrip/Source/PluginProcessor.h:1-66` (ZychanStripProcessor, order packing)
+- `/root/projects/zychanstrip/Source/PluginProcessor.cpp:1-231` (processor flow)
+- `/root/projects/zychanstrip/Source/Meters.h:1-283` (meter implementation)
+- `/root/projects/zychanstrip/README.md:143-166` (signal flow, latency, phase)
+- `/root/projects/zychanstrip/README.md:248-259` (known issues summary)
+- `/root/projects/zychanstrip/Source/Modules.h:100-132` (Module base)
+- `/root/projects/zychanstrip/Source/Modules.h:315-374` (runLimiter per‑sample loop)
 
 ---
 Sources verified. This document is the deliverable for Lane C.

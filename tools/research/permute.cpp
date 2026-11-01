@@ -195,9 +195,9 @@ struct Chain
         return sum;
     }
 
-    // Mirrors RackStripProcessor::processBlock (Source/PluginProcessor.cpp:113-150).
+    // Mirrors ZychanStripProcessor::processBlock (Source/PluginProcessor.cpp:113-150).
     // dryDelaySamples: 0 reproduces the shipped dry/wet path; >0 applies the
-    // latency compensation that rackstrip-mix-phase proposes.
+    // latency compensation that zychanstrip-mix-phase proposes.
     void run (const Signal& in, const Order& order, std::vector<float>& outL, std::vector<float>& outR,
               std::array<float, kNumModules>* maxGr, float* finalCompDb, int dryDelaySamples = 0)
     {
@@ -404,7 +404,7 @@ int main()
     reportPermutationTable ("Mastering, auto-gain ON, transients", presetMastering (true), trans);
 
     //----------------------------------------------------------- dry/wet phase
-    std::printf ("\n## 3. Dry/wet phase (`rackstrip-mix-phase`)\n\n");
+    std::printf ("\n## 3. Dry/wet phase (`zychanstrip-mix-phase`)\n\n");
     {
         Preset p = presetUnity();
         for (auto& kv : p.values)
@@ -445,7 +445,7 @@ int main()
     }
 
     //------------------------------------------------------- auto-gain reference
-    std::printf ("\n## 4. Auto-gain reference (`rackstrip-autogain-order`)\n\n");
+    std::printf ("\n## 4. Auto-gain reference (`zychanstrip-autogain-order`)\n\n");
     {
         const Order limLast { 0, 2, 1, 3 };
         const Order limFirst { 3, 0, 2, 1 };

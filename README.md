@@ -42,8 +42,8 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 Read this before touching code. It is the fastest route from a fresh clone to a working build.
 
 ```bash
-git clone https://git.zyusof.net/zack/rackstrip.git
-cd rackstrip
+git clone https://git.zyusof.net/zack/zychanstrip.git
+cd zychanstrip
 
 # CMake and Ninja are usually installed by pip on this machine, not in PATH by default:
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
@@ -84,7 +84,7 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 
 ## Architecture
 
-**Plugin shell.** `RackStripProcessor` is an `AudioProcessor` with a fixed four-slot rack. It is not a synth, needs no MIDI, and presents AU type `aufx`, subtype `Zych`, manufacturer `ZYUS` (`net.zyusof.zychanstrip`).
+**Plugin shell.** `ZychanStripProcessor` is an `AudioProcessor` with a fixed four-slot rack. It is not a synth, needs no MIDI, and presents AU type `aufx`, subtype `Zych`, manufacturer `ZYUS` (`net.zyusof.zychanstrip`).
 
 **Module model.** Every module derives from `rack::Module` (`Source/Modules.h`) and exposes `process(AudioBuffer&)`, plus `getLatencySamples()`, an atomic `grDb` for its meter, and (limiter only) `outPeak` / `gainCompDb`. Modules are processed **in rack order**, which is stored as a single packed `uint32_t` that the audio thread reads once per block — re-ordering can never tear mid-block.
 
@@ -97,7 +97,7 @@ enum ModuleId { Console = 0, Opto = 1, Fet = 2, Limiter = 3, NumModules = 4 };
 
 **State migration.** `setStateInformation` patches older session blobs by inserting any parameter that is missing (e.g. `lim_auto_gain`, the EQ560 bands, `master_mix`). If you add a parameter, add it to that migration list too, or old sessions will silently miss it.
 
-**Editor.** `RackStripEditor` holds a `canvas` component that draws the chassis and hosts the four `ModulePanel` children plus the header controls. A second child, `MeterPanel`, fills the window when the METER page is selected.
+**Editor.** `ZychanStripEditor` holds a `canvas` component that draws the chassis and hosts the four `ModulePanel` children plus the header controls. A second child, `MeterPanel`, fills the window when the METER page is selected.
 
 ---
 
@@ -128,7 +128,7 @@ Its four fader channels (threshold, ceiling, release, enhance) are recessed blac
 
 Both RESET pills, and the metering page `BACK`, share one look (`Source/UiStyle.h`): the RACK/METER teal gradient at rest and matte black while held, so the momentary action visibly bottoms out.
 
-Parameter values are written on the message thread with real gestures, so host automation follows the reset. Module DSP state (EQ biquads, compressor envelopes, limiter delay and energy rings) is cleared at the start of the next audio block via a single atomic request, so the reset is real-time safe and leaves no stale look-ahead tail. `RackStripProcessor::resetToDefaults()` is the one implementation; both buttons call it through `RackStripEditor::resetRackToDefaults()`.
+Parameter values are written on the message thread with real gestures, so host automation follows the reset. Module DSP state (EQ biquads, compressor envelopes, limiter delay and energy rings) is cleared at the start of the next audio block via a single atomic request, so the reset is real-time safe and leaves no stale look-ahead tail. `ZychanStripProcessor::resetToDefaults()` is the one implementation; both buttons call it through `ZychanStripEditor::resetRackToDefaults()`.
 
 ### Parallel dry/wet
 `master_mix` (0–100 %, default 100) blends the untouched input against the finished master output for parallel processing. It is applied **after** master volume.
@@ -155,7 +155,7 @@ Selected with the header **RACK / METER** toggle; the METER page has its own **`
 | Phase scope | decimated L/R pairs rotated 45° into a Lissajous |
 | 31-band analyser | 2048-point FFT, Hann window, folded into 31 log-spaced bands with per-band peak-hold |
 
-**Hooks:** `RackStripEditor::timerCallback()` calls `MeterPanel::tick()` only while the meter page is visible; `RackStripEditor::showPage(bool)` swaps pages.
+**Hooks:** `ZychanStripEditor::timerCallback()` calls `MeterPanel::tick()` only while the meter page is visible; `ZychanStripEditor::showPage(bool)` swaps pages.
 
 ---
 
@@ -238,7 +238,7 @@ rm -rf ~/Library/Audio/Plug-Ins/Components/zychanstrip.component
 ```
 
 Two copies of the same subtype confuse the AU registrar, so the user copy is removed.
-`rackstrip-dupe-au` is closed by this policy.
+`zychanstrip-dupe-au` is closed by this policy.
 
 **Validation is the user's job.** A build is done when the AU is installed and *proven loadable*:
 
@@ -293,7 +293,7 @@ Captions span the whole grid cell, so long names are not clipped. The harness as
 The harness does **not** exercise editor destruction, which is where crashes live. Use this pattern manually when touching UI lifecycle:
 
 ```cpp
-auto* ed = static_cast<RackStripEditor*>(proc.createEditor());
+auto* ed = static_cast<ZychanStripEditor*>(proc.createEditor());
 ed->setSize (1080, 760);
 delete ed;                    // any slider/attachment ordering bug fires here
 ```
@@ -304,12 +304,12 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `rackstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
-| `rackstrip-autogain-order` | ~~**Auto-gain is order-dependent**~~ **FIXED** | Auto Gain now divides the energy of the **chain input** (measured before any module) by the **rack output** (after every module, before master gain), both captured as one pair from the previous block. Measured spread across all 24 permutations: **0.000 dB** (was 7.6 dB). Harness: *"Auto Gain is order-independent across 24 permutations"*. |
-| `rackstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. The editor destructor now also clears every `this`-capturing callback (`MeterPanel::onBack/onReset`, page toggle, reset button, panel drag hooks) before those members are released. Still awaiting repro steps. |
-| `rackstrip-rta-averaging` | RTA averaging is cosmetic | The label changes but the FFT smoothing factor is hard-coded (`0.28` in `Meters.h`). |
-| `rackstrip-vu-ppm` | Missing panel | The spec's analog VU/PPM pair with needle ballistics is not built. |
-| `rackstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01** | Policy is now one copy, system-wide; the user-level copy was removed. |
+| `zychanstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
+| `zychanstrip-autogain-order` | ~~**Auto-gain is order-dependent**~~ **FIXED** | Auto Gain now divides the energy of the **chain input** (measured before any module) by the **rack output** (after every module, before master gain), both captured as one pair from the previous block. Measured spread across all 24 permutations: **0.000 dB** (was 7.6 dB). Harness: *"Auto Gain is order-independent across 24 permutations"*. |
+| `zychanstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. The editor destructor now also clears every `this`-capturing callback (`MeterPanel::onBack/onReset`, page toggle, reset button, panel drag hooks) before those members are released. Still awaiting repro steps. |
+| `zychanstrip-rta-averaging` | RTA averaging is cosmetic | The label changes but the FFT smoothing factor is hard-coded (`0.28` in `Meters.h`). |
+| `zychanstrip-vu-ppm` | Missing panel | The spec's analog VU/PPM pair with needle ballistics is not built. |
+| `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01** | Policy is now one copy, system-wide; the user-level copy was removed. |
 
 Closed work is recorded with evidence; anything unverified stays open deliberately.
 
@@ -327,7 +327,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 8. **Bitmaps are banned.** All graphics are procedural `juce::Graphics` calls so the UI stays sharp at any scale (864×608 → 1620×1140, 27:19 locked).
 
 ### Repo conventions
-- Remote: `https://git.zyusof.net/zack/rackstrip` (Gitea). `main` is the trunk.
+- Remote: `https://git.zyusof.net/zack/zychanstrip` (Gitea). `main` is the trunk.
 - Commit and push every change; verify with `git status` and `git log --oneline origin/main..HEAD` (empty = pushed).
 - Keep the harness green before pushing.
 

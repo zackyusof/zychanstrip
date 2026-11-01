@@ -9,7 +9,7 @@ using namespace juce;
 class MeterPanel : public juce::Component
 {
 public:
-    explicit MeterPanel (RackStripProcessor& p);
+    explicit MeterPanel (ZychanStripProcessor& p);
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -40,7 +40,7 @@ private:
     /** Map dBFS to 0..1 for the active metering scale. */
     float normForScale (float db) const;
 
-    RackStripProcessor& proc;
+    ZychanStripProcessor& proc;
 
     /** Which momentary header button is currently held, so it can draw black while pressed. */
     enum class Pressed { None, Back, Reset };

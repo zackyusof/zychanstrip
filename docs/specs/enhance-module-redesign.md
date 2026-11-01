@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Slug | `enhance-module-redesign` |
-| Repo | `/Users/zack/rackstrip` |
+| Repo | `/Users/zack/zychanstrip` |
 | Track | `enhance-module-redesign` |
 | Owner | `zack` |
 | Created | 2026-10-31 |

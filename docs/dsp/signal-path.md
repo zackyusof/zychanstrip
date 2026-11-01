@@ -10,7 +10,7 @@ Source of truth: `Source/PluginProcessor.cpp` (processor) and `Source/Modules.h`
 
 ## 1. The buffer contract
 
-`RackStripProcessor` is a plain `juce::AudioProcessor` with a fixed four-slot rack
+`ZychanStripProcessor` is a plain `juce::AudioProcessor` with a fixed four-slot rack
 (`Source/PluginProcessor.h:10`). It accepts stereo or mono and requires input and output
 channel sets to match (`PluginProcessor.cpp:91-96`). There is no MIDI, no sidechain, no
 tail (`PluginProcessor.h:25-30`).

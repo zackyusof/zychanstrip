@@ -9,10 +9,10 @@ Pinned commit: `f6d175d8253375a51832fd52aa86482c191caadc` (upstream EQ 560 v1.8.
 the exact `dBToWidth` curve, and fourth-order Butterworth zero-stuffing 2x up/downsampling from this source.
 The source credits Andrew Simper's state-variable filter paper and Exstrom Laboratories for the Butterworth design.
 
-Intentional differences: RackStrip omits the original random noise floor, idle auto-blanking and fixed
+Intentional differences: ZychanStrip omits the original random noise floor, idle auto-blanking and fixed
 120 Hz/20 Hz/10 kHz character filters, retaining the existing console HPF instead. EQ band automation
 is smoothed with a 20 ms one-pole in dB, with coefficients refreshed every eight native sample frames.
-There is no separate upstream trim because RackStrip already has console output and rack master controls.
+There is no separate upstream trim because ZychanStrip already has console output and rack master controls.
 This is a deterministic EQ-core port, not a manufacturer-certified hardware model. Resampling uses IIR
 filters with frequency-dependent phase, not a fixed sample delay; the console reports no additional fixed latency.
 

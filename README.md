@@ -55,7 +55,7 @@ Verify:
 ```bash
 python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reuses Ninja flags)
 ./build/snapshot/snapshot /tmp/shots # runs all tests, writes PNGs
-# expect: RESULT 205/205 passed
+# expect: RESULT 215/215 passed
 ```
 
 **Where the code lives**
@@ -73,7 +73,7 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 **Before you change anything**
 
 1. `git pull` — work from the latest `main`, not a stale copy.
-2. Run the harness first and confirm 205/205 so you know your baseline.
+2. Run the harness first and confirm 215/215 so you know your baseline.
 3. After ANY change: `ninja -C build` then re-run the harness. The build auto-installs,
    so a passing harness means the installed plugin is the code you just wrote.
 4. Commit and push.
@@ -114,6 +114,15 @@ Gain, peak reduction, and a compress/limit `mode` switch. Program-dependent rele
 Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and a stereo-linked auto-gain that matches its own output level back to its input so you hear tone changes rather than loudness shifts.
 
 **Default rack order is 560 → 1176 → LA-2A → Enhance** (`[0,2,1,3]`). Any saved session keeps its own order — the default only applies to fresh instances.
+
+### RESET
+`RESET` in the header (and `RESET` on the metering page) restores the factory state in one action:
+
+* every parameter returns to the default declared in `createLayout()` — module controls, master level and dry/wet mix alike;
+* the rack order returns to `[0,2,1,3]` and the faceplates animate back to those slots;
+* all metering (peaks, holds, RTA, scope, correlation) is cleared.
+
+Parameter values are written on the message thread with real gestures, so host automation follows the reset. Module DSP state (EQ biquads, compressor envelopes, limiter delay and energy rings) is cleared at the start of the next audio block via a single atomic request, so the reset is real-time safe and leaves no stale look-ahead tail. `RackStripProcessor::resetToDefaults()` is the one implementation; both buttons call it through `RackStripEditor::resetRackToDefaults()`.
 
 ### Parallel dry/wet
 `master_mix` (0–100 %, default 100) blends the untouched input against the finished master output for parallel processing. It is applied **after** master volume.
@@ -225,7 +234,7 @@ python3 tools/build_snapshot.py
 ./build/snapshot/snapshot <output-dir>
 ```
 
-It runs **205 checks** and writes PNGs to `<output-dir>`:
+It runs **215 checks** and writes PNGs to `<output-dir>`:
 
 - **DSP** (`tools/dsp_checks.h`): EQ band response, limiter behaviour, auto-gain, channel handling, master gain ramp, state roundtrip, legacy-session migration, dry/wet mix law.
 - **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment inside every panel at 864×608 / 1080×760 / 1620×1140, reorder by grip drag, aspect-ratio lock.

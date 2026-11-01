@@ -21,6 +21,9 @@ public:
     /** Invoked when the operator asks to return to the processor (rack) page. */
     std::function<void()> onBack;
 
+    /** Invoked by the header RESET button. The editor points this at its full reset action. */
+    std::function<void()> onReset;
+
     void setScale (int index);                 // 0 linear, 1 K-20, 2 K-14, 3 K-12
     int  getScale() const { return scale; }
     void setRtaAveraging (int index);

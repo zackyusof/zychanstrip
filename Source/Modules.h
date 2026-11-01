@@ -104,7 +104,19 @@ public:
         : apvts (s), prefix (std::move (paramPrefix)) {}
     virtual ~Module() = default;
 
-    virtual void prepare (double sr, int /*maxBlock*/) { sampleRate = sr; outPeak.store (0.0f); }
+    virtual void prepare (double sr, int maxBlock)
+    {
+        sampleRate = sr;
+        maxBlockSize = maxBlock;
+        outPeak.store (0.0f);
+        reset();
+    }
+
+    /** Return the module's internal DSP state to its power-on condition.
+        Never touches parameters; called from prepare() and from the audio thread after
+        the operator's RESET request, so it must not allocate on the audio thread. */
+    virtual void reset() {}
+
     virtual int  getLatencySamples() const { return 0; }
 
     void run (juce::AudioBuffer<float>& buf)
@@ -129,6 +141,7 @@ protected:
     juce::AudioProcessorValueTreeState& apvts;
     juce::String prefix;
     double sampleRate = 44100.0;
+    int maxBlockSize = 0;
 };
 
 //==============================================================================
@@ -143,12 +156,14 @@ public:
             bandParameters[i] = apvts.getRawParameterValue (prefix + Eq560::bandIds[i]);
     }
 
-    void prepare (double sr, int mb) override
+    void reset() override
     {
-        Module::prepare (sr, mb);
         updateBands();
-        eq.prepare (sr);
+        eq.prepare (sampleRate);
+        env = 0.0f;
         grDb.store (0.0f);
+        gainCompDb.store (0.0f);
+        outPeak.store (0.0f);
     }
 
 protected:
@@ -158,16 +173,32 @@ protected:
         const int n = buf.getNumSamples();
         const int nch = std::min (2, buf.getNumChannels());
 
+        const float thresh = get ("thresh");
+        const float ratio  = get ("ratio");
+        const float atkMs  = get ("attack");
+        const float relMs  = get ("release");
+        const float outG   = dbToGain (get ("out"));
+        const float aC = timeCoef (atkMs, sampleRate);
+        const float rC = timeCoef (relMs, sampleRate);
+        float maxGr = 0.0f;
+
         for (int i = 0; i < n; ++i)
         {
             eq.beginSample();
+            float pk = 0.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
                 const float s = (float) eq.processSample (ch, buf.getSample (ch, i));
                 buf.setSample (ch, i, apiConsoleColor (s));
+                pk = std::max (pk, std::abs (buf.getSample (ch, i)));
             }
+            env = smooth (env, gainReductionDb (gainToDb (pk), thresh, ratio, 2.0f), aC, rC);
+            maxGr = std::max (maxGr, env);
+            const float g = dbToGain (-env) * outG;
+            for (int ch = 0; ch < nch; ++ch)
+                buf.getWritePointer (ch)[i] *= g;
         }
-        grDb.store (0.0f);
+        grDb.store (maxGr);
     }
 
 private:
@@ -180,6 +211,7 @@ private:
 
     Eq560 eq;
     std::array<std::atomic<float>*, 10> bandParameters {};
+    float env = 0.0f;
 };
 
 //==============================================================================
@@ -188,7 +220,13 @@ class OptoModule : public Module
 {
 public:
     using Module::Module;
-    void prepare (double sr, int mb) override { Module::prepare (sr, mb); fast = slow = 0.0f; }
+    void reset() override
+    {
+        fast = slow = 0.0f;
+        grDb.store (0.0f);
+        gainCompDb.store (0.0f);
+        outPeak.store (0.0f);
+    }
 
 protected:
     void process (juce::AudioBuffer<float>& buf) override
@@ -233,7 +271,13 @@ class FetModule : public Module
 {
 public:
     using Module::Module;
-    void prepare (double sr, int mb) override { Module::prepare (sr, mb); env = 0.0f; }
+    void reset() override
+    {
+        env = 0.0f;
+        grDb.store (0.0f);
+        gainCompDb.store (0.0f);
+        outPeak.store (0.0f);
+    }
 
 protected:
     void process (juce::AudioBuffer<float>& buf) override
@@ -279,19 +323,23 @@ public:
         : Module (state, std::move (paramPrefix)),
           autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain")) {}
 
-    void prepare (double sr, int mb) override
+    void reset() override
     {
-        Module::prepare (sr, mb);
-        la = std::max (2, (int) std::ceil (0.0015 * sr));
-        for (auto& d : delay) d.assign ((size_t) la, 0.0f);
-        for (auto& d : dryDelay) d.assign ((size_t) la, 0.0f);
-        reqRing.assign ((size_t) la, 1.0f);
-        avgRing.assign ((size_t) la, 1.0f);
+        // Ring sizes follow the sample rate; resize only when the rate actually changed so a
+        // reset from the audio thread cannot allocate in the common case.
+        const int wanted = std::max (2, (int) std::ceil (0.0015 * sampleRate));
+        la = wanted;
+        for (auto& d : delay) if ((int) d.size() != la) d.assign ((size_t) la, 0.0f); else std::fill (d.begin(), d.end(), 0.0f);
+        for (auto& d : dryDelay) if ((int) d.size() != la) d.assign ((size_t) la, 0.0f); else std::fill (d.begin(), d.end(), 0.0f);
+        if ((int) reqRing.size() != la) reqRing.assign ((size_t) la, 1.0f); else std::fill (reqRing.begin(), reqRing.end(), 1.0f);
+        if ((int) avgRing.size() != la) avgRing.assign ((size_t) la, 1.0f); else std::fill (avgRing.begin(), avgRing.end(), 1.0f);
         sum = (double) la; wp = 0; relGain = 1.0f;
         dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
-        energyCoef = std::exp (-1.0 / (0.2 * sr));
-        compensationCoef = timeCoef (100.0f, sr);
+        energyCoef = std::exp (-1.0 / (0.2 * sampleRate));
+        compensationCoef = timeCoef (100.0f, sampleRate);
+        grDb.store (0.0f);
         gainCompDb.store (0.0f);
+        outPeak.store (0.0f);
     }
 
     int getLatencySamples() const override { return la - 1; }

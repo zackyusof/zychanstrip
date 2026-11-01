@@ -114,6 +114,15 @@ void RackStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 {
     juce::ScopedNoDenormals noDenormals;
     const int numSamples = buffer.getNumSamples();
+
+    // Operator RESET: clear every module's internal state on the audio thread, then snap the
+    // master smoother instead of gliding to the restored default.
+    if (resetRequested.exchange (false))
+    {
+        for (auto& m : modules) m->reset();
+        masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+    }
+
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
         buffer.clear (c, 0, numSamples);
 
@@ -170,6 +179,27 @@ void RackStripProcessor::setOrder (const std::array<int, NumModules>& o)
         p |= (uint32_t) id << (8 * i);
     }
     packedOrder.store (p);
+}
+
+//==============================================================================
+void RackStripProcessor::resetToDefaults()
+{
+    // Every registered parameter (module controls, master level and mix) returns to the
+    // default declared in createLayout(). Host automation sees real gestures.
+    for (auto* parameter : getParameters())
+    {
+        if (parameter == nullptr) continue;
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (parameter->getDefaultValue());
+        parameter->endChangeGesture();
+    }
+
+    setOrder (getDefaultOrder());
+    meters.reset();
+
+    // Module state (envelopes, EQ biquads, limiter delay/energy rings) is cleared by the next
+    // audio block, so this call never touches DSP state from the message thread.
+    resetRequested.store (true);
 }
 
 //==============================================================================

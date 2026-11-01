@@ -147,7 +147,8 @@ void MeterPanel::mouseDown (const MouseEvent& e)
     }
     if (resetBtn.contains (e.getPosition()))
     {
-        proc.getMeters().reset();
+        if (onReset) onReset();
+        else         proc.getMeters().reset();
         repaint();
     }
     else if (scaleBtn.contains (e.getPosition()))
@@ -293,14 +294,18 @@ void MeterPanel::paintHeader (Graphics& g)
     g.setColour (bronze);
     g.drawText (String ("<  ") + scaleName (scale) + "  >", scaleBtn, Justification::centred, false);
 
-    // RESET
-    g.setColour (bgInset);
-    g.fillRoundedRectangle (resetBtn.toFloat(), 2.0f);
-    g.setColour (bronze.withAlpha (0.45f));
-    g.drawRoundedRectangle (resetBtn.toFloat(), 2.0f, 1.0f);
-    g.setFont (sslSans (9.0f, true));
-    g.setColour (inkWhite);
-    g.drawText ("RESET", resetBtn, Justification::centred, false);
+    // RESET — same style as the rack/meter page toggle, not the back button
+    {
+        const Rectangle<float> rb = resetBtn.toFloat();
+        g.setGradientFill (ColourGradient (bronze, rb.getX(), rb.getY(),
+                                           bronzeDim, rb.getX(), rb.getBottom(), false));
+        g.fillRoundedRectangle (rb.reduced (2.0f), 2.0f);
+        g.setColour (Colours::white.withAlpha (0.22f));
+        g.drawRoundedRectangle (rb, 3.0f, 1.0f);
+        g.setFont (sslSans (9.0f, true));
+        g.setColour (inkWhite);
+        g.drawText ("RESET", resetBtn, Justification::centred, false);
+    }
 }
 
 void MeterPanel::paintMeters (Graphics& g)

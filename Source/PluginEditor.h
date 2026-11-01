@@ -26,6 +26,8 @@ public:
     void setMeterPageVisible (bool show) { showPage (show); }
     void pumpTimerForTest() { timerCallback(); }
     bool isMeterPageVisible() const { return metersShown; }
+    /** Test seam: perform the RESET action without synthesising a mouse event. */
+    void resetForTest() { resetRackToDefaults(); }
 
 private:
 
@@ -33,6 +35,8 @@ private:
     int slotForCentreX (int x) const;
     std::array<int, 4> orderWithDragged (int id, int slot) const;
     void layoutFor (const std::array<int, 4>& order, int skipId, bool animate);
+    /** RESET: every module back to its default control values, factory rack order, meters cleared. */
+    void resetRackToDefaults();
 
     RackStripProcessor& proc;
     std::unique_ptr<RackLookAndFeel> laf;
@@ -68,6 +72,19 @@ private:
     };
     PageToggle pageToggle;
     bool metersShown = false;
+
+    // Header reset button, styled like the rack/meter page toggle, sits left of master/dry-wet
+    class ResetButton : public juce::Component
+    {
+    public:
+        std::function<void()> onReset;
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
+    private:
+        bool armed = false;
+    };
+    ResetButton resetButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (RackStripEditor)
 };

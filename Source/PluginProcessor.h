@@ -34,8 +34,14 @@ public:
     void setStateInformation (const void*, int) override;
 
     // Rack order: order[slot] = module id. Thread-safe.
+    static std::array<int, NumModules> getDefaultOrder() { return { Console, Fet, Opto, Limiter }; }
     std::array<int, NumModules> getOrder() const;
     void setOrder (const std::array<int, NumModules>&);
+
+    /** Restore every parameter to its declared default, return the rack to the factory order
+        and clear all metering. Message thread only; the module DSP state itself is cleared on
+        the next audio block so the reset is sample-accurate and RT-safe. */
+    void resetToDefaults();
 
     float getGainReduction (int moduleId) const { return modules[(size_t) moduleId]->grDb.load(); }
 
@@ -56,6 +62,7 @@ private:
     // Default rack order is 560 EQ -> 1176 FET -> LA-2A opto -> Enhance.
     // ModuleId is Console=0, Opto=1, Fet=2, Limiter=3, so the slots are [0,2,1,3].
     std::atomic<uint32_t> packedOrder { 0x03010200u };
+    std::atomic<bool> resetRequested { false };
     RackMeters meters;
     juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
     std::atomic<float>* mixAmount = nullptr;

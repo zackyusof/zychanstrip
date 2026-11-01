@@ -203,6 +203,64 @@ void audioTests()
     proc.processBlock (empty, midi);
     check (true, "empty audio block accepted");
 }
+// RESET must be a full restore: every parameter back to its declared default, the factory rack
+// order, cleared meters and no stale DSP state left in the chain.
+void resetTests()
+{
+    RackStripProcessor proc;
+    prepare (proc, 2);
+
+    setParam (proc, "con_bypass", 1.0f);
+    setParam (proc, "con_eq_1k", 8.0f);
+    setParam (proc, "con_out", -6.0f);
+    setParam (proc, "opto_peak", 65.0f);
+    setParam (proc, "opto_mode", 1.0f);
+    setParam (proc, "fet_input", 12.0f);
+    setParam (proc, "fet_ratio", 4.0f);
+    setParam (proc, "fet_bypass", 1.0f);
+    setParam (proc, "lim_gain", 9.0f);
+    setParam (proc, "lim_ceiling", -6.0f);
+    setParam (proc, "lim_auto_gain", 0.0f);
+    setParam (proc, "master_level", -12.0f);
+    setParam (proc, "master_mix", 40.0f);
+    proc.setOrder ({ 3, 1, 2, 0 });
+    check (proc.getOrder() != RackStripProcessor::getDefaultOrder(), "custom settings applied before reset");
+
+    proc.resetToDefaults();
+
+    bool everyParameterDefault = true;
+    juce::String drifted;
+    for (auto* p : proc.getParameters())
+    {
+        if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-6f)
+        {
+            everyParameterDefault = false;
+            drifted << p->getName (64) << " ";
+        }
+    }
+    check (everyParameterDefault, "reset returns every parameter to its default " + drifted);
+    check (proc.getOrder() == RackStripProcessor::getDefaultOrder(), "reset restores the factory rack order");
+
+    // A loud block just before the reset must not leak through the limiter's look-ahead delay
+    // afterwards: the reset is consumed at the start of the next block.
+    juce::AudioBuffer<float> loud (2, 512), silent (2, 512);
+    for (int ch = 0; ch < 2; ++ch)
+        juce::FloatVectorOperations::fill (loud.getWritePointer (ch), 0.9f, 512);
+    silent.clear();
+    juce::MidiBuffer midi;
+    for (int i = 0; i < 4; ++i) proc.processBlock (loud, midi);
+    check (proc.getMeters().peakDb (0) > -20.0f, "loud block reaches the meters before reset");
+
+    proc.resetToDefaults();
+    silent.clear();
+    proc.processBlock (silent, midi);
+    bool silentOutput = true;
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i) silentOutput &= std::abs (silent.getSample (ch, i)) < 1.0e-6f;
+    check (silentOutput, "reset clears stale DSP state before the next block is processed");
+    check (proc.getMeters().peakDb (0) <= -100.0f, "reset clears the metering tap");
+}
+
 // Renders the SSL-style metering page with real audio pushed through the chain so the
 // meters, scope and correlation show genuine measurements rather than resting values.
 void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
@@ -296,6 +354,26 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
 
 void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce::File& output)
 {
+    // RESET button: the header button must restore module defaults, not just the meters.
+    auto* reset = findNamed (editor, "Reset");
+    check (reset != nullptr, "reset button component exists");
+    if (reset != nullptr)
+    {
+        setParam (proc, "con_eq_1k", 9.0f);
+        proc.setOrder ({ 3, 2, 1, 0 });
+        editor.resized();
+        const auto time = juce::Time::getCurrentTime();
+        const juce::Point<float> pt (reset->getWidth() * 0.5f, reset->getHeight() * 0.5f);
+        juce::MouseEvent ev (juce::Desktop::getInstance().getMainMouseSource(), pt,
+            juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, reset, reset, time, pt, time, 1, false);
+        reset->mouseDown (ev);
+        reset->mouseUp (ev);
+        check (std::abs (proc.apvts.getRawParameterValue ("con_eq_1k")->load()) < 1.0e-6f,
+               "RESET button restores module parameters");
+        check (proc.getOrder() == RackStripProcessor::getDefaultOrder(),
+               "RESET button restores the rack order");
+    }
+
     auto* master = dynamic_cast<juce::Slider*> (findNamed (editor, "Master level"));
     check (master != nullptr, "master slider found");
     if (master != nullptr)
@@ -383,6 +461,7 @@ public:
         eqTests();
         limiterTests();
         audioTests();
+        resetTests();
         RackStripProcessor proc;
         auto editor = std::unique_ptr<RackStripEditor> (static_cast<RackStripEditor*> (proc.createEditor()));
         newEditorTests (proc, *editor);

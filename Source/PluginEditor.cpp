@@ -21,6 +21,24 @@ R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 20"><rect x="0.75"
 
 Font fnt (float h, bool bold = true) { return Font (FontOptions (h, bold ? Font::bold : Font::plain)); }
 
+/** Rack/meter page-toggle style button: gradient-filled rounded rect with a
+    metallic rim and centred text, matching PageToggle in PluginEditor. */
+void paintRackMeterButton (Graphics& g, Rectangle<float> r, bool active, const String& text)
+{
+    const Colour on  { 0xff57d4c2 };
+    const Colour off { 0xff15181a };
+    const Colour onLow  { 0xff2f9d8f };
+    const Colour offLow { 0xff0a0c0d };
+    g.setGradientFill (ColourGradient (active ? on : off, r.getX(), r.getY(),
+                                       active ? onLow : offLow, r.getX(), r.getBottom(), false));
+    g.fillRoundedRectangle (r.reduced (2.0f), 2.0f);
+    g.setColour (Colours::white.withAlpha (active ? 0.55f : 0.22f));
+    g.drawRoundedRectangle (r, 3.0f, 1.0f);
+    g.setFont (fnt (10.0f, true));
+    g.setColour (active ? Colour (0xff06201d) : Colour (0xff9aa0a4));
+    g.drawText (text, r.toNearestInt(), Justification::centred, false);
+}
+
 namespace pal
 {
 const Colour chassisTop     { 0xff202428 };
@@ -1002,15 +1020,20 @@ public:
         g.setColour (Colours::black.withAlpha (0.65f));
         g.fillRoundedRectangle (cap.translated (2.0f, 3.5f), 4.0f);
 
-        // Machined chrome body
-        g.setGradientFill (ColourGradient (Colour (0xfff6fdff), cap.getX() + 2.0f, cap.getY(),
-                                           Colour (0xff708896), cap.getRight() - 2.0f, cap.getY(), false));
+// Machined brushed-silver fader cap (SSL/P&G style)
+        g.setGradientFill (ColourGradient (Colour (0xffe8edf2), cap.getX() + 2.0f, cap.getY(),
+                                            Colour (0xff8a96a3), cap.getRight() - 2.0f, cap.getY(), false));
         g.fillRoundedRectangle (cap, 4.0f);
+
+        // Ribbed grip ridges
+        g.setColour (Colour (0xff5a6470).withAlpha (0.6f));
+        for (float ry = cap.getY() + 6.0f; ry < cap.getBottom() - 6.0f; ry += 3.0f)
+            g.drawHorizontalLine ((int) ry, cap.getX() + 3.0f, cap.getRight() - 3.0f);
 
         // Ergonomic center finger concave well
         const Rectangle<float> well (cap.getX() + 4.0f, cap.getY() + 6.0f, cap.getWidth() - 8.0f, cap.getHeight() - 12.0f);
-        g.setGradientFill (ColourGradient (Colour (0xff8ea4b0), well.getX(), well.getY(),
-                                           Colour (0xff485a66), well.getX(), well.getBottom(), false));
+        g.setGradientFill (ColourGradient (Colour (0xffb0bac6), well.getX(), well.getY(),
+                                            Colour (0xff6a7480), well.getX(), well.getBottom(), false));
         g.fillRoundedRectangle (well, 3.0f);
 
         // Bright white central index line
@@ -1897,6 +1920,8 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     meterPanel = std::make_unique<MeterPanel> (proc);
     // The meter page carries its own way back to the rack, mirroring the RACK/METER switch.
     meterPanel->onBack = [this] { showPage (false); };
+    // RESET means the same thing on both pages: modules back to defaults, meters cleared.
+    meterPanel->onReset = [this] { resetRackToDefaults(); };
     meterPanel->setName ("Meter page");
     addChildComponent (*meterPanel);
     addAndMakeVisible (canvas);
@@ -1942,6 +1967,10 @@ RackStripEditor::RackStripEditor (RackStripProcessor& p)
     pageToggle.setBounds (kMargin + 232, 10, 84, 30);
     pageToggle.onChanged = [this] (bool showMeters) { showPage (showMeters); };
     canvas.addAndMakeVisible (pageToggle);
+
+    resetButton.setName ("Reset");
+    resetButton.onReset = [this] { resetRackToDefaults(); };
+    canvas.addAndMakeVisible (resetButton);
     masterAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_level", masterFader);
 
     // Dry/wet mix, sits after the master volume in the signal path
@@ -2011,6 +2040,8 @@ void RackStripEditor::resized()
     // Master + dry/wet share the header right side; mix sits below the master level.
     masterFader.setBounds (kEditorW - kMargin - 160, 8, 148, 16);
     mixFader.setBounds (kEditorW - kMargin - 160, 26, 148, 14);
+    // Reset button sits on the header, left of the master fader.
+    resetButton.setBounds (kEditorW - kMargin - 160 - 150, 10, 84, 30);
     if (meterPanel != nullptr && metersShown)
         meterPanel->setBounds (getLocalBounds());
 
@@ -2039,6 +2070,22 @@ void RackStripEditor::showPage (bool meters)
     if (meterPanel != nullptr) meterPanel->setVisible (meters);
     canvas.setVisible (! meters);
     resized();
+    repaint();
+}
+
+void RackStripEditor::resetRackToDefaults()
+{
+    proc.resetToDefaults();
+
+    // The rack order may have moved back to the factory slots, so re-place every face plate.
+    draggingId = -1;
+    previewOrder = proc.getOrder();
+    for (auto& panel : panels) panel->cancelDrag();
+    layoutFor (previewOrder, -1, true);
+
+    // Parameter attachments refresh the sliders/buttons; repaint the hand-drawn value readouts.
+    for (auto& panel : panels) panel->repaint();
+    if (meterPanel != nullptr) meterPanel->repaint();
     repaint();
 }
 
@@ -2080,6 +2127,30 @@ void RackStripEditor::PageToggle::mouseDown (const MouseEvent&)
     meters = ! meters;
     repaint();
     if (onChanged) onChanged (meters);
+}
+
+void RackStripEditor::ResetButton::paint (Graphics& g)
+{
+    paintRackMeterButton (g, getLocalBounds().toFloat(), armed, "RESET");
+}
+
+void RackStripEditor::ResetButton::mouseDown (const MouseEvent&)
+{
+    armed = true;
+    repaint();
+}
+
+void RackStripEditor::ResetButton::mouseUp (const MouseEvent& e)
+{
+    if (armed && getLocalBounds().contains (e.getPosition()))
+    {
+        armed = false;
+        repaint();
+        if (onReset) onReset();
+        return;
+    }
+    armed = false;
+    repaint();
 }
 
 void RackStripEditor::paint (Graphics& g)

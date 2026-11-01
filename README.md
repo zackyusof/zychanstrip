@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.0-green.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.0.1-green.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)

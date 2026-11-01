@@ -8,10 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Version numbers, tags and releases are the maintainer's decision; this file records what changed, not what
 has been published.
 
-## [Unreleased]
+## [1.0.1] — 2026-11-01
 
-Changes on `main` since the `v1.0` tag. The version is unchanged at **1.0.0** — no release has been cut
-for this batch.
+Bug-fix release over `v1.0`. No parameter, state-format or ABI changes; the JUCE 8 → 9 upgrade is
+source-compatible for hosts.
 
 ### Fixed
 
@@ -90,9 +90,9 @@ First tagged release (`v1.0`, commit `abc9872`).
 
 ### Known issues at 1.0.0
 
-- `rackstrip-mix-phase` — dry/wet phase error (fixed on `main`, see Unreleased).
-- `rackstrip-autogain-order` — order-dependent Auto Gain (fixed on `main`, see Unreleased).
+- `rackstrip-mix-phase` — dry/wet phase error (fixed in 1.0.1).
+- `rackstrip-autogain-order` — order-dependent Auto Gain (fixed in 1.0.1).
 - `rackstrip-verify-quit-crash` — quit-crash hardening unverified against a repro.
 - `rackstrip-rta-averaging` — the RTA averaging control is cosmetic.
 - `rackstrip-vu-ppm` — analog VU/PPM panel not built.
-- `rackstrip-dupe-au` — duplicate AU install (closed on `main`, see Unreleased).
+- `rackstrip-dupe-au` — duplicate AU install (closed in 1.0.1).

@@ -2131,7 +2131,22 @@ void RackStripEditor::PageToggle::mouseDown (const MouseEvent&)
 
 void RackStripEditor::ResetButton::paint (Graphics& g)
 {
-    paintRackMeterButton (g, getLocalBounds().toFloat(), armed, "RESET");
+    const auto r = getLocalBounds().toFloat();
+
+    if (! armed)
+    {
+        paintRackMeterButton (g, r, false, "RESET");
+        return;
+    }
+
+    // Pressed: the plate goes matte black so the button visibly bottoms out.
+    g.setColour (Colours::black);
+    g.fillRoundedRectangle (r.reduced (2.0f), 2.0f);
+    g.setColour (Colours::white.withAlpha (0.22f));
+    g.drawRoundedRectangle (r, 3.0f, 1.0f);
+    g.setFont (fnt (10.0f, true));
+    g.setColour (Colours::white.withAlpha (0.80f));
+    g.drawText ("RESET", r.toNearestInt(), Justification::centred, false);
 }
 
 void RackStripEditor::ResetButton::mouseDown (const MouseEvent&)

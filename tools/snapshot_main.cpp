@@ -366,7 +366,20 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
         const juce::Point<float> pt (reset->getWidth() * 0.5f, reset->getHeight() * 0.5f);
         juce::MouseEvent ev (juce::Desktop::getInstance().getMainMouseSource(), pt,
             juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, reset, reset, time, pt, time, 1, false);
+
+        // Pressed face must be black, not the teal page-toggle highlight.
         reset->mouseDown (ev);
+        auto pressed = reset->createComponentSnapshot (reset->getLocalBounds());
+        int black = 0, total = 0;
+        for (int y = 6; y < pressed.getHeight() - 6; ++y)
+            for (int x = 6; x < pressed.getWidth() - 6; ++x)
+            {
+                const auto c = pressed.getPixelAt (x, y);
+                ++total;
+                if (c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) ++black;
+            }
+        check (total > 0 && black > total / 2, "pressed RESET face is black");
+
         reset->mouseUp (ev);
         check (std::abs (proc.apvts.getRawParameterValue ("con_eq_1k")->load()) < 1.0e-6f,
                "RESET button restores module parameters");

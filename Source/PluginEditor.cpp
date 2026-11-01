@@ -237,7 +237,8 @@ struct KnobScale
     bool minorTicks = true;
 };
 
-void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale& sc, Colour c)
+void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale& sc, Colour c,
+                 float scale = 1.0f)
 {
     const int total = sc.minorTicks ? (sc.majorTicks - 1) * 4 + 1 : sc.majorTicks;
     for (int i = 0; i < total; ++i)
@@ -245,16 +246,19 @@ void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale
         const bool major = (i % 4) == 0;
         const float a = sc.a0 + (sc.a1 - sc.a0) * (float) i / (float) (total - 1);
         const Point<float> dir (std::sin (a), -std::cos (a));
-        const float len = major ? 6.5f : 3.5f;
+        const float len = (major ? 6.5f : 3.5f) * scale;
+        const float shadowY = 0.8f * scale;
 
         // Shadow under tick
         g.setColour (Colours::black.withAlpha (0.50f));
-        g.drawLine (Line<float> (centre + dir * radius + Point<float> (0.0f, 0.8f),
-                                 centre + dir * (radius + len) + Point<float> (0.0f, 0.8f)), major ? 1.5f : 1.0f);
+        g.drawLine (Line<float> (centre + dir * radius + Point<float> (0.0f, shadowY),
+                                 centre + dir * (radius + len) + Point<float> (0.0f, shadowY)),
+                    (major ? 1.5f : 1.0f) * scale);
 
         // Crisp tick mark
         g.setColour (c.withAlpha (major ? 0.95f : 0.58f));
-        g.drawLine (Line<float> (centre + dir * radius, centre + dir * (radius + len)), major ? 1.5f : 1.0f);
+        g.drawLine (Line<float> (centre + dir * radius, centre + dir * (radius + len)),
+                    (major ? 1.5f : 1.0f) * scale);
     }
 }
 
@@ -269,13 +273,14 @@ inline float vuDeflectionForDb (float db)
 }
 
 /** Authentic large circular vintage VU meter (Teletronix LA-2A style).
-    Features precision broadcast ballistic markings, red overload sector,
-    counter-balanced knife-edge needle, molded bakelite bezel with quadrant screws,
-    and incandescent tungsten illumination. */
+    The scale arc is dropped and widened so it sweeps the whole upper half of the glass,
+    the broadcast numerals ride just outside it and the three legends are spread from the
+    top of the face down to the needle pivot, leaving no dead paper at the bottom. */
 void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
 {
     const auto c = r.getCentre();
     const float R_meter = r.getWidth() * 0.5f;
+    const float H = r.getHeight();
 
     // 1. Heavy moulded black bakelite bezel with quadrant mounting screws
     const Rectangle<float> bezel = r.expanded (4.0f);
@@ -341,13 +346,24 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.setColour (Colour (0x30000000));
     g.drawEllipse (r.reduced (0.8f), 1.8f);
 
-    // 3. Dial scale arcs & markings
-    const Point<float> pivot (c.x, r.getY() + r.getHeight() * 0.75f);
-    const float R = r.getHeight() * 0.49f;
-    const float a0 = -0.74f; // approx -42.4 deg
-    const float a1 =  0.74f; // approx +42.4 deg
+    // 3. Dial scale arcs & markings — dropped pivot, wider sweep
+    const Point<float> pivot (c.x, r.getY() + H * 0.80f);
+    const float R = H * 0.55f;
+    const float a0 = -0.90f; // approx -51.6 deg
+    const float a1 =  0.90f; // approx +51.6 deg
     auto angleForT = [&] (float t) { return a0 + (a1 - a0) * t; };
     auto dirForA = [] (float a) { return Point<float> (std::sin (a), -std::cos (a)); };
+
+    // Broadcast numerals sit outside the arc; keep them inside the glass rim near the ends
+    const float safeR = R_meter - 13.0f;
+    auto numeralPos = [&] (float radius, const Point<float>& dir)
+    {
+        Point<float> p = pivot + dir * radius;
+        const Point<float> fromC = p - c;
+        const float distC = fromC.getDistanceFromOrigin();
+        if (distC > safeR && distC > 0.0f) p = c + fromC * (safeR / distC);
+        return p;
+    };
 
     // Upper VU arc: black from -20 to 0 VU (t=0.08..0.90)
     Path blackArc;
@@ -386,9 +402,12 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
         g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk);
         g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + (isRed ? 6.5f : 5.5f))), isRed ? 1.6f : 1.2f);
 
-        // Numeral
-        g.setFont (fnt (8.0f, true));
-        const Point<float> labelPos = pivot + d * (R + 11.5f);
+        // Numerals: black scale rides outside the arc, the overload group stacks inward
+        // at the red end so it stays inside the glass instead of clipping on the rim.
+        g.setFont (fnt (isRed ? 7.0f : 8.0f, true));
+        const Point<float> labelPos = isRed
+            ? pivot + d * (R - 8.0f - (m.db - 1.0f) * 9.0f)
+            : numeralPos (R + 9.0f, d);
         g.drawText (m.txt, Rectangle<float> (22.0f, 10.0f).withCentre (labelPos), Justification::centred, false);
     }
 
@@ -415,27 +434,28 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
         g.setColour (pal::needleInk.withAlpha (0.75f));
         g.drawLine (Line<float> (pivot + d * (R_sec - 3.5f), pivot + d * R_sec), 0.85f);
 
-        g.setFont (fnt (6.5f, false));
-        const Point<float> pPos = pivot + d * (R_sec - 8.5f);
+        g.setFont (fnt (7.0f, false));
+        // the 100 % mark would sit under the red overload block — blank it, the needle covers it
+        const Point<float> pPos = pivot + d * (R_sec - 10.0f);
         g.drawText (String (p), Rectangle<float> (18.0f, 8.0f).withCentre (pPos), Justification::centred, false);
     }
 
-    // Typography
-    g.setFont (fnt (7.0f, true));
-    g.setColour (pal::needleInk.withAlpha (0.75f));
-    g.drawText ("TELETRONIX", Rectangle<float> (80.0f, 10.0f).withCentre ({ c.x, pivot.y - R * 0.56f }), Justification::centred, false);
+    // Typography: spread from the top of the face down to the pivot
+    g.setFont (fnt (9.5f, true));
+    g.setColour (pal::needleInk.withAlpha (0.78f));
+    g.drawText ("TELETRONIX", Rectangle<float> (110.0f, 12.0f).withCentre ({ c.x, r.getY() + H * 0.13f }), Justification::centred, false);
 
-    g.setFont (Font (FontOptions ("Georgia", 15.0f, Font::bold)));
+    g.setFont (Font (FontOptions ("Georgia", 20.0f, Font::bold)));
     g.setColour (pal::needleInk.withAlpha (0.92f));
-    g.drawText ("VU", Rectangle<float> (50.0f, 16.0f).withCentre ({ c.x, pivot.y - R * 0.38f }), Justification::centred, false);
+    g.drawText ("VU", Rectangle<float> (60.0f, 26.0f).withCentre ({ c.x, r.getY() + H * 0.55f }), Justification::centred, false);
 
     g.setFont (fnt (7.5f, true));
     g.setColour (pal::needleInk.withAlpha (0.80f));
-    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (pivot + dirForA (angleForT (0.04f)) * (R + 11.5f)), Justification::centred, false);
+    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (numeralPos (R + 9.0f, dirForA (angleForT (-0.05f)))), Justification::centred, false);
 
-    g.setFont (fnt (8.5f, true));
+    g.setFont (fnt (11.0f, true));
     g.setColour (pal::needleInk.withAlpha (0.88f));
-    g.drawText ("REDUCTION", Rectangle<float> (100.0f, 12.0f).withCentre ({ c.x, pivot.y - R * 0.20f }), Justification::centred, false);
+    g.drawText ("REDUCTION", Rectangle<float> (120.0f, 14.0f).withCentre ({ c.x, r.getY() + H * 0.70f }), Justification::centred, false);
 
     // 4. Knife-edge needle with drop shadow and counter-weight tail
     const float needleAngle = a0 + (a1 - a0) * jlimit (0.02f, 1.0f, deflection);
@@ -491,8 +511,9 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
 }
 
 /** Authentic rectangular vintage Simpson 29T meter (UREI 1176 style).
-    Features precision ballistic scale with red overload sector, signature lower
-    molded bakelite apron mask, ZERO ADJ slotted calibration screw, and long sweeping needle. */
+    The illuminated dial window fills the moulded housing edge to edge — only the glass lip
+    and the moulded apron remain dark — with the signature lower bakelite mask, the ZERO ADJ
+    calibration screw re-centred on the expanded window and the long sweeping needle. */
 void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
 {
     const auto c = r.getCentre();
@@ -505,23 +526,12 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
                                        Colour (0xff111215), r.getRight(), r.getBottom(), false));
     g.fillRoundedRectangle (r, 5.0f);
 
-    // Bezel specular border
-    g.setColour (Colours::white.withAlpha (0.22f));
-    g.drawRoundedRectangle (r.reduced (0.8f), 5.0f, 1.2f);
-    g.setColour (Colour (0xff0a0b0d));
-    g.drawRoundedRectangle (r.reduced (2.5f), 4.0f, 1.0f);
+    // 2. Illuminated dial window: the housing minus the glass lip only
+    const Rectangle<float> inner = r.reduced (1.5f);
 
-    // Stepped inner metallic chrome/silver rim
-    const Rectangle<float> chromeRim = r.reduced (4.0f);
-    g.setGradientFill (ColourGradient (Colour (0xffcbced2), chromeRim.getX(), chromeRim.getY(),
-                                       Colour (0xff484a4e), chromeRim.getRight(), chromeRim.getBottom(), false));
-    g.drawRoundedRectangle (chromeRim, 3.5f, 1.5f);
-
-    // 2. Illuminated dial window
-    const Rectangle<float> inner = r.reduced (6.5f);
     g.saveState();
     Path winClip;
-    winClip.addRoundedRectangle (inner, 3.0f);
+    winClip.addRoundedRectangle (inner, 3.5f);
     g.reduceClipRegion (winClip);
 
     // Warm aged buff dial paper
@@ -534,12 +544,12 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
                                        Colours::transparentWhite, c.x, inner.getBottom(), true));
     g.fillRect (inner);
 
-    // Recessed frame inner shadow
+    // Recessed lip shadow cast onto the paper (light source: top)
     g.setGradientFill (ColourGradient (Colour (0x60000000), c.x, inner.getY(),
                                        Colours::transparentBlack, c.x, inner.getY() + 18.0f, false));
     g.fillRect (inner);
     g.setColour (Colour (0x40000000));
-    g.drawRoundedRectangle (inner, 3.0f, 1.2f);
+    g.drawRoundedRectangle (inner, 3.5f, 1.2f);
 
     // 3. Dial scale arcs & markings
     const Point<float> pivot (c.x, inner.getBottom() + 4.0f);
@@ -586,9 +596,10 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
         g.setColour (isRed ? Colour (0xffc82418) : pal::needleInk);
         g.drawLine (Line<float> (pivot + d * R, pivot + d * (R + (isRed ? 6.0f : 5.0f))), isRed ? 1.6f : 1.2f);
 
-        // Numeral
-        g.setFont (fnt (7.5f, true));
-        const Point<float> labelPos = pivot + d * (R + 10.5f);
+        // Numerals: the overload group fans radially outward so +1/+2/+3 stay legible
+        const float labelR = R + 10.5f + (isRed ? m.db * 10.0f : 0.0f);
+        g.setFont (fnt (isRed ? 7.0f : 7.5f, true));
+        const Point<float> labelPos = pivot + d * labelR;
         g.drawText (m.txt, Rectangle<float> (22.0f, 10.0f).withCentre (labelPos), Justification::centred, false);
     }
 
@@ -621,17 +632,17 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     }
 
     // Typography: positioned clearly in the visible window above the mask
-    g.setFont (Font (FontOptions ("Georgia", 15.0f, Font::bold)));
+    g.setFont (Font (FontOptions ("Georgia", 16.0f, Font::bold)));
     g.setColour (pal::needleInk.withAlpha (0.92f));
-    g.drawText ("VU", Rectangle<float> (46.0f, 16.0f).withCentre ({ c.x, inner.getY() + 66.0f }), Justification::centred, false);
+    g.drawText ("VU", Rectangle<float> (46.0f, 18.0f).withCentre ({ c.x, inner.getY() + inner.getHeight() * 0.52f }), Justification::centred, false);
 
     g.setFont (fnt (7.5f, true));
     g.setColour (pal::needleInk.withAlpha (0.80f));
-    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (pivot + dirForA (angleForT (0.04f)) * (R + 10.5f)), Justification::centred, false);
+    g.drawText ("dB", Rectangle<float> (18.0f, 10.0f).withCentre (pivot + dirForA (angleForT (-0.045f)) * (R + 10.5f)), Justification::centred, false);
 
     g.setFont (fnt (8.0f, true));
     g.setColour (pal::needleInk.withAlpha (0.85f));
-    g.drawText ("GR", Rectangle<float> (30.0f, 10.0f).withCentre ({ c.x, inner.getY() + 84.0f }), Justification::centred, false);
+    g.drawText ("GR", Rectangle<float> (30.0f, 10.0f).withCentre ({ c.x, inner.getY() + inner.getHeight() * 0.62f }), Justification::centred, false);
 
     // 4. Needle with drop shadow emerging from behind lower mask
     const float needleAngle = a0 + (a1 - a0) * jlimit (0.02f, 1.0f, deflection);
@@ -657,8 +668,8 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.setColour (pal::needleInk);
     g.fillPath (needle, AffineTransform::rotation (needleAngle).translated (pivot.x, pivot.y));
 
-    // 5. Signature lower moulded black bakelite mask / apron covering movement
-    const float maskY = inner.getBottom() - inner.getHeight() * 0.26f;
+    // 5. Signature lower moulded black bakelite mask / apron covering the movement
+    const float maskY = inner.getBottom() - inner.getHeight() * 0.25f;
     Path mask;
     mask.startNewSubPath (inner.getX() - 1.0f, inner.getBottom() + 1.0f);
     mask.lineTo (inner.getX() - 1.0f, maskY);
@@ -676,8 +687,8 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.setColour (Colours::white.withAlpha (0.28f));
     g.strokePath (maskEdge, PathStrokeType (1.0f));
 
-    // Iconic ZERO ADJ mechanical calibration screw
-    const Point<float> screwPos (c.x, inner.getBottom() - 14.0f);
+    // Iconic ZERO ADJ mechanical calibration screw, centred on the expanded window
+    const Point<float> screwPos (c.x, inner.getBottom() - 16.0f);
     g.setColour (Colours::black.withAlpha (0.65f));
     g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (screwPos.translated (0.0f, 0.5f)));
 
@@ -693,9 +704,9 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
 
     g.setFont (fnt (6.5f, true));
     g.setColour (Colour (0xff888e94));
-    g.drawText ("ZERO ADJ", Rectangle<float> (46.0f, 8.0f).withCentre ({ c.x, inner.getBottom() - 4.5f }), Justification::centred, false);
+    g.drawText ("ZERO ADJ", Rectangle<float> (46.0f, 8.0f).withCentre ({ c.x, inner.getBottom() - 6.0f }), Justification::centred, false);
 
-    // 6. Flat polished glass reflection
+    // 6. Flat polished glass reflection, top-down key light
     Path glare;
     glare.startNewSubPath (inner.getX() + 10.0f, inner.getY());
     glare.lineTo (inner.getX() + 50.0f, inner.getY());
@@ -707,6 +718,15 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.fillPath (glare);
 
     g.restoreState();
+
+    // 7. Glass lip and polished bezel, stroked after the paper so the frame stays crisp
+    g.setGradientFill (ColourGradient (Colour (0xffcbced2), r.getX(), r.getY(),
+                                       Colour (0xff484a4e), r.getRight(), r.getBottom(), false));
+    g.drawRoundedRectangle (r.reduced (0.7f), 4.6f, 1.4f);
+    g.setColour (Colours::white.withAlpha (0.22f));
+    g.drawRoundedRectangle (r.reduced (0.2f), 5.0f, 1.0f);
+    g.setColour (Colour (0xff0a0b0d));
+    g.drawRoundedRectangle (r.reduced (2.2f), 4.0f, 0.9f);
 }
 
 /** Engraved metallic equipment badge. */
@@ -802,7 +822,10 @@ public:
     {
         auto r = Rectangle<float> ((float) x, (float) y, (float) w, (float) h).reduced (2.0f);
         const float d = jmin (r.getWidth(), r.getHeight());
-        auto b = r.withSizeKeepingCentre (d, d);
+        // knobScale shrinks the drawn hardware about its own centre (the component bounds,
+        // and therefore the centre axis, never move). Used by the 1176 ATTACK/RELEASE pair.
+        const float knobScale = (float) s.getProperties().getWithDefault ("knobScale", 1.0f);
+        auto b = r.withSizeKeepingCentre (d * knobScale, d * knobScale);
         const auto c = b.getCentre();
         const auto cap = s.findColour (Slider::rotarySliderFillColourId);
 
@@ -810,7 +833,7 @@ public:
         const float angle = a0 + pos * (a1 - a0);
 
         // ---- Skirt: heavy machined ring with scale marks
-        const float skirtR = d * 0.50f;
+        const float skirtR = d * knobScale * 0.50f;
         g.setColour (Colours::black.withAlpha (0.55f));
         g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c).translated (0.0f, 2.0f));
 
@@ -821,10 +844,10 @@ public:
         g.drawEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c), 0.8f);
 
         KnobScale sc; sc.a0 = a0; sc.a1 = a1;
-        paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.85f));
+        paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.85f), knobScale);
 
         // ---- Knob Body
-        const float bodyR = d * 0.355f;
+        const float bodyR = d * knobScale * 0.355f;
         auto body = Rectangle<float> (bodyR * 2.0f, bodyR * 2.0f).withCentre (c);
 
         g.setColour (Colours::black.withAlpha (0.65f));
@@ -1337,11 +1360,13 @@ protected:
         std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> att;
     };
 
-    void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white)
+    void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white,
+                    float scale = 1.0f)
     {
         k.slider.setRotaryParameters (MathConstants<float>::pi * 1.22f, MathConstants<float>::pi * 2.78f, true);
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
+        k.slider.getProperties().set ("knobScale", scale);
         k.slider.setNumDecimalPlacesToDisplay (1);
         k.slider.setPopupDisplayEnabled (true, true, nullptr);
         k.slider.setDoubleClickReturnValue (true, k.slider.getDoubleClickReturnValue());
@@ -1582,9 +1607,12 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Authentic large round circular VU meter scaled to fill frame nicely
+        // Authentic large round circular VU meter, housing at 85 % of its old diameter about
+        // the same centre point on the plate.
         const int vw = jmin (c.getWidth() - 8, 214);
-        vu = { c.getCentreX() - vw / 2, c.getY() + 4, vw, vw };
+        const Rectangle<int> fullVu { c.getCentreX() - vw / 2, c.getY() + 4, vw, vw };
+        const int nvw = roundToInt ((float) vw * 0.85f);
+        vu = fullVu.withSizeKeepingCentre (nvw, nvw);
 
         const int kw = 84;
         const int ky = 320;
@@ -1657,8 +1685,10 @@ public:
     {
         setupKnob (input,  "input",  pal::silverCap, Colour (0xff202020));
         setupKnob (output, "output", pal::silverCap, Colour (0xff202020));
-        setupKnob (atk,    "attack", pal::silverCap, Colour (0xff202020));
-        setupKnob (rel,    "release",pal::silverCap, Colour (0xff202020));
+        // ATTACK / RELEASE sit at 80 % of the other knobs; the component bounds (and so the
+        // centre axis) stay exactly where they were, only the drawn hardware shrinks.
+        setupKnob (atk,    "attack", pal::silverCap, Colour (0xff202020), 0.8f);
+        setupKnob (rel,    "release",pal::silverCap, Colour (0xff202020), 0.8f);
 
         ratioParam = proc.apvts.getParameter ("fet_ratio");
         const char* names[] { "4:1", "8:1", "12:1", "20:1", "ALL" };
@@ -1708,8 +1738,13 @@ protected:
         caption (g, "INPUT",  { input.slider.getBounds().getCentreX() - 50, input.slider.getY() - 20, 100, 18 }, 13.0f);
         caption (g, "OUTPUT", { output.slider.getBounds().getCentreX() - 50, output.slider.getY() - 20, 100, 18 }, 13.0f);
         caption (g, "RATIO",  ratioLabel, 14.0f);
-        caption (g, "ATTACK", { atk.slider.getBounds().getCentreX() - 50, atk.slider.getY() - 18, 100, 18 }, 13.0f);
-        caption (g, "RELEASE",{ rel.slider.getBounds().getCentreX() - 50, rel.slider.getY() - 18, 100, 18 }, 13.0f);
+        // ATTACK / RELEASE captions scale with their 80 % knobs and stay on the knob axis
+        const int atkCx = atk.slider.getBounds().getCentreX();
+        const int relCx = rel.slider.getBounds().getCentreX();
+        const int atkCy = atk.slider.getBounds().getCentreY();
+        const int relCy = rel.slider.getBounds().getCentreY();
+        caption (g, "ATTACK",  { atkCx - 40, atkCy - 44, 80, 15 }, 10.4f);
+        caption (g, "RELEASE", { relCx - 40, relCy - 44, 80, 15 }, 10.4f);
 
         // Vintage UREI-style wordmark in the top centre
         engraveText (g, "urei", { content.getX(), content.getY() - 6, content.getWidth(), 22 },

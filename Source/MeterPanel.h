@@ -14,6 +14,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
 
     /** Called from the editor's 30 Hz timer. */
     void tick();
@@ -40,6 +41,10 @@ private:
     float normForScale (float db) const;
 
     RackStripProcessor& proc;
+
+    /** Which momentary header button is currently held, so it can draw black while pressed. */
+    enum class Pressed { None, Back, Reset };
+    Pressed pressed = Pressed::None;
 
     int scale = 0;
     juce::Rectangle<int> resetBtn, scaleBtn, backBtn, headerBar, meterArea, footerArea, scopeArea, corrArea, rtaArea;

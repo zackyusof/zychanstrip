@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "MeterPanel.h"
+#include "UiStyle.h"
 
 using namespace juce;
 
@@ -20,24 +21,6 @@ constexpr const char* kZyMarkSvg =
 R"svg(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 20"><rect x="0.75" y="0.75" width="18.5" height="18.5" rx="3" fill="#35262b" stroke="#f06470" stroke-width="1.5"/><path d="M4.5 5h11l-11 10h11" fill="none" stroke="#f06470" stroke-width="2.25" stroke-linecap="square" stroke-linejoin="miter"/><rect x="24.75" y="0.75" width="18.5" height="18.5" rx="3" fill="#19322f" stroke="#57d4c2" stroke-width="1.5"/><path d="m28.5 5 5.5 5 5.5-5M34 10v5" fill="none" stroke="#57d4c2" stroke-width="2.25" stroke-linecap="square" stroke-linejoin="miter"/></svg>)svg";
 
 Font fnt (float h, bool bold = true) { return Font (FontOptions (h, bold ? Font::bold : Font::plain)); }
-
-/** Rack/meter page-toggle style button: gradient-filled rounded rect with a
-    metallic rim and centred text, matching PageToggle in PluginEditor. */
-void paintRackMeterButton (Graphics& g, Rectangle<float> r, bool active, const String& text)
-{
-    const Colour on  { 0xff57d4c2 };
-    const Colour off { 0xff15181a };
-    const Colour onLow  { 0xff2f9d8f };
-    const Colour offLow { 0xff0a0c0d };
-    g.setGradientFill (ColourGradient (active ? on : off, r.getX(), r.getY(),
-                                       active ? onLow : offLow, r.getX(), r.getBottom(), false));
-    g.fillRoundedRectangle (r.reduced (2.0f), 2.0f);
-    g.setColour (Colours::white.withAlpha (active ? 0.55f : 0.22f));
-    g.drawRoundedRectangle (r, 3.0f, 1.0f);
-    g.setFont (fnt (10.0f, true));
-    g.setColour (active ? Colour (0xff06201d) : Colour (0xff9aa0a4));
-    g.drawText (text, r.toNearestInt(), Justification::centred, false);
-}
 
 namespace pal
 {
@@ -2131,22 +2114,8 @@ void RackStripEditor::PageToggle::mouseDown (const MouseEvent&)
 
 void RackStripEditor::ResetButton::paint (Graphics& g)
 {
-    const auto r = getLocalBounds().toFloat();
-
-    if (! armed)
-    {
-        paintRackMeterButton (g, r, false, "RESET");
-        return;
-    }
-
-    // Pressed: the plate goes matte black so the button visibly bottoms out.
-    g.setColour (Colours::black);
-    g.fillRoundedRectangle (r.reduced (2.0f), 2.0f);
-    g.setColour (Colours::white.withAlpha (0.22f));
-    g.drawRoundedRectangle (r, 3.0f, 1.0f);
-    g.setFont (fnt (10.0f, true));
-    g.setColour (Colours::white.withAlpha (0.80f));
-    g.drawText ("RESET", r.toNearestInt(), Justification::centred, false);
+    // Teal at rest like RACK/METER, matte black while held.
+    rackui::paintPill (g, getLocalBounds().toFloat(), armed, "RESET");
 }
 
 void RackStripEditor::ResetButton::mouseDown (const MouseEvent&)

@@ -33,6 +33,34 @@ void prepare (RackStripProcessor& proc, int channels, double sr = 48000.0)
            "channel layout configured");
     proc.prepareToPlay (sr, 512);
 }
+// Fraction of opaque, fully black pixels inside `area` of a component snapshot.
+double blackFraction (const juce::Image& img, juce::Rectangle<int> area)
+{
+    int black = 0, total = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+        {
+            if (! img.getBounds().contains (x, y)) continue;
+            const auto c = img.getPixelAt (x, y);
+            ++total;
+            if (c.getAlpha() > 200 && c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) ++black;
+        }
+    return total > 0 ? (double) black / (double) total : 0.0;
+}
+// Fraction of the page-toggle teal inside `area` of a component snapshot.
+double tealFraction (const juce::Image& img, juce::Rectangle<int> area)
+{
+    int teal = 0, total = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+        {
+            if (! img.getBounds().contains (x, y)) continue;
+            const auto c = img.getPixelAt (x, y);
+            ++total;
+            if (c.getAlpha() > 200 && c.getRed() < 140 && c.getGreen() > 130 && c.getBlue() > 110) ++teal;
+        }
+    return total > 0 ? (double) teal / (double) total : 0.0;
+}
 void processConstant (RackStripProcessor& proc, juce::AudioBuffer<float>& buffer)
 {
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
@@ -310,17 +338,42 @@ void meterPageTests (RackStripProcessor& proc, RackStripEditor& editor, const ju
         else
             check (! editor.isMeterPageVisible(), "clicking METER again returns to the rack");
 
-        // The meter page must offer its own way back: click BACK and confirm we return to the
-        // rack. Only meaningful while the page is actually open (hidden components are not
-        // enumerated by getChildren()).
+        // The meter page must offer its own way back: press BACK (black while held) and confirm
+        // the release returns us to the rack. Only meaningful while the page is actually open
+        // (hidden components are not enumerated by getChildren()).
         if (auto* meter = editor.isMeterPageVisible() ? findNamed (editor, "Meter page") : nullptr)
         {
-            const auto t3 = juce::Time::getCurrentTime();
-            const juce::Point<float> p3 (24.0f, 29.0f);   // inside the BACK button
-            juce::MouseEvent ev3 (juce::Desktop::getInstance().getMainMouseSource(), p3,
-                juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, meter, meter,
-                t3, p3, t3, 1, false);
-            meter->mouseDown (ev3);
+            const auto hb = meter->getLocalBounds().reduced (14, 12).removeFromTop (34);
+            const juce::Rectangle<int> backSample (hb.getX() + 4, hb.getCentreY() - 8, 10, 16);
+            const juce::Rectangle<int> resetSample (hb.getCentreX() - 40, hb.getCentreY() - 8, 10, 16);
+            auto meterEvent = [&] (juce::Point<float> p)
+            {
+                const auto t = juce::Time::getCurrentTime();
+                return juce::MouseEvent (juce::Desktop::getInstance().getMainMouseSource(), p,
+                    juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, meter, meter, t, p, t, 1, false);
+            };
+
+            // Idle: both buttons carry the page-toggle teal.
+            auto idleFace = meter->createComponentSnapshot (meter->getLocalBounds());
+            check (tealFraction (idleFace, backSample) > 0.5, "meter page BACK is teal at rest");
+            check (tealFraction (idleFace, resetSample) > 0.5, "meter page RESET is teal at rest");
+
+            // RESET goes black while held, then fires the full defaults restore on release.
+            proc.setOrder ({ 3, 2, 1, 0 });
+            const juce::Point<float> resetPoint ((float) resetSample.getCentreX(), (float) resetSample.getCentreY());
+            meter->mouseDown (meterEvent (resetPoint));
+            auto heldReset = meter->createComponentSnapshot (meter->getLocalBounds());
+            check (blackFraction (heldReset, resetSample) > 0.5, "meter page RESET is black while pressed");
+            meter->mouseUp (meterEvent (resetPoint));
+            check (proc.getOrder() == RackStripProcessor::getDefaultOrder(),
+                   "meter page RESET fires the full defaults restore");
+
+            // BACK goes black while held and returns to the rack on release.
+            const auto backPoint = backSample.getCentre().toFloat();
+            meter->mouseDown (meterEvent (backPoint));
+            auto heldFace = meter->createComponentSnapshot (meter->getLocalBounds());
+            check (blackFraction (heldFace, backSample) > 0.5, "meter page BACK is black while pressed");
+            meter->mouseUp (meterEvent (backPoint));
             check (! editor.isMeterPageVisible(), "BACK on the meter page returns to the rack");
         }
         else if (pass == 1)
@@ -367,18 +420,15 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
         juce::MouseEvent ev (juce::Desktop::getInstance().getMainMouseSource(), pt,
             juce::ModifierKeys::leftButtonModifier, 1, 0, 0, 0, 0, reset, reset, time, pt, time, 1, false);
 
-        // Pressed face must be black, not the teal page-toggle highlight.
+        const auto face = reset->getLocalBounds().reduced (6);
+        // Idle face carries the page-toggle teal, like RACK/METER.
+        auto idle = reset->createComponentSnapshot (reset->getLocalBounds());
+        check (tealFraction (idle, face) > 0.5, "idle RESET face is teal");
+
+        // Held face drops to matte black instead of a highlight.
         reset->mouseDown (ev);
         auto pressed = reset->createComponentSnapshot (reset->getLocalBounds());
-        int black = 0, total = 0;
-        for (int y = 6; y < pressed.getHeight() - 6; ++y)
-            for (int x = 6; x < pressed.getWidth() - 6; ++x)
-            {
-                const auto c = pressed.getPixelAt (x, y);
-                ++total;
-                if (c.getRed() == 0 && c.getGreen() == 0 && c.getBlue() == 0) ++black;
-            }
-        check (total > 0 && black > total / 2, "pressed RESET face is black");
+        check (blackFraction (pressed, face) > 0.5, "pressed RESET face is black");
 
         reset->mouseUp (ev);
         check (std::abs (proc.apvts.getRawParameterValue ("con_eq_1k")->load()) < 1.0e-6f,

@@ -20,7 +20,7 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
    every order and bypass combination.
 4. **The metering tap is read-only** and sits after master gain and dry/wet mix.
 5. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
-   `RESULT 216/216`). The Linux container can compile the DSP research harness in
+   `RESULT 222/222`). The Linux container can compile the DSP research harness in
    `tools/research/` but cannot build the AU.
 6. Commit and push every change (`main` on `https://git.zyusof.net/zack/rackstrip`).
    Keep the harness green before pushing; record what you could not verify.

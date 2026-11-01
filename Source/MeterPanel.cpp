@@ -1,4 +1,5 @@
 #include "MeterPanel.h"
+#include "UiStyle.h"
 
 using namespace juce;
 
@@ -140,20 +141,26 @@ void MeterPanel::resized()
 
 void MeterPanel::mouseDown (const MouseEvent& e)
 {
-    if (backBtn.contains (e.getPosition()))
+    if (backBtn.contains (e.getPosition()))       { pressed = Pressed::Back;  repaint(); return; }
+    if (resetBtn.contains (e.getPosition()))      { pressed = Pressed::Reset; repaint(); return; }
+    if (scaleBtn.contains (e.getPosition()))        setScale ((scale + 1) % 4);
+}
+
+void MeterPanel::mouseUp (const MouseEvent& e)
+{
+    const auto was = pressed;
+    pressed = Pressed::None;
+    repaint();
+
+    // Momentary buttons fire on release, and only when released over the same button.
+    if (was == Pressed::Back && backBtn.contains (e.getPosition()))
     {
         if (onBack) onBack();
-        return;
     }
-    if (resetBtn.contains (e.getPosition()))
+    else if (was == Pressed::Reset && resetBtn.contains (e.getPosition()))
     {
         if (onReset) onReset();
         else         proc.getMeters().reset();
-        repaint();
-    }
-    else if (scaleBtn.contains (e.getPosition()))
-    {
-        setScale ((scale + 1) % 4);
     }
 }
 
@@ -265,14 +272,8 @@ void MeterPanel::paintHeader (Graphics& g)
     g.setColour (bronze);
     g.fillRect (headerBar.getX(), headerBar.getBottom() - 1, headerBar.getWidth(), 1);
 
-    // Return-to-rack button, mirroring the RACK/METER switch on the processor page
-    g.setColour (bgInset);
-    g.fillRoundedRectangle (backBtn.toFloat(), 2.0f);
-    g.setColour (bronze.withAlpha (0.45f));
-    g.drawRoundedRectangle (backBtn.toFloat(), 2.0f, 1.0f);
-    g.setFont (sslSans (9.0f, true));
-    g.setColour (inkWhite);
-    g.drawText ("<  RACK", backBtn, Justification::centred, false);
+    // Return-to-rack button: same teal/black momentary pill as the rack page controls.
+    rackui::paintPill (g, backBtn.toFloat(), pressed == Pressed::Back, "<  RACK", 9.0f);
 
     g.setFont (Font (FontOptions (15.0f, Font::bold)));
     const String brand = "S O L I D   S T A T E   L O G I C";
@@ -294,18 +295,8 @@ void MeterPanel::paintHeader (Graphics& g)
     g.setColour (bronze);
     g.drawText (String ("<  ") + scaleName (scale) + "  >", scaleBtn, Justification::centred, false);
 
-    // RESET — same style as the rack/meter page toggle, not the back button
-    {
-        const Rectangle<float> rb = resetBtn.toFloat();
-        g.setGradientFill (ColourGradient (bronze, rb.getX(), rb.getY(),
-                                           bronzeDim, rb.getX(), rb.getBottom(), false));
-        g.fillRoundedRectangle (rb.reduced (2.0f), 2.0f);
-        g.setColour (Colours::white.withAlpha (0.22f));
-        g.drawRoundedRectangle (rb, 3.0f, 1.0f);
-        g.setFont (sslSans (9.0f, true));
-        g.setColour (inkWhite);
-        g.drawText ("RESET", resetBtn, Justification::centred, false);
-    }
+    // RESET — same teal/black momentary pill as the rack header
+    rackui::paintPill (g, resetBtn.toFloat(), pressed == Pressed::Reset, "RESET", 9.0f);
 }
 
 void MeterPanel::paintMeters (Graphics& g)

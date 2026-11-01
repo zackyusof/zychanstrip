@@ -1694,8 +1694,8 @@ protected:
         for (int i = 0; i < 5; ++i)
             ratioBtns[(size_t) i].setBounds (c.getX() + 4 + i * (bw + 4), 192, bw, 26);
 
-        // Scaled-up rectangular Simpson 29T VU meter filling negative space
-        meter = { c.getCentreX() - 108, 230, 216, 154 };
+        // Span the faceplate edge to edge, independent of the control-area inset.
+        meter = { plateBounds().getX(), 230, plateBounds().getWidth(), 154 };
 
         const int ay = meter.getBottom() + 32;
         const int akw = 80;

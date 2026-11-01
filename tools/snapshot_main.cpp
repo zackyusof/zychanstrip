@@ -437,6 +437,33 @@ void editorTests (RackStripProcessor& proc, RackStripEditor& editor, const juce:
                "RESET button restores the rack order");
     }
 
+    // Enhance module faders: every black channel carries a very thin white rim.
+    for (auto id : { "limiter gain", "limiter ceiling", "limiter release", "limiter enhance" })
+    {
+        auto* fader = findNamed (editor, id);
+        check (fader != nullptr, juce::String ("enhance fader found: ") + id);
+        if (fader == nullptr) continue;
+        auto face = fader->createComponentSnapshot (fader->getLocalBounds());
+        const int top = face.getHeight() * 8 / 100, bottom = face.getHeight() * 92 / 100;
+        // Ink = alpha-weighted brightness. The band just outside the black stroke must be lit by
+        // the white rim while the empty plate further out stays dark. Rows where the fader cap
+        // (or a tick) occupies that outer band are skipped, so any cap position is allowed.
+        auto ink = [] (juce::Colour c) { return (double) c.getBrightness() * (double) c.getAlpha() / 255.0; };
+        int cleanRows = 0, litRows = 0;
+        for (int y = top; y < bottom; ++y)
+        {
+            double rim = 0.0, outside = 0.0;
+            for (int x = 18; x <= 19; ++x) rim = juce::jmax (rim, ink (face.getPixelAt (x, y)));
+            for (int x = 21; x <= 24; ++x) outside = juce::jmax (outside, ink (face.getPixelAt (x, y)));
+            if (outside > 0.05) continue;
+            ++cleanRows;
+            if (rim > 0.20) ++litRows;
+        }
+        check (cleanRows > 40 && litRows >= cleanRows * 98 / 100,
+               juce::String ("thin white rim on ") + id + " channel ("
+                   + juce::String (litRows) + "/" + juce::String (cleanRows) + " rows lit)");
+    }
+
     auto* master = dynamic_cast<juce::Slider*> (findNamed (editor, "Master level"));
     check (master != nullptr, "master slider found");
     if (master != nullptr)

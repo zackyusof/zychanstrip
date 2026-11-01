@@ -55,7 +55,7 @@ Verify:
 ```bash
 python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reuses Ninja flags)
 ./build/snapshot/snapshot /tmp/shots # runs all tests, writes PNGs
-# expect: RESULT 222/222 passed
+# expect: RESULT 230/230 passed
 ```
 
 **Where the code lives**
@@ -73,7 +73,7 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 **Before you change anything**
 
 1. `git pull` — work from the latest `main`, not a stale copy.
-2. Run the harness first and confirm 222/222 so you know your baseline.
+2. Run the harness first and confirm 230/230 so you know your baseline.
 3. After ANY change: `ninja -C build` then re-run the harness. The build auto-installs,
    so a passing harness means the installed plugin is the code you just wrote.
 4. Commit and push.
@@ -112,6 +112,8 @@ Gain, peak reduction, and a compress/limit `mode` switch. Program-dependent rele
 
 ### 4. Enhance / master limiter (`Limiter`, prefix `lim_`)
 Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and a stereo-linked auto-gain that matches its own output level back to its input so you hear tone changes rather than loudness shifts.
+
+Its four fader channels (threshold, ceiling, release, enhance) are recessed black slots drawn with a very thin white rim (`RackLookAndFeel::drawChromeFader`), so the black slider lines stay readable against the dark plate.
 
 **Default rack order is 560 → 1176 → LA-2A → Enhance** (`[0,2,1,3]`). Any saved session keeps its own order — the default only applies to fresh instances.
 
@@ -239,7 +241,7 @@ python3 tools/build_snapshot.py
 ./build/snapshot/snapshot <output-dir>
 ```
 
-It runs **222 checks** and writes PNGs to `<output-dir>`:
+It runs **230 checks** and writes PNGs to `<output-dir>`:
 
 - **DSP** (`tools/dsp_checks.h`): EQ band response, limiter behaviour, auto-gain, channel handling, master gain ramp, state roundtrip, legacy-session migration, dry/wet mix law.
 - **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment inside every panel at 864×608 / 1080×760 / 1620×1140, reorder by grip drag, aspect-ratio lock.

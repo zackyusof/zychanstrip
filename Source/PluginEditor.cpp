@@ -981,6 +981,11 @@ public:
         g.setColour (Colours::white.withAlpha (0.15f));
         g.drawLine (track.getX() + 0.5f, track.getY(), track.getX() + 0.5f, track.getBottom(), 1.0f);
 
+        // Very thin white rim along the black channel edge: keeps the fader slot readable
+        // against the dark plate without thickening the line.
+        g.setColour (Colours::white.withAlpha (0.62f));
+        g.drawRoundedRectangle (track.expanded (0.8f), 4.8f, 0.7f);
+
         // Felt center travel guide
         g.setColour (Colour (0xff000000));
         g.fillRect (Rectangle<float> (cx - 1.0f, (float) y + 4.0f, 2.0f, (float) h - 8.0f));

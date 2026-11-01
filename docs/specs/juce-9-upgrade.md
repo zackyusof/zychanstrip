@@ -153,12 +153,13 @@ second network fetch); the committed pin is the normal `FetchContent` tag, which
 | REQ-5 | TST-5 | `ls` both Components dirs | PASS — only `/Library` exists |
 | REQ-6 | TST-6 | grep docs | PASS — README badge/requirements + AGENTS.md say JUCE 9 |
 
-Known gap — **`auval` cannot validate this host**: `auval -a` lists 30 Apple AUs and **0 of the several
-hundred third-party AUs** installed in `/Library/Audio/Plug-Ins/Components`, i.e. third-party AU
-registration is broken host-wide (pre-existing; `tools/build_snapshot.py` already documents "without a
-working AudioComponentRegistrar"). Cache reset and registrar restart (`launchctl kickstart` is SIP-blocked)
-did not change it. Verification therefore uses the direct factory load test above, which exercises the
-same construction path `auval` would.
+Known gap — **AU validation is the user's job (user directive 2026-11-01)**: `auval`/`pluginval` are not
+run and their result is not reported. This host cannot validate third-party AUs in any case — `auval -a`
+lists 30 Apple AUs and **0 of the several hundred third-party AUs** installed in
+`/Library/Audio/Plug-Ins/Components`, i.e. registration is broken host-wide (pre-existing;
+`tools/build_snapshot.py` already documents "without a working AudioComponentRegistrar"). Verification
+therefore stops at the direct factory load test above, which exercises the same construction path `auval`
+would; the user confirms in their host.
 
 ## 5. Deploy
 

@@ -238,6 +238,17 @@ rm -rf ~/Library/Audio/Plug-Ins/Components/zychanstrip.component
 Two copies of the same subtype confuse the AU registrar, so the user copy is removed.
 `rackstrip-dupe-au` is closed by this policy.
 
+**Validation is the user's job.** A build is done when the AU is installed and *proven loadable*:
+
+- the bundle is in place, owned `root:wheel`;
+- `codesign -v` passes;
+- `PlistBuddy` shows `aufx` / `Zych` / `ZYUS` and the expected version;
+- the component constructs through its own `zychanstripAUFactory` (`Open`/`Close` return 0).
+
+Do **not** run `auval` or `pluginval` and do not report their result — the user validates in their host.
+On this Mac `auval` cannot validate any third-party AU anyway: it lists Apple's 30 and none of the several
+hundred third-party components installed here, so a missing entry says nothing about this build.
+
 **Build directory gotcha.** `build/` is configured against an absolute source path. If you move or rename the repo, `ninja` fails with `rebuilding 'build.ninja': subcommand failed`. Fix: `rm -rf build` and re-run `cmake -S . -B build ...` from the new path.
 
 ---

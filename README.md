@@ -33,6 +33,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 - [Development & Verification Tools](#development--verification-tools)
 - [Known issues / next work](#known-issues--next-work)
 - [Conventions & traps](#conventions--traps)
+- [Changelog](#changelog)
 
 ---
 
@@ -329,3 +330,11 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 - Remote: `https://git.zyusof.net/zack/rackstrip` (Gitea). `main` is the trunk.
 - Commit and push every change; verify with `git status` and `git log --oneline origin/main..HEAD` (empty = pushed).
 - Keep the harness green before pushing.
+
+---
+
+## Changelog
+
+Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
+and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
+Version numbers, tags and releases remain the maintainer's decision.

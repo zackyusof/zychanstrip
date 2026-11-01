@@ -5,7 +5,7 @@ The top-level `README.md` is the handover document; read it first.
 
 ## What this is
 
-A JUCE 8 Audio Unit (`aufx`/`Zych`/`ZYUS`) presenting four classic outboard modules in a
+A JUCE 9 Audio Unit (`aufx`/`Zych`/`ZYUS`) presenting four classic outboard modules in a
 re-orderable rack, plus a metering page. All DSP lives in `Source/Modules.h` (with the
 EQ core in `Source/Eq560.h`); there is no other audio path.
 

@@ -55,10 +55,10 @@ const Colour btnOn          { 0xff296eb4 };
 
 void drawZyLogo (Graphics& g, Rectangle<float> bounds)
 {
-    static std::unique_ptr<Drawable> drawable = []() {
-        if (auto xml = XmlDocument::parse (kZyMarkSvg))
-            return Drawable::createFromSVG (*xml);
-        return std::unique_ptr<Drawable>();
+    // JUCE 9 removed Drawable::createFromSVG (const XmlElement&); createFromSVGString
+    // parses the markup directly and returns null when the document is invalid.
+    static std::unique_ptr<Drawable> drawable = []() -> std::unique_ptr<Drawable> {
+        return Drawable::createFromSVGString (kZyMarkSvg);
     }();
     if (drawable != nullptr)
         drawable->drawWithin (g, bounds, RectanglePlacement::centred | RectanglePlacement::onlyReduceInSize, 1.0f);

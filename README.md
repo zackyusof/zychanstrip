@@ -9,7 +9,7 @@
 [![Version](https://img.shields.io/badge/Version-1.0-green.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
-[![Framework](https://img.shields.io/badge/Built%20with-JUCE%208-green.svg)](#architecture)
+[![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
 [![Zero Bitmaps](https://img.shields.io/badge/GUI-100%25%20Procedural%20Vector-purple.svg)](#architecture)
 
 **zychanstrip** is four classic outboard processors in one rack plus a Studio-Grade metering page, delivered as a high-performance **Audio Unit (AU)** effect.
@@ -204,7 +204,7 @@ Host output
 
 ## Build and Install
 
-**Requirements (verified on this machine):** macOS with Xcode Command Line Tools (`xcode-select --install`), CMake ≥ 3.22, Ninja, Apple Silicon (arm64 target is forced in `CMakeLists.txt`). JUCE 8.0.4 is fetched automatically by `FetchContent` into `build/_deps/juce-src` on first configure.
+**Requirements (verified on this machine):** macOS with Xcode Command Line Tools (`xcode-select --install`), CMake ≥ 3.22, Ninja, Apple Silicon (arm64 target is forced in `CMakeLists.txt`). JUCE 9.0.4 is fetched automatically by `FetchContent` into `build/_deps/juce-src` on first configure.
 
 ```bash
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"   # pip-installed cmake/ninja
@@ -225,7 +225,18 @@ To also install system-wide (both locations work; the system copy wins):
                    /Library/Audio/Plug-Ins/Components/zychanstrip.component
 ```
 
-> **Note:** installing to BOTH locations is a known source of confusion — the AU registrar sees two copies of the same subtype. Prefer one. Tracked as `rackstrip-dupe-au`.
+**Install policy (2026-11-01): exactly one copy, system-wide.** `COPY_PLUGIN_AFTER_BUILD`
+always writes the user copy, so a release install is two steps:
+
+```bash
+sudo /usr/bin/ditto build/zychanstrip_artefacts/Release/AU/zychanstrip.component \
+     /Library/Audio/Plug-Ins/Components/zychanstrip.component
+sudo chown -R root:wheel /Library/Audio/Plug-Ins/Components/zychanstrip.component
+rm -rf ~/Library/Audio/Plug-Ins/Components/zychanstrip.component
+```
+
+Two copies of the same subtype confuse the AU registrar, so the user copy is removed.
+`rackstrip-dupe-au` is closed by this policy.
 
 **Build directory gotcha.** `build/` is configured against an absolute source path. If you move or rename the repo, `ninja` fails with `rebuilding 'build.ninja': subcommand failed`. Fix: `rm -rf build` and re-run `cmake -S . -B build ...` from the new path.
 
@@ -271,7 +282,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `rackstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. Awaiting repro steps. |
 | `rackstrip-rta-averaging` | RTA averaging is cosmetic | The label changes but the FFT smoothing factor is hard-coded (`0.28` in `Meters.h`). |
 | `rackstrip-vu-ppm` | Missing panel | The spec's analog VU/PPM pair with needle ballistics is not built. |
-| `rackstrip-dupe-au` | Duplicate AU install | Same component in `~/Library` and `/Library`. |
+| `rackstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01** | Policy is now one copy, system-wide; the user-level copy was removed. |
 
 Closed work is recorded with evidence; anything unverified stays open deliberately.
 

@@ -19,10 +19,18 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
 3. **Latency is reported once, from `prepareToPlay()`**, and must stay constant across
    every order and bypass combination.
 4. **The metering tap is read-only** and sits after master gain and dry/wet mix.
-5. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
-   `RESULT 246/246`). The Linux container can compile the DSP research harness in
+5. **Install GLOBAL ONLY — never user space (2026-11-03).** `COPY_PLUGIN_AFTER_BUILD` is
+   `FALSE`: a build installs nothing. The one install path is `tools/install_global.sh`
+   (or `ninja -C build install-global`), which writes
+   `/Library/Audio/Plug-Ins/Components/zychanstrip.component`, chowns `root:wheel`, verifies
+   the installed md5 against the built one and deletes any
+   `~/Library/Audio/Plug-Ins/Components/` copy. Never `ditto`/`cp` into `~/Library` — not for
+   a quick test, not "both locations work". A stale user copy shadows a newer global build and
+   re-opens `zychanstrip-dupe-au`.
+6. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
+   `RESULT 253/253`). The Linux container can compile the DSP research harness in
    `tools/research/` but cannot build the AU.
-6. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
+7. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
    Keep the harness green before pushing; record what you could not verify.
 
 ## Documentation duties

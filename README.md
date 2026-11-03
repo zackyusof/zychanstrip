@@ -214,31 +214,35 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build
 ```
 
-`COPY_PLUGIN_AFTER_BUILD` is on, so a successful build installs to:
+`COPY_PLUGIN_AFTER_BUILD` is **off**: a build installs nothing anywhere. The bundle is left in
 
 ```
-~/Library/Audio/Plug-Ins/Components/zychanstrip.component
+build/zychanstrip_artefacts/Release/AU/zychanstrip.component
 ```
 
-To also install system-wide (both locations work; the system copy wins):
+**Install policy (2026-11-03, user directive): GLOBAL ONLY — never user space.**
+One command installs system-wide, chowns `root:wheel`, verifies the installed md5 against the
+built one, and removes any `~/Library` copy:
 
 ```bash
-/usr/bin/ditto ~/Library/Audio/Plug-Ins/Components/zychanstrip.component \
-                   /Library/Audio/Plug-Ins/Components/zychanstrip.component
+tools/install_global.sh          # or: ninja -C build install-global
 ```
 
-**Install policy (2026-11-01): exactly one copy, system-wide.** `COPY_PLUGIN_AFTER_BUILD`
-always writes the user copy, so a release install is two steps:
+`tools/install_global.sh` is the only sanctioned install path. It refuses to source from or write
+to `~/Library/Audio/Plug-Ins`, and fails if more than one copy exists afterwards. Two bundles of
+the same subtype confuse the AudioComponentRegistrar, and a stale user copy silently shadows a
+newer global build — which is exactly how `zychanstrip-dupe-au` came back once.
 
 ```bash
+# what the script does, in full
 sudo /usr/bin/ditto build/zychanstrip_artefacts/Release/AU/zychanstrip.component \
      /Library/Audio/Plug-Ins/Components/zychanstrip.component
 sudo chown -R root:wheel /Library/Audio/Plug-Ins/Components/zychanstrip.component
 rm -rf ~/Library/Audio/Plug-Ins/Components/zychanstrip.component
 ```
 
-Two copies of the same subtype confuse the AU registrar, so the user copy is removed.
-`zychanstrip-dupe-au` is closed by this policy.
+Never install to `~/Library/Audio/Plug-Ins/Components/` — not "just to test", not "both locations
+work". A build only lands in `build/`; installing means `tools/install_global.sh`.
 
 **Validation is the user's job.** A build is done when the AU is installed and *proven loadable*:
 
@@ -309,7 +313,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `zychanstrip-verify-quit-crash` | Unverified crash fix | A crash at app quit (`MessageQueue::post` on a null mutex) was hardened in `fb3cb3f` but never reproduced locally. The editor destructor now also clears every `this`-capturing callback (`MeterPanel::onBack/onReset`, page toggle, reset button, panel drag hooks) before those members are released. Still awaiting repro steps. |
 | `zychanstrip-rta-averaging` | RTA averaging is cosmetic | The label changes but the FFT smoothing factor is hard-coded (`0.28` in `Meters.h`). |
 | `zychanstrip-vu-ppm` | Missing panel | The spec's analog VU/PPM pair with needle ballistics is not built. |
-| `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01** | Policy is now one copy, system-wide; the user-level copy was removed. |
+| `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
 
 Closed work is recorded with evidence; anything unverified stays open deliberately.
 

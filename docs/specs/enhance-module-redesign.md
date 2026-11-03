@@ -158,7 +158,7 @@ The design reference is preserved in the repository at:
 
 - Files to modify: `Source/PluginEditor.h`, `Source/PluginEditor.cpp`.
 - Build command: `ninja -C build`.
-- Artifact: `~/Library/Audio/Plug-Ins/Components/zychanstrip.component`.
+- Artifact: `build/zychanstrip_artefacts/Release/AU/zychanstrip.component` (a build installs nothing).
 
 ---
 
@@ -178,7 +178,10 @@ The design reference is preserved in the repository at:
 
 ## 5. Deploy
 
-- Target installation path: `~/Library/Audio/Plug-Ins/Components/zychanstrip.component`.
+- Target installation path: `/Library/Audio/Plug-Ins/Components/zychanstrip.component` — **global
+  only, never `~/Library`** (policy 2026-11-03). Use `tools/install_global.sh` (or
+  `ninja -C build install-global`); it installs system-wide, chowns `root:wheel`, verifies md5 and
+  removes any user-domain copy.
 - Rollback: `git checkout HEAD~1 -- Source/PluginEditor.cpp Source/PluginEditor.h`.
 
 ---

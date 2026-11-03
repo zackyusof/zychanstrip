@@ -12,6 +12,14 @@ has been published.
 
 ### Changed
 
+- **Install wiring is global-only.** `COPY_PLUGIN_AFTER_BUILD` is now `FALSE`, so a build no longer
+  copies the AU into `~/Library/Audio/Plug-Ins/Components` (JUCE's default). The single sanctioned
+  install path is the new `tools/install_global.sh` / `ninja -C build install-global`, which installs
+  to `/Library/Audio/Plug-Ins/Components/zychanstrip.component`, chowns `root:wheel`, verifies the
+  installed md5 against the built artefact and deletes any user-domain copy. Two bundles of one
+  subtype confuse the AudioComponentRegistrar and a stale user copy shadows a newer global build.
+  No parameter, state, DSP or GUI change.
+
 - **Project renamed** from RackStrip to ZychanStrip, repo included (`zack/zychanstrip` on Gitea). Code
   identifiers follow: `RackStripProcessor` → `ZychanStripProcessor`, `RackStripEditor` → `ZychanStripEditor`,
   the snapshot harness reports `ZychanStripSnapshot`. No parameter ID, range, default, state schema, bundle

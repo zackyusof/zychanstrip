@@ -32,7 +32,13 @@ juce_add_plugin(zychanstrip
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
-    COPY_PLUGIN_AFTER_BUILD TRUE
+    # Install policy (2026-11-03): GLOBAL ONLY.
+    # Never copy into ~/Library/Audio/Plug-Ins — two bundles of the same AU subtype
+    # confuse the registrar, and the user copy silently shadows a newer global build.
+    # Builds therefore install nowhere; `tools/install_global.sh` (or `ninja
+    # install-global`) is the ONLY install path and it targets /Library + removes
+    # any user-space copy.
+    COPY_PLUGIN_AFTER_BUILD FALSE
     AU_MAIN_TYPE kAudioUnitType_Effect
     VST3_CATEGORIES Fx Dynamics EQ)
 
@@ -66,4 +72,12 @@ if(APPLE)
         HEADER_FILE_ONLY TRUE
         MACOSX_PACKAGE_LOCATION Resources)
     target_sources(zychanstrip_AU PRIVATE THIRD_PARTY_NOTICES.md)
+
+    # Global-only installer. Builds never write to ~/Library; this target is the one
+    # sanctioned path into /Library/Audio/Plug-Ins/Components (asks for sudo itself).
+    add_custom_target(install-global
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/tools/install_global.sh"
+        DEPENDS zychanstrip_AU
+        USES_TERMINAL
+        COMMENT "Installing zychanstrip AU system-wide (global only, user space refused)")
 endif()

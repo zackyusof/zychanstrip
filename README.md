@@ -116,7 +116,7 @@ The Gain and Peak Reduction knobs use the Davies 1470/Daka-Ware face, with a cor
 ### 4. Enhance / master limiter (`Limiter`, prefix `lim_`)
 Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and a stereo-linked auto-gain that matches its own output level back to its input so you hear tone changes rather than loudness shifts.
 
-Its four fader channels (threshold, ceiling, release, enhance) are recessed black slots drawn with a very thin white rim (`RackLookAndFeel::drawChromeFader`), so the black slider lines stay readable against the dark plate.
+Its four fader channels (threshold, ceiling, release, enhance) sit inside one shared, meter-style recessed faceplate around the full 2×2 bank. The plate has a dark metallic bezel, black inset, and opposing light/shadow bevels; individual channels retain their narrow recessed slots (`LimiterPanel::paintFaceBase`, `RackLookAndFeel::drawChromeFader`).
 
 **Default rack order is 560 → 1176 → LA-2A → Enhance** (`[0,2,1,3]`). Any saved session keeps its own order — the default only applies to fresh instances.
 
@@ -379,6 +379,11 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 ---
 
 ## Changelog
+
+### 2026-11-03 — Limiter fader bank bezel
+
+- Added one shared meter-style recessed frame around the limiter's complete 2×2 fader bank; individual faders remain unframed within it.
+- Preserved all controls, parameter IDs, ranges, defaults, and DSP behavior. Build/install evidence is recorded in the task report.
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.

@@ -1173,10 +1173,19 @@ public:
         g.setColour (Colours::white.withAlpha (0.15f));
         g.drawLine (track.getX() + 0.5f, track.getY(), track.getX() + 0.5f, track.getBottom(), 1.0f);
 
-        // Very thin white rim along the black channel edge: keeps the fader slot readable
-        // against the dark plate without thickening the line.
-        g.setColour (Colours::white.withAlpha (0.62f));
-        g.drawRoundedRectangle (track.expanded (0.8f), 4.8f, 0.7f);
+        // Fine inner lip catches light at the top-left while the dark opposite
+        // edge keeps the slot visibly sunk into the framed well.
+        const auto lip = track.expanded (0.8f);
+        g.setColour (Colours::white.withAlpha (0.34f));
+        g.drawLine (lip.getX() + 2.0f, lip.getY() + 1.0f,
+                    lip.getRight() - 2.0f, lip.getY() + 1.0f, 0.8f);
+        g.drawLine (lip.getX() + 1.0f, lip.getY() + 2.0f,
+                    lip.getX() + 1.0f, lip.getBottom() - 2.0f, 0.8f);
+        g.setColour (Colours::black.withAlpha (0.9f));
+        g.drawLine (lip.getX() + 2.0f, lip.getBottom() - 1.0f,
+                    lip.getRight() - 2.0f, lip.getBottom() - 1.0f, 0.8f);
+        g.drawLine (lip.getRight() - 1.0f, lip.getY() + 2.0f,
+                    lip.getRight() - 1.0f, lip.getBottom() - 2.0f, 0.8f);
 
         // Felt center travel guide
         g.setColour (Colour (0xff000000));
@@ -2014,6 +2023,7 @@ protected:
         const int gridTop = top + 34;
         const int bottomReserve = 26;
         const int gridH = c.getBottom() - gridTop - bottomReserve;
+        faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
 
         // Leave room for the per-row captions above each fader cell.
         const int captionH = 16;
@@ -2076,6 +2086,31 @@ protected:
     // The metre surround is painted into the face image so the ladders draw on top of it.
     void paintFaceBase (Graphics& g) override
     {
+        if (! faderBank.isEmpty())
+        {
+            const auto bank = faderBank.toFloat();
+            g.setColour (Colour (0xff050606));
+            g.fillRoundedRectangle (bank.translated (1.0f, 2.0f), 4.0f);
+            g.setGradientFill (ColourGradient (Colour (0xff555653), bank.getX(), bank.getY(),
+                                               Colour (0xff242625), bank.getRight(), bank.getBottom(), false));
+            g.fillRoundedRectangle (bank, 4.0f);
+            g.setColour (Colour (0xff090a0a));
+            g.drawRoundedRectangle (bank, 4.0f, 1.0f);
+            const auto inset = bank.reduced (2.0f);
+            g.setColour (Colour (0xff080909));
+            g.fillRoundedRectangle (inset, 2.0f);
+            // Continuous beveled lip frames the whole 2x2 fader group as one recessed plate.
+            g.setColour (Colours::white.withAlpha (0.36f));
+            g.drawLine (inset.getX() + 3.0f, inset.getY() + 1.0f,
+                        inset.getRight() - 3.0f, inset.getY() + 1.0f, 1.0f);
+            g.drawLine (inset.getX() + 1.0f, inset.getY() + 3.0f,
+                        inset.getX() + 1.0f, inset.getBottom() - 3.0f, 1.0f);
+            g.setColour (Colours::black.withAlpha (0.98f));
+            g.drawLine (inset.getX() + 3.0f, inset.getBottom() - 1.0f,
+                        inset.getRight() - 3.0f, inset.getBottom() - 1.0f, 1.3f);
+            g.drawLine (inset.getRight() - 1.0f, inset.getY() + 3.0f,
+                        inset.getRight() - 1.0f, inset.getBottom() - 3.0f, 1.3f);
+        }
         if (ladderA.isEmpty()) return;
 
         const Rectangle<int> frame (ladderA.getX() - 10, ladderA.getY() - 16,
@@ -2141,7 +2176,7 @@ private:
     std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
-    Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel;
+    Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel, faderBank;
     std::array<Rectangle<int>, 2> gridCells {};     // column cells, shared by layout and captions
     Rectangle<int>& gridCell (size_t col) { return gridCells[col < 2 ? col : 0]; }
     float outLevel = 0.0f;

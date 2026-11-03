@@ -794,17 +794,15 @@ public:
     }
 
     //-------------------------------------------------------------------- knobs
-    /** Davies Molding 1470-style knob: a squat fluted bakelite body, ~25 mm across and
-        12 mm tall, with a separately moulded white index pointer running past the body
-        (it tips the outside diameter by ~4 mm). Proportions are real part dimensions
-        normalised to the drawn skirt radius, so the height/diameter ratio is faithful
-        (12/25) rather than eyeballed. */
+    /** Davies Molding 1470 / Daka-Ware knob: upright fluted bakelite body with a top
+        index pointer. Dimensions are normalized to the 25 mm body diameter; the pointer
+        projects slightly beyond its rim. */
     static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
                                 float a0, float a1, float knobScale)
     {
-        const float bodyR  = b.getWidth() * 0.39f;            // fluted body radius
-        const float bodyH  = bodyR * 2.0f * (12.0f / 25.0f); // 12 mm tall vs 25 mm across
-        const float bevel  = jmax (2.0f, bodyR * 0.20f);
+        const float bodyR  = b.getWidth() * 0.35f;
+        const float bodyH  = bodyR * 1.28f;
+        const float bevel  = bodyR * 0.30f;
         const auto cap     = s.findColour (Slider::rotarySliderFillColourId);
         const float pos    = (float) s.valueToProportionOfLength (s.getValue());
         const float angle  = a0 + pos * (a1 - a0);
@@ -813,31 +811,30 @@ public:
         KnobScale sc; sc.a0 = a0; sc.a1 = a1;
         paintScale (g, c, bodyR * 1.08f, sc, Colours::white.withAlpha (0.80f), knobScale);
 
-        // ---- Short cylindrical Daka-Ware barrel, foreshortened in the vertical axis.
-        // This is deliberately NOT a shallow wheel: the 12/25 real-part ratio is visible.
-        const float tilt = 0.72f;
+        // ---- Upright cylindrical barrel. Its major axis is vertical in the UI:
+        // the last rendering accidentally used a wide, foreshortened ellipse.
         const float topY = c.y - bodyH * 0.50f;
         const float botY = c.y + bodyH * 0.50f;
         g.setColour (Colours::black.withAlpha (0.45f));
-        g.fillEllipse (Rectangle<float> (bodyR * 2.15f, bodyH * tilt * 0.68f)
-                           .withCentre (c.translated (0.0f, bodyH * 0.24f + 1.5f)));
+        g.fillEllipse (Rectangle<float> (bodyR * 1.75f, bodyH * 0.48f)
+                           .withCentre (c.translated (0.0f, bodyH * 0.34f + 1.5f)));
 
-        // Front cylindrical side: round end silhouette with a visible vertical wall.
-        auto side = Rectangle<float> (bodyR * 2.0f, bodyH * tilt).withCentre ({ c.x, c.y + bevel * 0.28f });
+        // Vertical fluted cylindrical wall.
+        auto side = Rectangle<float> (bodyR * 1.48f, bodyH).withCentre (c);
         g.setGradientFill (ColourGradient (cap.brighter (0.22f), side.getX(), side.getY(),
                                            cap.darker (0.62f), side.getRight(), side.getBottom(), false));
-        g.fillRoundedRectangle (side, bodyR * 0.34f);
+        g.fillRoundedRectangle (side, bodyR * 0.28f);
 
         // Moulded vertical flutes around the barrel; paired highlight/shadow strokes
         // give the 1470's characteristic evenly spaced Daka-Ware ribs.
-        for (int i = 0; i < 18; ++i)
+        for (int i = 0; i < 14; ++i)
         {
-            const float t = ((float) i + 0.5f) / 18.0f;
+            const float t = ((float) i + 0.5f) / 14.0f;
             const float x = side.getX() + t * side.getWidth();
             const float nx = 2.0f * t - 1.0f;
             const float arc = std::sqrt (jmax (0.0f, 1.0f - nx * nx));
-            const float y0 = side.getY() + bevel * (1.0f - arc) * 0.38f;
-            const float y1 = side.getBottom() - bevel * (1.0f - arc) * 0.38f;
+            const float y0 = side.getY() + bevel * (1.0f - arc) * 0.35f;
+            const float y1 = side.getBottom() - bevel * (1.0f - arc) * 0.35f;
             g.setColour (Colours::black.withAlpha (0.40f));
             g.drawLine (x, y0, x, y1, jmax (0.7f, bodyR * 0.035f));
             g.setColour (cap.brighter (0.38f).withAlpha (0.55f));
@@ -846,7 +843,7 @@ public:
 
         // Distinct top face / bevel, with the pointer seated on the top rather than
         // appearing as a long white blade stuck to the front of a flat disc.
-        auto topFace = Rectangle<float> (bodyR * 2.0f, bevel * 1.42f).withCentre ({ c.x, topY + bevel * 0.72f });
+        auto topFace = Rectangle<float> (bodyR * 1.48f, bevel * 1.15f).withCentre ({ c.x, topY + bevel * 0.55f });
         g.setGradientFill (ColourGradient (cap.brighter (0.56f), topFace.getX(), topFace.getY(),
                                            cap.darker (0.18f), topFace.getRight(), topFace.getBottom(), false));
         g.fillEllipse (topFace);
@@ -857,8 +854,8 @@ public:
 
         // ---- Separate white pointer/index, running along the top and projecting just
         // beyond the 25 mm body (about 2 mm, or +4 mm overall diameter).
-        const float tipR  = bodyR * 0.83f;
-        const float rootR = bodyR * 0.14f;
+        const float tipR  = bodyR * 0.58f;
+        const float rootR = bodyR * 0.10f;
         Path ptr;
         ptr.startNewSubPath (-bodyR * 0.075f, -rootR);
         ptr.lineTo (-bodyR * 0.055f, -tipR);
@@ -866,7 +863,7 @@ public:
         ptr.lineTo ( bodyR * 0.075f, -rootR);
         ptr.closeSubPath();
 
-        const auto xf = AffineTransform::rotation (angle).scaled (1.0f, 0.58f).translated (c.x, topY + bevel * 0.70f);
+        const auto xf = AffineTransform::rotation (angle).scaled (1.0f, 0.58f).translated (c.x, topY + bevel * 0.55f);
 
         g.setColour (Colours::black.withAlpha (0.55f));
         g.fillPath (ptr, xf.translated (0.0f, 0.8f));

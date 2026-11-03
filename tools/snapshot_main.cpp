@@ -605,6 +605,40 @@ void meterPageTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, cons
 
 void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const juce::File& output)
 {
+    // LA-2A custom control: render endpoints and center so the scale, numeral order and
+    // angle-dependent cast shadow can be visually inspected at the actual panel size.
+    auto* opto = editor.getModulePanelForTest (ZychanStripProcessor::Opto);
+    auto* gainKnob = opto != nullptr ? dynamic_cast<juce::Slider*> (findNamed (*opto, "gain")) : nullptr;
+    auto* peakKnob = opto != nullptr ? dynamic_cast<juce::Slider*> (findNamed (*opto, "peak")) : nullptr;
+    check (gainKnob != nullptr && peakKnob != nullptr, "LA-2A gain and peak-reduction knobs found");
+    if (gainKnob != nullptr && peakKnob != nullptr)
+    {
+        auto saveKnobSnapshot = [&] (const juce::String& filename)
+        {
+            const auto image = editor.createComponentSnapshot (editor.getLocalBounds());
+            juce::FileOutputStream stream (output.getChildFile (filename));
+            return stream.openedOk() && juce::PNGImageFormat().writeImageToStream (image, stream);
+        };
+        const double gainOriginal = gainKnob->getValue();
+        const double peakOriginal = peakKnob->getValue();
+        gainKnob->setValue (gainKnob->getMinimum(), juce::dontSendNotification);
+        peakKnob->setValue (peakKnob->getMinimum(), juce::dontSendNotification);
+        check (saveKnobSnapshot ("la2a-knobs-min.png"),
+               "LA-2A minimum endpoint snapshot");
+        gainKnob->setValue ((gainKnob->getMinimum() + gainKnob->getMaximum()) * 0.5,
+                            juce::dontSendNotification);
+        peakKnob->setValue ((peakKnob->getMinimum() + peakKnob->getMaximum()) * 0.5,
+                            juce::dontSendNotification);
+        check (saveKnobSnapshot ("la2a-knobs-mid.png"),
+               "LA-2A midpoint snapshot");
+        gainKnob->setValue (gainKnob->getMaximum(), juce::dontSendNotification);
+        peakKnob->setValue (peakKnob->getMaximum(), juce::dontSendNotification);
+        check (saveKnobSnapshot ("la2a-knobs-max.png"),
+               "LA-2A maximum endpoint snapshot");
+        gainKnob->setValue (gainOriginal, juce::dontSendNotification);
+        peakKnob->setValue (peakOriginal, juce::dontSendNotification);
+    }
+
     // RESET button: the header button must restore module defaults, not just the meters.
     auto* reset = findNamed (editor, "Reset");
     check (reset != nullptr, "reset button component exists");

@@ -27,6 +27,7 @@ public:
     void pumpTimerForTest() { timerCallback(); }
     bool isMeterPageVisible() const { return metersShown; }
     juce::Component* getUnityButtonForTest() { return unityButton.get(); }
+    juce::Component* getModulePanelForTest (int id);
     /** Test seam: perform the RESET action without synthesising a mouse event. */
     void resetForTest() { resetRackToDefaults(); }
 

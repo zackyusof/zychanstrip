@@ -245,6 +245,11 @@ struct KnobScale
     bool minorTicks = true;
 };
 
+Point<float> knobDirection (float angle)
+{
+    return { std::sin (angle), -std::cos (angle) };
+}
+
 void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale& sc, Colour c,
                  float scale = 1.0f)
 {
@@ -253,14 +258,14 @@ void paintScale (Graphics& g, Point<float> centre, float radius, const KnobScale
     {
         const bool major = (i % 4) == 0;
         const float a = sc.a0 + (sc.a1 - sc.a0) * (float) i / (float) (total - 1);
-        const Point<float> dir (std::sin (a), -std::cos (a));
+        const Point<float> dir = knobDirection (a);
         const float len = (major ? 6.5f : 3.5f) * scale;
-        const float shadowY = 0.8f * scale;
+        const Point<float> shadowOffset (0.9f * scale, 1.25f * scale);
 
-        // Shadow under tick
+        // Cast tick shadow in the same light direction as the knob: lower-right.
         g.setColour (Colours::black.withAlpha (0.50f));
-        g.drawLine (Line<float> (centre + dir * radius + Point<float> (0.0f, shadowY),
-                                 centre + dir * (radius + len) + Point<float> (0.0f, shadowY)),
+        g.drawLine (Line<float> (centre + dir * radius + shadowOffset,
+                                 centre + dir * (radius + len) + shadowOffset),
                     (major ? 1.5f : 1.0f) * scale);
 
         // Crisp tick mark
@@ -799,34 +804,81 @@ public:
     /** Daka-Ware LA-2A replacement knob: low round base, scalloped grip body, and the
         characteristic long raised pointer/wing. Geometry follows the product reference. */
     static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
-                                float a0, float a1, float knobScale)
+                                float knobScale)
     {
-        juce::ignoreUnused (knobScale);
         static Image knobImage = []
         {
             const auto* bytes = BinaryData::dakawarela2afront_png;
             const int size = BinaryData::dakawarela2afront_pngSize;
             return ImageFileFormat::loadFrom (bytes, (size_t) size);
         }();
-        const float pos    = (float) s.valueToProportionOfLength (s.getValue());
-        const float angle  = a0 + pos * (a1 - a0);
-        KnobScale sc; sc.a0 = a0; sc.a1 = a1; sc.majorTicks = 9; sc.minorTicks = false;
-        const float radius = b.getWidth() * 0.47f;
-        paintScale (g, c, radius * 1.05f, sc, Colours::white.withAlpha (0.82f), 1.0f);
+        static Image knobShadow = [] (const Image& source)
+        {
+            if (! source.isValid()) return Image();
+            Image shadow (Image::ARGB, source.getWidth(), source.getHeight(), true);
+            for (int y = 0; y < source.getHeight(); ++y)
+                for (int x = 0; x < source.getWidth(); ++x)
+                {
+                    const auto alpha = source.getPixelAt (x, y).getAlpha();
+                    shadow.setPixelAt (x, y, Colour (0xff090a0b).withAlpha ((uint8) (alpha * 0.58f)));
+                }
+            return shadow;
+        } (knobImage);
+        const float pos = jlimit (0.0f, 1.0f, (float) s.valueToProportionOfLength (s.getValue()));
+        // UA's numbered faceplate runs clockwise from 0 at ~7:30 to 100 at ~4:30.
+        constexpr float dialA0 = MathConstants<float>::pi * 1.25f;
+        constexpr float dialA1 = MathConstants<float>::pi * 2.75f;
+        const float outerR = b.getWidth() * 0.455f;
+        const float angle = dialA0 + pos * (dialA1 - dialA0);
+        const float tickR = outerR * 1.02f;
+        const float labelR = outerR * 1.40f;
+        const Point<float> shadowOffset (2.3f * knobScale, 3.0f * knobScale);
 
+        const float side = outerR * 1.48f;
+        const auto knobDest = Rectangle<float> (side, side).withCentre (c);
+
+        // The shadow uses source alpha only; its black RGB is independent of the artwork.
+        // Rotate the offset silhouette around the knob centre, then paint the source paddle.
         if (knobImage.isValid())
         {
-        const float side = radius * 2.0f;
-            const auto dest = Rectangle<float> (side, side).withCentre (c);
-            g.setColour (Colours::black.withAlpha (0.62f));
-            g.fillEllipse (Rectangle<float> (side * 0.88f, side * 0.54f)
-                               .withCentre (c.translated (0.0f, side * 0.25f)));
             g.saveState();
-            g.addTransform (AffineTransform::rotation (angle,
-                                                       c.x, c.y));
-            g.drawImage (knobImage, dest, RectanglePlacement::centred);
+            const auto shadowDest = knobDest.translated (shadowOffset.x, shadowOffset.y)
+                                        .transformedBy (AffineTransform::rotation (
+                                            angle - MathConstants<float>::pi, c.x, c.y));
+            g.drawImage (knobShadow, shadowDest, RectanglePlacement::centred);
+            g.restoreState();
+
+            g.saveState();
+            g.addTransform (AffineTransform::rotation (angle - MathConstants<float>::pi, c.x, c.y));
+            g.drawImage (knobImage, knobDest, RectanglePlacement::centred);
             g.restoreState();
         }
+
+        for (int value = 0; value <= 100; value += 10)
+        {
+            const float markAngle = dialA0 + (dialA1 - dialA0) * ((float) value / 100.0f);
+            const Point<float> dir = knobDirection (markAngle);
+            const float markLength = (value % 20 == 0 ? 5.2f : 3.4f) * knobScale;
+            g.setColour (Colours::black.withAlpha (0.92f));
+            g.drawLine (Line<float> (c + dir * tickR,
+                                     c + dir * (tickR + markLength)),
+                        (value % 20 == 0 ? 1.2f : 0.8f) * knobScale);
+        }
+
+        g.setFont (fnt (jmax (7.0f, 8.0f * knobScale), true));
+        for (int value = 0; value <= 100; value += 10)
+        {
+            const float t = (float) value / 100.0f;
+            const float labelAngle = dialA0 + (dialA1 - dialA0) * t;
+            const Point<float> dir = knobDirection (labelAngle);
+            const Point<float> labelCentre = c + dir * labelR;
+            const auto labelBox = Rectangle<float> (20.0f, 12.0f).withCentre (labelCentre);
+            g.setColour (Colours::black.withAlpha (0.78f));
+            g.drawText (String (value), labelBox.translated (0.0f, 0.7f), Justification::centred);
+            g.setColour (Colour (0xff171819));
+            g.drawText (String (value), labelBox, Justification::centred);
+        }
+
     }
 
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,
@@ -845,7 +897,7 @@ public:
         // Opt-in per slider so the other modules keep their own hardware.
         if (s.getProperties().contains ("davies1470"))
         {
-            drawDavies1470 (g, b, c, s, a0, a1, knobScale);
+            drawDavies1470 (g, b, c, s, knobScale);
             return;
         }
 
@@ -1407,7 +1459,11 @@ protected:
     void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white,
                     float scale = 1.0f, bool davies1470 = false)
     {
-        k.slider.setRotaryParameters (MathConstants<float>::pi * 1.22f, MathConstants<float>::pi * 2.78f, true);
+        const float rotaryStart = davies1470 ? MathConstants<float>::pi * 1.25f
+                                              : MathConstants<float>::pi * 1.22f;
+        const float rotaryEnd = davies1470 ? MathConstants<float>::pi * 2.75f
+                                            : MathConstants<float>::pi * 2.78f;
+        k.slider.setRotaryParameters (rotaryStart, rotaryEnd, true);
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
         k.slider.getProperties().set ("knobScale", scale);
@@ -1415,6 +1471,7 @@ protected:
         k.slider.setNumDecimalPlacesToDisplay (1);
         k.slider.setPopupDisplayEnabled (true, true, nullptr);
         k.slider.setDoubleClickReturnValue (true, k.slider.getDoubleClickReturnValue());
+        k.slider.setName (id);
         k.att = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, prefix + id, k.slider);
         addAndMakeVisible (k.slider);
     }
@@ -1632,8 +1689,8 @@ public:
         bypass.setColour (ToggleButton::textColourId, labelColour);
 
         // LA-2A used the Davies Molding 1470 fluted bakelite knob on both controls.
-        setupKnob (gain, "gain", pal::blackCap, Colours::white, 1.0f, true);
-        setupKnob (peak, "peak", pal::blackCap, Colours::white, 1.0f, true);
+        setupKnob (gain, "gain", pal::blackCap, Colours::white, 0.78f, true);
+        setupKnob (peak, "peak", pal::blackCap, Colours::white, 0.78f, true);
 
         onBtn.setButtonText ("ON  (LIMIT)");
         onBtn.setClickingTogglesState (true);
@@ -2090,6 +2147,12 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     getConstrainer()->setFixedAspectRatio ((double) kEditorW / kEditorH);
     setSize (864, 608);
     startTimerHz (30);
+}
+
+juce::Component* ZychanStripEditor::getModulePanelForTest (int id)
+{
+    return id >= 0 && id < (int) panels.size() ? static_cast<juce::Component*> (panels[(size_t) id].get())
+                                               : nullptr;
 }
 
 ZychanStripEditor::~ZychanStripEditor()

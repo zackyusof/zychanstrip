@@ -61,7 +61,7 @@ const char* MeterPanel::scaleName (int index)
         case 1: return "K-20";
         case 2: return "K-14";
         case 3: return "K-12";
-        default: return "LINEAR";
+        default: return "SETTLE";
     }
 }
 
@@ -101,9 +101,16 @@ void MeterPanel::tick()
     m.copyScope (scopePoints);
     const auto& bd = m.bands();
     const auto& bh = m.bandHolds();
+    // Averaging control: previously the SETTLE/AVG indicator was painted but nothing read it,
+    // so every position behaved identically. Apply one-pole smoothing to the analyser bands
+    // here, on the GUI thread, at the panel's own tick rate — the DSP metering tap stays
+    // untouched and read-only.
+    static constexpr float avgCoef[] { 1.00f, 0.55f, 0.25f, 0.10f };   // SETTLE, FAST, MED, AVG
+    const float a = avgCoef[(size_t) jlimit (0, 3, rtaAverage)];
     for (int i = 0; i < RackMeters::kBands && i < (int) bd.size(); ++i)
     {
-        bandDb[(size_t) i] = bd[(size_t) i];
+        const float target = bd[(size_t) i];
+        bandDb[(size_t) i] += (target - bandDb[(size_t) i]) * a;
         bandHoldDb[(size_t) i] = (i < (int) bh.size()) ? bh[(size_t) i] : -100.0f;
     }
     const float c = m.correlation();
@@ -260,7 +267,7 @@ void MeterPanel::paintRta (Graphics& g)
     // Averaging indicator on the right of the section rule
     g.setFont (sslSans (7.5f, true));
     g.setColour (bronze);
-    const char* avgName[] { "FAST", "MED", "SLOW", "AVG" };
+    const char* avgName[] { "SETTLE", "FAST", "MED", "AVG" };
     g.drawText (avgName[jlimit (0, 3, rtaAverage)],
                 Rectangle<float> ((float) area.getRight() - 70.0f, (float) rtaArea.getY(), 42.0f, 12.0f),
                 Justification::centredRight, false);

@@ -111,6 +111,8 @@ Input/output/attack/release plus a 4:1 / 8:1 / 12:1 / 20:1 / ALL ratio bank. Fas
 ### 3. Teletronix LA-2A opto leveler (`Opto`, prefix `opto_`)
 Gain, peak reduction, and a compress/limit `mode` switch. Program-dependent release, 12AX7/12BH7 tube colour.
 
+The Gain and Peak Reduction knobs use the Davies 1470/Daka-Ware face, with a correctly aligned 0–100 numbered scale and a cast shadow that follows the control.
+
 ### 4. Enhance / master limiter (`Limiter`, prefix `lim_`)
 Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and a stereo-linked auto-gain that matches its own output level back to its input so you hear tone changes rather than loudness shifts.
 

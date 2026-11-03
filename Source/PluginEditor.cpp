@@ -804,7 +804,7 @@ public:
     /** Daka-Ware LA-2A replacement knob: low round base, scalloped grip body, and the
         characteristic long raised pointer/wing. Geometry follows the product reference. */
     static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
-                                float knobScale)
+                                float knobScale, float a0, float a1)
     {
         static Image knobImage = []
         {
@@ -825,20 +825,25 @@ public:
             return shadow;
         } (knobImage);
         const float pos = jlimit (0.0f, 1.0f, (float) s.valueToProportionOfLength (s.getValue()));
-        // UA's numbered faceplate runs clockwise from 0 at ~7:30 to 100 at ~4:30.
-        constexpr float dialA0 = MathConstants<float>::pi * 1.25f;
-        constexpr float dialA1 = MathConstants<float>::pi * 2.75f;
+
+        // Scale geometry. Slider::setRotaryParameters (1.25pi, 2.75pi) defines 0..100 on a
+        // 225 deg sweep from ~7:30 to ~4:30. Everything below is expressed in that same
+        // dial frame so the paddle index and the engraved ring can never drift apart.
+        constexpr float travel = MathConstants<float>::pi * 1.25f;   // 225 deg
+        const float dialA0 = -travel * 0.5f;                        // -112.5 deg from 12 o'clock
+        const float dialA1 =  travel * 0.5f;                        // +112.5 deg
+        const float angle = a0 + pos * (a1 - a0);
         const float outerR = b.getWidth() * 0.455f;
-        const float angle = dialA0 + pos * (dialA1 - dialA0);
         const float tickR = outerR * 1.02f;
-        const float labelR = outerR * 1.40f;
         const Point<float> shadowOffset (2.3f * knobScale, 3.0f * knobScale);
 
         const float side = outerR * 1.48f;
         const auto knobDest = Rectangle<float> (side, side).withCentre (c);
 
         // The shadow uses source alpha only; its black RGB is independent of the artwork.
-        // Rotate the offset silhouette around the knob centre, then paint the source paddle.
+        // It carries the SAME rotation as the knob and is then displaced by one fixed
+        // lower-right screen-space offset, so the light stays coherent at every angle.
+        // (Rotating the already-offset destination would swing the light around the dial.)
         if (knobImage.isValid())
         {
             g.saveState();
@@ -854,6 +859,10 @@ public:
             g.restoreState();
         }
 
+        // Ring radius for the engraved numerals: outside the ticks and clear of the longest
+        // knob feature, so no numeral is ever covered by the knob or its pointer.
+        const float numeralR = tickR + 9.0f * knobScale;
+
         for (int value = 0; value <= 100; value += 10)
         {
             const float markAngle = dialA0 + (dialA1 - dialA0) * ((float) value / 100.0f);
@@ -868,13 +877,12 @@ public:
         g.setFont (fnt (jmax (7.0f, 8.0f * knobScale), true));
         for (int value = 0; value <= 100; value += 10)
         {
-            const float t = (float) value / 100.0f;
-            const float labelAngle = dialA0 + (dialA1 - dialA0) * t;
+            const float labelAngle = dialA0 + (dialA1 - dialA0) * ((float) value / 100.0f);
             const Point<float> dir = knobDirection (labelAngle);
-            const Point<float> labelCentre = c + dir * labelR;
-            const auto labelBox = Rectangle<float> (20.0f, 12.0f).withCentre (labelCentre);
-            g.setColour (Colours::black.withAlpha (0.78f));
-            g.drawText (String (value), labelBox.translated (0.0f, 0.7f), Justification::centred);
+            const Point<float> labelCentre = c + dir * numeralR;
+            const auto labelBox = Rectangle<float> (22.0f, 13.0f).withCentre (labelCentre);
+            g.setColour (Colours::black.withAlpha (0.30f));
+            g.drawText (String (value), labelBox.translated (0.0f, 0.8f), Justification::centred);
             g.setColour (Colour (0xff171819));
             g.drawText (String (value), labelBox, Justification::centred);
         }
@@ -896,7 +904,7 @@ public:
         // Opt-in per slider so the other modules keep their own hardware.
         if (s.getProperties().contains ("davies1470"))
         {
-            drawDavies1470 (g, b, c, s, knobScale);
+            drawDavies1470 (g, b, c, s, knobScale, a0, a1);
             return;
         }
 
@@ -1458,11 +1466,18 @@ protected:
     void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white,
                     float scale = 1.0f, bool davies1470 = false)
     {
-        const float rotaryStart = davies1470 ? MathConstants<float>::pi * 1.25f
+        const float rotaryStart = davies1470 ? MathConstants<float>::pi * -0.75f
                                               : MathConstants<float>::pi * 1.22f;
-        const float rotaryEnd = davies1470 ? MathConstants<float>::pi * 2.75f
+        const float rotaryEnd = davies1470 ? MathConstants<float>::pi * 0.75f
                                             : MathConstants<float>::pi * 2.78f;
         k.slider.setRotaryParameters (rotaryStart, rotaryEnd, true);
+        // The Davie1470 renderer derives its tick/label ring from these same bounds, so record
+        // them on the component instead of re-deriving them (the two used to drift apart).
+        if (davies1470)
+        {
+            k.slider.getProperties().set ("dialA0", rotaryStart);
+            k.slider.getProperties().set ("dialA1", rotaryEnd);
+        }
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
         k.slider.getProperties().set ("knobScale", scale);

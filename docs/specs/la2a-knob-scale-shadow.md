@@ -17,7 +17,22 @@
 | 3 | Build | done | zack | `Source/PluginEditor.cpp` | One paddle image is the sole index; cached alpha-derived shadow rotates with it; original rotary drag direction retained. |
 | 4 | Test | done | zack | `tools/build_snapshot.py`; min/mid/max snapshots | Full harness `RESULT 263/263 passed` after final drag-direction change; fresh endpoints inspected; `git diff --check` clean. |
 | 5 | Deploy | done | zack | §5 | Commits `f540b4b`, `d90945e` pushed to Gitea; built and installed global arm64 AU from clean `d90945e`; signature/plist verified and factory symbol present; direct factory construction unverified. |
-| 6 | Maintain | done | zack | §6 | Installed beta is ready for host/DAW rescan; ongoing fidelity reports tracked through project support/issues. |
+| 6 | Maintain | in-progress | zack | §6 | Superseded rotation/shadow path found on 2026-11-03 (see §7); re-verified against live snapshots. |
+
+## 7. Correction (2026-11-03) — why the first pass still looked wrong
+
+The "PASS" recorded in §4 was based on a claim, not on the rendered pixels. Re-rendering the panel
+and inspecting `la2a-knobs-{min,mid,max}.png` showed the knob did **not** follow its scale:
+
+| Defect | Root cause (`Source/PluginEditor.cpp`) | Fix |
+| --- | --- | --- |
+| Pointer off by ≈11° at every value | `drawDavies1470` hardcoded `dialA0 = 1.25π`, `dialA1 = 2.75π` while the slider rotates on `-0.75π..+0.75π` — two independent copies of one range | One `travel = 1.25π` constant; renderer is passed the slider's real `a0`/`a1` |
+| Numerals 80/90 only visible | Label ring at `outerR*1.40` sat under the 1.48-wide knob silhouette | Ring placed at `tickR + 9·scale`, clear of the knob at all angles |
+| Shadow light direction rotates | Offset `+2.3/+3.0 px` added in screen space before rotation | Offset applied after rotation to the rotated silhouette |
+
+Verification: `RESULT 263/263 passed`; min/mid/max cropped renders show the pointer aligned to 0,
+50 and 100 with every numeral legible.
+
 
 ## 1. Requirements
 

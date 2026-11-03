@@ -10,6 +10,33 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed
+
+- **LA-2A INPUT GAIN / PEAK REDUCTION knobs no longer contradict their own engraved scale.**
+  The tick marks and 0–100 numerals were drawn on a hardcoded 1.25π–2.75π arc while the knob index
+  rotated on the slider's actual −0.75π–0.75π travel, so the pointer sat a tenth of a turn (≈11°) off
+  the number it was pointing at. Both now derive from one travel constant (`1.25π`), and the renderer
+  receives the slider's real rotary bounds instead of a second private copy of them.
+- LA-2A knob numerals were drawn on a ring that the knob body covered at mid travel (only the 80/90
+  labels survived). The ring is now outside the ticks and clears the full knob silhouette at every angle.
+- LA-2A knob cast shadow used a screen-space offset of +2.3/+3.0 px, so its horizontal component
+  vanished at minimum and doubled at maximum — the light direction visibly rotated with the knob. The
+  offset is now applied to the already-rotated silhouette, keeping one coherent lower-right light.
+- Meter page scale button showed `LINEAR`; the label is `SETTLE`.
+
+### Changed
+
+- **31-band analyser averaging control now works.** `setRtaAveraging()` was never called and the paint
+  path ignored `rtaAverage`, so the SETTLE/FAST/MED/AVG indicator was cosmetic. Bands are smoothed on
+  the GUI thread at the panel tick rate with coefficients 1.00 / 0.55 / 0.25 / 0.10; the DSP metering
+  tap stays read-only and untouched.
+
+### Added
+
+- `docs/dsp/module-console.md`, `module-opto.md`, `module-fet.md` and `interaction.md` — the four pages
+  the DSP reference index linked to but which did not exist. Written from source with `file:line`
+  citations; derived claims are marked *(inference)*.
+
 ## [1.1.1-beta.1] — 2026-11-03
 
 Beta build from the current Gitea `main` delta since `v1.0.1`, as explicitly confirmed by the user.

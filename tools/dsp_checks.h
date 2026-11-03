@@ -179,6 +179,36 @@ LimiterMeasurement measureLimiter (rack::LimiterModule& limiter, double sr, int 
 }
 void limiterTests()
 {
+    for (int window : { 1, 2, 3, 67, 72, 144, 288 })
+    {
+        rack::LimiterModule::SlidingMinimum minimum;
+        minimum.prepare (window);
+        std::vector<float> reference ((size_t) window, 1.0f);
+        bool exact = true;
+        const int iterations = window * 12 + 37;
+        for (int i = 0; i < iterations; ++i)
+        {
+            float value = 1.0f;
+            switch (i % 5)
+            {
+                case 0: value = (float) (i % 17) / 16.0f; break;
+                case 1: value = (float) (16 - (i % 17)) / 16.0f; break;
+                case 2: value = 0.375f; break;
+                case 3: value = (i % 3 == 0) ? 0.25f : 0.75f; break;
+                default: value = 1.0f; break;
+            }
+            reference[(size_t) (i % window)] = value;
+            float expected = 1.0f;
+            for (float candidate : reference) expected = std::min (expected, candidate);
+            exact &= minimum.push (value) == expected;
+            if (i == iterations / 2)
+            {
+                minimum.reset();
+                std::fill (reference.begin(), reference.end(), 1.0f);
+            }
+        }
+        check (exact, "limiter sliding minimum matches initialized ring, reset/wrap window=" + juce::String (window));
+    }
     ZychanStripProcessor proc;
     check (proc.apvts.getRawParameterValue ("lim_auto_gain") != nullptr, "Auto Gain parameter exists");
     if (proc.apvts.getRawParameterValue ("lim_auto_gain") == nullptr) return;

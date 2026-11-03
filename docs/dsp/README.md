@@ -13,7 +13,7 @@ in each file, with `file:line` citations so a claim can be re-checked.
 | [`module-console.md`](module-console.md) | `ConsoleModule` — API 560 ten-band graphic EQ + 2520 colour |
 | [`module-opto.md`](module-opto.md) | `OptoModule` — LA-2A style optical leveller + tube colour |
 | [`module-fet.md`](module-fet.md) | `FetModule` — 1176 style FET compressor + Class-A colour |
-| [`module-limiter.md`](module-limiter.md) | `LimiterModule` — look-ahead brickwall limiter, Enhance, auto-gain |
+| [`module-limiter.md`](module-limiter.md) | `LimiterModule` — look-ahead brickwall limiter, sliding-minimum CPU optimization, Enhance, auto-gain |
 | [`interaction.md`](interaction.md) | How modules interact: level, envelope, colour stacking, auto-gain feedback |
 | [`reordering.md`](reordering.md) | What re-ordering changes (and what it provably does not), per permutation |
 | [`measurements.md`](measurements.md) | Measured numbers from `tools/research/permute.cpp` on this repo |

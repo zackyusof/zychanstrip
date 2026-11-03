@@ -1,4 +1,6 @@
 #pragma once
+
+#include <cstdint>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <algorithm>
@@ -337,6 +339,71 @@ private:
 class LimiterModule : public Module
 {
 public:
+    struct SlidingMinimum
+    {
+        void prepare (int window)
+        {
+            values.assign ((size_t) window, 1.0f);
+            indices.assign ((size_t) window, 0);
+            slots.assign ((size_t) window, 0);
+            capacity = window;
+            reset();
+        }
+
+        void reset()
+        {
+            std::fill (values.begin(), values.end(), 1.0f);
+            head = count = 0;
+            sequence = 0;
+            for (int i = 0; i < capacity; ++i)
+            {
+                const uint64_t id = (uint64_t) i;
+                indices[(size_t) count] = id;
+                slots[(size_t) count] = i;
+                ++count;
+            }
+        }
+
+        float push (float value)
+        {
+            while (count > 0 && sequence - indices[(size_t) head] >= (uint64_t) capacity)
+            {
+                head = (head + 1) % capacity;
+                --count;
+            }
+
+            const int slot = (int) (sequence % (uint64_t) capacity);
+            values[(size_t) slot] = value;
+            while (count > 0)
+            {
+                const int back = (head + count - 1) % capacity;
+                const int backSlot = slots[(size_t) back];
+                if (values[(size_t) backSlot] < value) break;
+                --count;
+            }
+            if (count == 0)
+            {
+                head = (head + 1) % capacity;
+                count = 0;
+            }
+            const int tail = (head + count) % capacity;
+            indices[(size_t) tail] = sequence;
+            slots[(size_t) tail] = slot;
+            ++count;
+
+            const int minSlot = slots[(size_t) head];
+            const float result = values[(size_t) minSlot];
+            ++sequence;
+            return result;
+        }
+
+        std::vector<float> values;
+        std::vector<uint64_t> indices;
+        std::vector<int> slots;
+        int capacity = 0, head = 0, count = 0;
+        uint64_t sequence = 0;
+    };
+
     LimiterModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
         : Module (state, std::move (paramPrefix)),
           autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain")) {}
@@ -350,6 +417,7 @@ public:
         for (auto& d : delay) if ((int) d.size() != la) d.assign ((size_t) la, 0.0f); else std::fill (d.begin(), d.end(), 0.0f);
         for (auto& d : dryDelay) if ((int) d.size() != la) d.assign ((size_t) la, 0.0f); else std::fill (d.begin(), d.end(), 0.0f);
         if ((int) reqRing.size() != la) reqRing.assign ((size_t) la, 1.0f); else std::fill (reqRing.begin(), reqRing.end(), 1.0f);
+        if (slidingMin.capacity != la) slidingMin.prepare (la); else slidingMin.reset();
         if ((int) avgRing.size() != la) avgRing.assign ((size_t) la, 1.0f); else std::fill (avgRing.begin(), avgRing.end(), 1.0f);
         sum = (double) la; wp = 0; relGain = 1.0f;
         dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
@@ -406,8 +474,7 @@ private:
 
             const float req = (active && pk > ceil) ? ceil / pk : 1.0f;
             reqRing[(size_t) wp] = req;
-            float mn = 1.0f;
-            for (float r : reqRing) mn = std::min (mn, r);
+            const float mn = slidingMin.push (req);
 
             sum += (double) mn - (double) avgRing[(size_t) wp];
             avgRing[(size_t) wp] = mn;
@@ -469,6 +536,7 @@ private:
     const float* finalOut = nullptr;     // true chain output energy, post master + mix
     int finalOutSamples = 0;
     std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
+    SlidingMinimum slidingMin;
     int la = 64, wp = 0;
     double sum = 64.0;
     float relGain = 1.0f;

@@ -12,6 +12,13 @@ has been published.
 
 ### Added
 
+- **Installer enforces "build the latest".** `tools/install_global.sh` now refuses to install a
+  build that isn't reproducible from a commit: it fails on a dirty tree (tracked changes or
+  untracked files under `Source/`/`tools/`), when local `HEAD` is behind `origin/main`, and when
+  the artefact is older than the `HEAD` commit — and it prints the commit it installed. Rationale:
+  the 2026-11-03 install carried uncommitted limiter work, so no commit produced the running
+  binary. `ZYCH_ALLOW_STALE=1` overrides for a deliberate experiment.
+
 - **Version / channel label in the GUI header.** The editor now draws the build's version in a recessed
   pill immediately after the `zychanstrip` wordmark: `v1.0.1` for a stable build, `v1.0.2-beta.1` in
   amber for a prerelease. The string comes from `ZYCHANSTRIP_GUI_VERSION` in `CMakeLists.txt`

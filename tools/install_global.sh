@@ -22,7 +22,7 @@ DEST="$DEST_DIR/zychanstrip.component"
 USER_DIR="$HOME/Library/Audio/Plug-Ins/Components"
 USER_COPY="$USER_DIR/zychanstrip.component"
 
-die() { printf 'ERROR: %s\n' "$*" >&2; exit "${2:-1}"; }
+die() { printf 'ERROR: %s\n' "$1" >&2; exit "${2:-1}"; }
 
 [ "$(uname -s)" = "Darwin" ] || die "macOS only (this installs an Audio Unit)."
 
@@ -45,6 +45,56 @@ SRC="$(cd "$(dirname "$SRC")" && pwd)/$(basename "$SRC")"
 case "$SRC" in
     "$USER_DIR"/*) die "refusing to install FROM user space ($SRC). Build produces the artefact under build/." ;;
 esac
+
+# ---- "Latest always" guard (2026-11-03, user directive) -------------------------------
+# An installed AU must be reproducible from a commit: build the newest code, not whatever
+# happened to be in the tree when someone last ran ninja. Measured failure this prevents:
+# the 2026-11-03 install carried an uncommitted limiter optimization, so no commit produced
+# the binary that was running.
+#   * tracked files modified (or untracked files under Source/ tools/) -> refuse
+#   * local HEAD behind refs/remotes/origin/main                        -> refuse
+#   * artefact older than the HEAD commit                              -> refuse
+# Escape hatch for deliberate experiments: ZYCH_ALLOW_STALE=1 (prints a loud warning).
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+    GIT_HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
+    GIT_HEAD_SUBJECT="$(git -C "$REPO" log -1 --format=%s | cut -c1-72)"
+    GIT_HEAD_TS="$(git -C "$REPO" log -1 --format=%ct)"
+
+    dirty="$(git -C "$REPO" status --porcelain --untracked-files=normal -- Source tools CMakeLists.txt)"
+    if [ -n "$dirty" ]; then
+        if [ "${ZYCH_ALLOW_STALE:-0}" = "1" ]; then
+            echo "WARNING: building from a DIRTY tree (ZYCH_ALLOW_STALE=1) — not reproducible:" >&2
+            printf '%s\n' "$dirty" >&2
+        else
+            printf 'ERROR: tracked source is modified — a build from a dirty tree is not reproducible.\n%s\n' "$dirty" >&2
+            die "commit (or stash) the source first, then rebuild. Override only for a deliberate experiment: ZYCH_ALLOW_STALE=1 $0" 1
+        fi
+    fi
+
+    if origin_sha="$(git -C "$REPO" rev-parse --verify --quiet refs/remotes/origin/main)"; then
+        if [ "$origin_sha" != "$GIT_HEAD_SHA" ]; then
+            if git -C "$REPO" merge-base --is-ancestor "$GIT_HEAD_SHA" "$origin_sha" 2>/dev/null; then
+                printf 'ERROR: local HEAD %s is BEHIND origin/main %s — fetch/pull, rebuild, then install.\n' \
+                    "$(git -C "$REPO" rev-parse --short HEAD)" "$(git -C "$REPO" rev-parse --short "$origin_sha")" >&2
+                die "refusing to install a stale build (overridable with ZYCH_ALLOW_STALE=1)" 1
+            fi
+            echo "WARNING: HEAD is ahead of origin/main — this build is not on the remote yet." >&2
+        fi
+    fi
+
+    SRC_TS="$(stat -f %m "$SRC/Contents/MacOS/zychanstrip")"
+    if [ "$SRC_TS" -lt "$GIT_HEAD_TS" ]; then
+        if [ "${ZYCH_ALLOW_STALE:-0}" = "1" ]; then
+            echo "WARNING: artefact predates HEAD (ZYCH_ALLOW_STALE=1)." >&2
+        else
+            die "artefact is older than HEAD ($(git -C "$REPO" rev-parse --short HEAD)) — run 'ninja -C build' and retry." 1
+        fi
+    fi
+
+    printf 'git    : %s %s\n' "$(git -C "$REPO" rev-parse --short HEAD)" "$GIT_HEAD_SUBJECT"
+else
+    echo "WARNING: not a git checkout — cannot verify the build matches the latest commit." >&2
+fi
 
 SRC_MD5="$(md5 -q "$SRC/Contents/MacOS/zychanstrip")"
 printf 'source : %s\nmd5    : %s\n' "$SRC" "$SRC_MD5"

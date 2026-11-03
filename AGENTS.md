@@ -30,7 +30,12 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
 6. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
    `RESULT 253/253`). The Linux container can compile the DSP research harness in
    `tools/research/` but cannot build the AU.
-7. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
+7. **Build the latest, always (2026-11-03).** Order is commit → `ninja -C build` →
+   `tools/install_global.sh`. The installer refuses a dirty tree, a `HEAD` behind `origin/main`,
+   or an artefact older than the `HEAD` commit, and prints the installed commit. Never install a
+   build made from uncommitted work: no commit reproduces it, so the running binary cannot be
+   rebuilt or reviewed (`ZYCH_ALLOW_STALE=1` overrides for a deliberate experiment only).
+8. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
    Keep the harness green before pushing; record what you could not verify.
 
 ## Documentation duties

@@ -238,6 +238,14 @@ signature whose stale `Contents/_CodeSignature` makes `codesign -v` fail on the 
 (`code has no resources but signature indicates they must be present`). The installer runs
 `codesign --force --sign -` and refuses to finish unless `codesign -v` then passes.
 
+**Build the latest, always.** The installer refuses an install that isn't reproducible from a
+commit — it fails if tracked source is modified, if local `HEAD` is behind `origin/main`, or if
+the artefact is older than the `HEAD` commit, and it prints the commit it installed. So the
+sequence is always: **commit → `ninja -C build` → `tools/install_global.sh`**. An AU built from a
+dirty tree has no commit that reproduces it, which is exactly what happened on 2026-11-03 when an
+installed build carried uncommitted limiter work. `ZYCH_ALLOW_STALE=1 tools/install_global.sh`
+overrides the guard for a deliberate experiment and prints a warning.
+
 ```bash
 # what the script does, in full
 sudo /usr/bin/ditto build/zychanstrip_artefacts/Release/AU/zychanstrip.component \

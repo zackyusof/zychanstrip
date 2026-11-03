@@ -52,6 +52,12 @@ for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_na
             continue
         objs.append(os.path.join(root, f))
 
+# Include generated JUCE BinaryData resources used by the knob image.
+for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", "zychanstrip_assets.dir")):
+    for f in files:
+        if f.endswith(".o"):
+            objs.append(os.path.join(root, f))
+
 fw = ["Cocoa", "CoreAudio", "CoreAudioKit", "CoreMIDI", "AudioToolbox", "CoreFoundation", "IOKit", "Foundation",
       "AppKit", "QuartzCore", "CoreServices", "Metal", "MetalKit", "WebKit", "Security",
       "Accelerate", "CoreVideo", "DiscRecording", "AVFoundation", "CoreMedia", "AudioUnit",

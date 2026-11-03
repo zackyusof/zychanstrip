@@ -42,6 +42,10 @@ juce_add_plugin(zychanstrip
     AU_MAIN_TYPE kAudioUnitType_Effect
     VST3_CATEGORIES Fx Dynamics EQ)
 
+juce_add_binary_data(zychanstrip_assets
+    SOURCES Source/Assets/daka-ware-la2a-front.png)
+target_link_libraries(zychanstrip PRIVATE zychanstrip_assets)
+
 target_sources(zychanstrip PRIVATE
     Source/Modules.h
     Source/Meters.h
@@ -51,6 +55,11 @@ target_sources(zychanstrip PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.h
     Source/PluginEditor.cpp)
+
+set_source_files_properties(Source/Assets/daka-ware-la2a-front.png PROPERTIES
+    HEADER_FILE_ONLY TRUE
+    MACOSX_PACKAGE_LOCATION Resources)
+target_sources(zychanstrip_AU PRIVATE Source/Assets/daka-ware-la2a-front.png)
 
 target_compile_definitions(zychanstrip PUBLIC
     JUCE_WEB_BROWSER=0

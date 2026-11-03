@@ -1,6 +1,8 @@
 #include "PluginEditor.h"
 #include "MeterPanel.h"
 #include "UiStyle.h"
+#include <BinaryData.h>
+
 
 using namespace juce;
 
@@ -794,84 +796,34 @@ public:
     }
 
     //-------------------------------------------------------------------- knobs
-    /** Davies Molding 1470 / Daka-Ware knob: upright fluted bakelite body with a top
-        index pointer. Dimensions are normalized to the 25 mm body diameter; the pointer
-        projects slightly beyond its rim. */
+    /** Daka-Ware LA-2A replacement knob: low round base, scalloped grip body, and the
+        characteristic long raised pointer/wing. Geometry follows the product reference. */
     static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
                                 float a0, float a1, float knobScale)
     {
-        const float bodyR  = b.getWidth() * 0.35f;
-        const float bodyH  = bodyR * 1.28f;
-        const float bevel  = bodyR * 0.30f;
-        const auto cap     = s.findColour (Slider::rotarySliderFillColourId);
+        juce::ignoreUnused (knobScale);
+        static Image knobImage = []
+        {
+            const auto* bytes = BinaryData::dakawarela2afront_png;
+            const int size = BinaryData::dakawarela2afront_pngSize;
+            return ImageFileFormat::loadFrom (bytes, (size_t) size);
+        }();
         const float pos    = (float) s.valueToProportionOfLength (s.getValue());
         const float angle  = a0 + pos * (a1 - a0);
+        KnobScale sc; sc.a0 = a0; sc.a1 = a1; sc.majorTicks = 9; sc.minorTicks = false;
+        const float radius = b.getWidth() * 0.47f;
+        paintScale (g, c, radius * 1.05f, sc, Colours::white.withAlpha (0.82f), 1.0f);
 
-        // Scale marks sit outside the body, clear of the flutes.
-        KnobScale sc; sc.a0 = a0; sc.a1 = a1;
-        paintScale (g, c, bodyR * 1.08f, sc, Colours::white.withAlpha (0.80f), knobScale);
-
-        // ---- Upright cylindrical barrel. Its major axis is vertical in the UI:
-        // the last rendering accidentally used a wide, foreshortened ellipse.
-        const float topY = c.y - bodyH * 0.50f;
-        const float botY = c.y + bodyH * 0.50f;
-        g.setColour (Colours::black.withAlpha (0.45f));
-        g.fillEllipse (Rectangle<float> (bodyR * 1.75f, bodyH * 0.48f)
-                           .withCentre (c.translated (0.0f, bodyH * 0.34f + 1.5f)));
-
-        // Vertical fluted cylindrical wall.
-        auto side = Rectangle<float> (bodyR * 1.48f, bodyH).withCentre (c);
-        g.setGradientFill (ColourGradient (cap.brighter (0.22f), side.getX(), side.getY(),
-                                           cap.darker (0.62f), side.getRight(), side.getBottom(), false));
-        g.fillRoundedRectangle (side, bodyR * 0.28f);
-
-        // Moulded vertical flutes around the barrel; paired highlight/shadow strokes
-        // give the 1470's characteristic evenly spaced Daka-Ware ribs.
-        for (int i = 0; i < 14; ++i)
+        if (knobImage.isValid())
         {
-            const float t = ((float) i + 0.5f) / 14.0f;
-            const float x = side.getX() + t * side.getWidth();
-            const float nx = 2.0f * t - 1.0f;
-            const float arc = std::sqrt (jmax (0.0f, 1.0f - nx * nx));
-            const float y0 = side.getY() + bevel * (1.0f - arc) * 0.35f;
-            const float y1 = side.getBottom() - bevel * (1.0f - arc) * 0.35f;
-            g.setColour (Colours::black.withAlpha (0.40f));
-            g.drawLine (x, y0, x, y1, jmax (0.7f, bodyR * 0.035f));
-            g.setColour (cap.brighter (0.38f).withAlpha (0.55f));
-            g.drawLine (x + 1.0f, y0, x + 1.0f, y1, jmax (0.5f, bodyR * 0.025f));
+            const float side = radius * 2.0f;
+            const auto dest = Rectangle<float> (side, side).withCentre (c);
+            g.saveState();
+            g.addTransform (AffineTransform::rotation (-angle,
+                                                       c.x, c.y));
+            g.drawImage (knobImage, dest, RectanglePlacement::centred);
+            g.restoreState();
         }
-
-        // Distinct top face / bevel, with the pointer seated on the top rather than
-        // appearing as a long white blade stuck to the front of a flat disc.
-        auto topFace = Rectangle<float> (bodyR * 1.48f, bevel * 1.15f).withCentre ({ c.x, topY + bevel * 0.55f });
-        g.setGradientFill (ColourGradient (cap.brighter (0.56f), topFace.getX(), topFace.getY(),
-                                           cap.darker (0.18f), topFace.getRight(), topFace.getBottom(), false));
-        g.fillEllipse (topFace);
-        g.setColour (Colours::white.withAlpha (0.20f));
-        g.drawEllipse (topFace.reduced (0.7f), 0.8f);
-        g.setColour (Colours::black.withAlpha (0.72f));
-        g.drawEllipse (side, 0.9f);
-
-        // ---- Separate white pointer/index, running along the top and projecting just
-        // beyond the 25 mm body (about 2 mm, or +4 mm overall diameter).
-        const float tipR  = bodyR * 0.58f;
-        const float rootR = bodyR * 0.10f;
-        Path ptr;
-        ptr.startNewSubPath (-bodyR * 0.075f, -rootR);
-        ptr.lineTo (-bodyR * 0.055f, -tipR);
-        ptr.lineTo ( bodyR * 0.055f, -tipR);
-        ptr.lineTo ( bodyR * 0.075f, -rootR);
-        ptr.closeSubPath();
-
-        const auto xf = AffineTransform::rotation (angle).scaled (1.0f, 0.58f).translated (c.x, topY + bevel * 0.55f);
-
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.fillPath (ptr, xf.translated (0.0f, 0.8f));
-        g.setGradientFill (ColourGradient (Colour (0xfffbfbf6), c.x - bodyR * 0.3f, c.y - tipR,
-                                           Colour (0xffcdcec6), c.x + bodyR * 0.3f, c.y + bodyR * 0.2f, false));
-        g.fillPath (ptr, xf);
-        g.setColour (Colours::black.withAlpha (0.35f));
-        g.strokePath (ptr, PathStrokeType (0.6f), xf);
     }
 
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,

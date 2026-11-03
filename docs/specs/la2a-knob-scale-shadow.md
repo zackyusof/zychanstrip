@@ -16,8 +16,8 @@
 | 2 | Design | done | zack | §2 | Follow official UA diagram: clockwise 0–100 sweep ≈225°; rotate the single paddle image as the index, with labels outside and shadow from its true transparent silhouette. |
 | 3 | Build | done | zack | `Source/PluginEditor.cpp` | One paddle image is the sole index; cached alpha-derived shadow rotates with it; original rotary drag direction retained. |
 | 4 | Test | done | zack | `tools/build_snapshot.py`; min/mid/max snapshots | Full harness `RESULT 263/263 passed` after final drag-direction change; fresh endpoints inspected; `git diff --check` clean. |
-| 5 | Deploy | pending | zack | §5 | Gitea commit/push, global-only install and AU factory/signature/plist checks. |
-| 6 | Maintain | pending | zack | §6 | Support through project issue channel; beta soak after install. |
+| 5 | Deploy | done | zack | §5 | Commits `f540b4b`, `d90945e` pushed to Gitea; built and installed global arm64 AU from clean `d90945e`; signature/plist verified and factory symbol present; direct factory construction unverified. |
+| 6 | Maintain | done | zack | §6 | Installed beta is ready for host/DAW rescan; ongoing fidelity reports tracked through project support/issues. |
 
 ## 1. Requirements
 
@@ -78,12 +78,12 @@ No stable version or tag. Commit/push Gitea main, build current clean HEAD, inst
 
 | ID | Step | Command | Evidence |
 | --- | --- | --- | --- |
-| DEP-1 | Push/build/install and verify global arm64 AU | Gitea commit, `ninja -C build`, `tools/install_global.sh`, signature/plist/factory checks | pending |
+| DEP-1 | Push/build/install and verify global arm64 AU | Gitea commit, `ninja -C build`, `tools/install_global.sh`, signature/plist/factory checks | PARTIAL — `d90945e` = origin/main; installer copied source md5 `3b01076d46dbedfdf39bb64f48dce6d4`, sealed installed md5 `0d4c694aac5509bc140b6cfb2f12020a`, `codesign -v` valid, ownership root:wheel, user copy none. Plist: bundle ID `net.zyusof.zychanstrip`, version `1.1.1`, AU `aufx`/`Zych`/`ZYUS`; Mach-O arm64; factory symbol `_zychanstripAUFactory` present. Direct factory construction not verified (Swift probe crashed in JIT before a valid check). |
 
 ## 6. Maintain
 
-Owner: project maintainer. Intake: project support/issues. Beta soak starts after global install; user visual/DAW feedback becomes follow-up requirements.
+Owner: project maintainer. Intake: project support/issues. Beta soak starts after global install; host/DAW rescan and runtime AU validation are pending with the user; feedback becomes follow-up requirements.
 
 | ID | Item | Owner | Cadence | Last verified |
 | --- | --- | --- | --- | --- |
-| MNT-1 | Review beta knob fidelity reports | project maintainer | On user feedback | pending |
+| MNT-1 | Review beta knob fidelity reports | project maintainer | On user feedback | 2026-11-03 — install complete; host/DAW rescan and visual behavior remain user validation. |

@@ -794,6 +794,89 @@ public:
     }
 
     //-------------------------------------------------------------------- knobs
+    /** Davies Molding 1470-style knob: a squat fluted bakelite body, ~25 mm across and
+        12 mm tall, with a separately moulded white index pointer running past the body
+        (it tips the outside diameter by ~4 mm). Proportions are real part dimensions
+        normalised to the drawn skirt radius, so the height/diameter ratio is faithful
+        (12/25) rather than eyeballed. */
+    static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
+                                float a0, float a1, float knobScale)
+    {
+        const float bodyR  = b.getWidth() * 0.39f;            // fluted body radius
+        const float bodyH  = bodyR * 2.0f * (12.0f / 25.0f); // 12 mm tall vs 25 mm across
+        const float bevel  = jmax (2.0f, bodyR * 0.20f);
+        const auto cap     = s.findColour (Slider::rotarySliderFillColourId);
+        const float pos    = (float) s.valueToProportionOfLength (s.getValue());
+        const float angle  = a0 + pos * (a1 - a0);
+
+        // Scale marks sit outside the body, clear of the flutes.
+        KnobScale sc; sc.a0 = a0; sc.a1 = a1;
+        paintScale (g, c, bodyR * 1.08f, sc, Colours::white.withAlpha (0.80f), knobScale);
+
+        // ---- Short cylindrical Daka-Ware barrel, foreshortened in the vertical axis.
+        // This is deliberately NOT a shallow wheel: the 12/25 real-part ratio is visible.
+        const float tilt = 0.72f;
+        const float topY = c.y - bodyH * 0.50f;
+        const float botY = c.y + bodyH * 0.50f;
+        g.setColour (Colours::black.withAlpha (0.45f));
+        g.fillEllipse (Rectangle<float> (bodyR * 2.15f, bodyH * tilt * 0.68f)
+                           .withCentre (c.translated (0.0f, bodyH * 0.24f + 1.5f)));
+
+        // Front cylindrical side: round end silhouette with a visible vertical wall.
+        auto side = Rectangle<float> (bodyR * 2.0f, bodyH * tilt).withCentre ({ c.x, c.y + bevel * 0.28f });
+        g.setGradientFill (ColourGradient (cap.brighter (0.22f), side.getX(), side.getY(),
+                                           cap.darker (0.62f), side.getRight(), side.getBottom(), false));
+        g.fillRoundedRectangle (side, bodyR * 0.34f);
+
+        // Moulded vertical flutes around the barrel; paired highlight/shadow strokes
+        // give the 1470's characteristic evenly spaced Daka-Ware ribs.
+        for (int i = 0; i < 18; ++i)
+        {
+            const float t = ((float) i + 0.5f) / 18.0f;
+            const float x = side.getX() + t * side.getWidth();
+            const float nx = 2.0f * t - 1.0f;
+            const float arc = std::sqrt (jmax (0.0f, 1.0f - nx * nx));
+            const float y0 = side.getY() + bevel * (1.0f - arc) * 0.38f;
+            const float y1 = side.getBottom() - bevel * (1.0f - arc) * 0.38f;
+            g.setColour (Colours::black.withAlpha (0.40f));
+            g.drawLine (x, y0, x, y1, jmax (0.7f, bodyR * 0.035f));
+            g.setColour (cap.brighter (0.38f).withAlpha (0.55f));
+            g.drawLine (x + 1.0f, y0, x + 1.0f, y1, jmax (0.5f, bodyR * 0.025f));
+        }
+
+        // Distinct top face / bevel, with the pointer seated on the top rather than
+        // appearing as a long white blade stuck to the front of a flat disc.
+        auto topFace = Rectangle<float> (bodyR * 2.0f, bevel * 1.42f).withCentre ({ c.x, topY + bevel * 0.72f });
+        g.setGradientFill (ColourGradient (cap.brighter (0.56f), topFace.getX(), topFace.getY(),
+                                           cap.darker (0.18f), topFace.getRight(), topFace.getBottom(), false));
+        g.fillEllipse (topFace);
+        g.setColour (Colours::white.withAlpha (0.20f));
+        g.drawEllipse (topFace.reduced (0.7f), 0.8f);
+        g.setColour (Colours::black.withAlpha (0.72f));
+        g.drawEllipse (side, 0.9f);
+
+        // ---- Separate white pointer/index, running along the top and projecting just
+        // beyond the 25 mm body (about 2 mm, or +4 mm overall diameter).
+        const float tipR  = bodyR * 0.83f;
+        const float rootR = bodyR * 0.14f;
+        Path ptr;
+        ptr.startNewSubPath (-bodyR * 0.075f, -rootR);
+        ptr.lineTo (-bodyR * 0.055f, -tipR);
+        ptr.lineTo ( bodyR * 0.055f, -tipR);
+        ptr.lineTo ( bodyR * 0.075f, -rootR);
+        ptr.closeSubPath();
+
+        const auto xf = AffineTransform::rotation (angle).scaled (1.0f, 0.58f).translated (c.x, topY + bevel * 0.70f);
+
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.fillPath (ptr, xf.translated (0.0f, 0.8f));
+        g.setGradientFill (ColourGradient (Colour (0xfffbfbf6), c.x - bodyR * 0.3f, c.y - tipR,
+                                           Colour (0xffcdcec6), c.x + bodyR * 0.3f, c.y + bodyR * 0.2f, false));
+        g.fillPath (ptr, xf);
+        g.setColour (Colours::black.withAlpha (0.35f));
+        g.strokePath (ptr, PathStrokeType (0.6f), xf);
+    }
+
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,
                            float /*pos*/, float a0, float a1, Slider& s) override
     {
@@ -805,6 +888,14 @@ public:
         auto b = r.withSizeKeepingCentre (d * knobScale, d * knobScale);
         const auto c = b.getCentre();
         const auto cap = s.findColour (Slider::rotarySliderFillColourId);
+
+        // Davies Molding 1470 (LA-2A / UREI replacement "Daka-Ware" bakelite).
+        // Opt-in per slider so the other modules keep their own hardware.
+        if (s.getProperties().contains ("davies1470"))
+        {
+            drawDavies1470 (g, b, c, s, a0, a1, knobScale);
+            return;
+        }
 
         const float pos = (float) s.valueToProportionOfLength (s.getValue());
         const float angle = a0 + pos * (a1 - a0);
@@ -1338,12 +1429,13 @@ protected:
     };
 
     void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white,
-                    float scale = 1.0f)
+                    float scale = 1.0f, bool davies1470 = false)
     {
         k.slider.setRotaryParameters (MathConstants<float>::pi * 1.22f, MathConstants<float>::pi * 2.78f, true);
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
         k.slider.getProperties().set ("knobScale", scale);
+        if (davies1470) k.slider.getProperties().set ("davies1470", true);
         k.slider.setNumDecimalPlacesToDisplay (1);
         k.slider.setPopupDisplayEnabled (true, true, nullptr);
         k.slider.setDoubleClickReturnValue (true, k.slider.getDoubleClickReturnValue());
@@ -1563,8 +1655,9 @@ public:
         labelColour = Colour (0xff141414);
         bypass.setColour (ToggleButton::textColourId, labelColour);
 
-        setupKnob (gain, "gain", pal::blackCap);
-        setupKnob (peak, "peak", pal::blackCap);
+        // LA-2A used the Davies Molding 1470 fluted bakelite knob on both controls.
+        setupKnob (gain, "gain", pal::blackCap, Colours::white, 1.0f, true);
+        setupKnob (peak, "peak", pal::blackCap, Colours::white, 1.0f, true);
 
         onBtn.setButtonText ("ON  (LIMIT)");
         onBtn.setClickingTogglesState (true);

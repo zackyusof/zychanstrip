@@ -10,6 +10,14 @@ has been published.
 
 ## [Unreleased]
 
+### Added
+
+- **Version / channel label in the GUI header.** The editor now draws the build's version in a recessed
+  pill immediately after the `zychanstrip` wordmark: `v1.0.1` for a stable build, `v1.0.2-beta.1` in
+  amber for a prerelease. The string comes from `ZYCHANSTRIP_GUI_VERSION` in `CMakeLists.txt`
+  (`PROJECT_VERSION` + optional `-DZYCHANSTRIP_BETA=beta.1`), so the GUI cannot disagree with the
+  artefact; `configure` prints it. No parameter, state or DSP change.
+
 ### Changed
 
 - **Install wiring is global-only.** `COPY_PLUGIN_AFTER_BUILD` is now `FALSE`, so a build no longer

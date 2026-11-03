@@ -57,6 +57,23 @@ target_compile_definitions(zychanstrip PUBLIC
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0)
 
+# Version / channel label shown in the GUI header, immediately after the wordmark.
+# Convention:  stable  ->  "v<PROJECT_VERSION>"            e.g. v1.0.1
+#              beta    ->  "v<PROJECT_VERSION>-<BETA>"     e.g. v1.0.2-beta.1
+# PROJECT_VERSION stays numeric (the bundle plist needs it); the prerelease suffix lives
+# only here, so the GUI can never disagree with the tag it was built from.
+set(ZYCHANSTRIP_BETA "" CACHE STRING
+    "Prerelease suffix rendered in the GUI header (e.g. beta.1); empty = stable")
+if(ZYCHANSTRIP_BETA)
+    set(ZYCHANSTRIP_GUI_VERSION "v${PROJECT_VERSION}-${ZYCHANSTRIP_BETA}")
+else()
+    set(ZYCHANSTRIP_GUI_VERSION "v${PROJECT_VERSION}")
+endif()
+message(STATUS "zychanstrip GUI version label: ${ZYCHANSTRIP_GUI_VERSION}")
+
+target_compile_definitions(zychanstrip PUBLIC
+    ZYCHANSTRIP_VERSION_LABEL="${ZYCHANSTRIP_GUI_VERSION}")
+
 target_link_libraries(zychanstrip
     PRIVATE
         juce::juce_audio_utils

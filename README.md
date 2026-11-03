@@ -262,6 +262,26 @@ hundred third-party components installed here, so a missing entry says nothing a
 
 **Build directory gotcha.** `build/` is configured against an absolute source path. If you move or rename the repo, `ninja` fails with `rebuilding 'build.ninja': subcommand failed`. Fix: `rm -rf build` and re-run `cmake -S . -B build ...` from the new path.
 
+## Version and channel label
+
+The header shows the version immediately after the `zychanstrip` wordmark — the build's only
+version display, taken from CMake so it cannot drift from the artefact:
+
+| Build | Label | Treatment |
+| --- | --- | --- |
+| stable | `v1.0.1` | neutral grey |
+| prerelease | `v1.0.2-beta.1` | amber |
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release                    # v<PROJECT_VERSION>
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1   # …-beta.1
+```
+
+`PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
+suffix lives only in the `ZYCHANSTRIP_BETA` cache string, and `configure` prints the resulting label.
+The amber treatment means a beta screenshot can never be mistaken for a release.
+
+
 ---
 
 ## Development & Verification Tools

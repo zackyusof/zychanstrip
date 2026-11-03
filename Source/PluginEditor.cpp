@@ -4,6 +4,12 @@
 
 using namespace juce;
 
+// Version / channel label rendered after the header wordmark. Supplied by CMake
+// (ZYCHANSTRIP_VERSION_LABEL); falls back to the bundle version if it is ever missing.
+#ifndef ZYCHANSTRIP_VERSION_LABEL
+ #define ZYCHANSTRIP_VERSION_LABEL "v" JucePlugin_VersionString
+#endif
+
 //==============================================================================
 //  Palette + photorealistic drawing helpers
 //==============================================================================
@@ -2238,7 +2244,8 @@ void ZychanStripEditor::paint (Graphics& g)
     const float logoY = header.getY() + 7.0f;
 
     // "zychanstrip" wordmark (matching zynamfx typographic style)
-    g.setFont (fnt (18.0f, true));
+    const Font wordmarkFont = fnt (18.0f, true);
+    g.setFont (wordmarkFont);
     // Engraved drop shadow
     g.setColour (Colours::black.withAlpha (0.75f));
     g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY + 1.0f, 120.0f, 22.0f), Justification::centredLeft);
@@ -2246,14 +2253,48 @@ void ZychanStripEditor::paint (Graphics& g)
     g.setColour (Colours::white);
     g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY, 120.0f, 22.0f), Justification::centredLeft);
 
-    // Iconic ZY monogram logo (resembling the logo on zynamfx)
-    const Rectangle<float> zyMarkBox (logoX + 118.0f, logoY + 1.0f, 44.0f, 20.0f);
+    // Version / channel label, immediately after the wordmark.
+    // Convention (CMakeLists ZYCHANSTRIP_BETA): stable = "v1.0.1", prerelease = "v1.0.2-beta.1".
+    // A prerelease renders amber so a beta build can never be mistaken for a release in a screenshot.
+    const String versionLabel { ZYCHANSTRIP_VERSION_LABEL };
+    const bool isBetaBuild = versionLabel.containsIgnoreCase ("beta");
+    const Font versionFont = fnt (9.5f, true);
+
+    GlyphArrangement wordmarkGa;
+    wordmarkGa.addLineOfText (wordmarkFont, "zychanstrip", 0.0f, 0.0f);
+    const float wordmarkW = wordmarkGa.getBoundingBox (0, -1, true).getRight();
+
+    GlyphArrangement versionGa;
+    versionGa.addLineOfText (versionFont, versionLabel, 0.0f, 0.0f);
+    const float versionW = versionGa.getBoundingBox (0, -1, true).getWidth();
+
+    const Rectangle<float> versionBox (logoX + wordmarkW + 7.0f, logoY + 6.5f, versionW + 11.0f, 14.0f);
+    g.setColour (Colours::black.withAlpha (0.45f));
+    g.fillRoundedRectangle (versionBox, 3.0f);
+    g.setColour ((isBetaBuild ? Colour (0xffe8a33d) : pal::engraveDim).withAlpha (0.55f));
+    g.drawRoundedRectangle (versionBox, 3.0f, 0.8f);
+    g.setFont (versionFont);
+    g.setColour (Colours::black.withAlpha (0.8f));
+    g.drawText (versionLabel, versionBox.translated (0.0f, 0.6f), Justification::centred, false);
+    g.setColour (isBetaBuild ? Colour (0xffffc45c) : Colour (0xffd8dde3));
+    g.drawText (versionLabel, versionBox, Justification::centred, false);
+
+    // Iconic ZY monogram logo (resembling the logo on zynamfx), placed clear of the version pill
+    const Rectangle<float> zyMarkBox (versionBox.getRight() + 9.0f, logoY + 1.0f, 44.0f, 20.0f);
     drawZyLogo (g, zyMarkBox);
 
-    // Subtitle badge
-    g.setFont (fnt (9.0f, false));
-    g.setColour (pal::engraveDim);
-    g.drawText ("MASTERING & TRACKING STRIP", Rectangle<float> (zyMarkBox.getRight() + 12.0f, logoY + 3.0f, 180.0f, 18.0f), Justification::centredLeft);
+    // Subtitle badge — placed clear of the page toggle. It used to start right after the
+    // monogram and ran underneath the RACK/METER toggle, so only "MAST" and "RIP" showed.
+    const int subtitleX = pageToggle.getRight() + 14;
+    const int subtitleRight = (int) (full.getWidth() * 0.5f) - 14;   // stop before the power jewel
+    if (subtitleRight - subtitleX > 80)
+    {
+        g.setFont (fnt (9.0f, false));
+        g.setColour (pal::engraveDim);
+        g.drawText ("MASTERING & TRACKING STRIP",
+                    Rectangle<int> (subtitleX, (int) (logoY + 3.0f), subtitleRight - subtitleX, 18),
+                    Justification::centredLeft, true);
+    }
 
     // Power jewel LED on header
     const Point<float> pwrC (full.getWidth() * 0.5f, header.getCentreY());    g.setColour (Colour (0xff08090a));

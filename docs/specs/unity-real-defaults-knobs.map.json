@@ -1,0 +1,83 @@
+{
+  "modules": [
+    {
+      "name": "engine",
+      "owner": "inline-orchestrator",
+      "globs": [
+        "Source/Modules.h",
+        "Source/PluginProcessor.h",
+        "Source/PluginProcessor.cpp"
+      ]
+    },
+    {
+      "name": "gui",
+      "owner": "inline-orchestrator",
+      "globs": [
+        "Source/PluginEditor.h",
+        "Source/PluginEditor.cpp",
+        "tools/snapshot_main.cpp",
+        "tools/dsp_checks.h"
+      ]
+    },
+    {
+      "name": "docs",
+      "owner": "inline-orchestrator",
+      "globs": [
+        "README.md",
+        "docs/specs/unity-real-defaults-knobs.md",
+        "docs/dsp/signal-path.md"
+      ]
+    },
+    {
+      "name": "project-and-remaining",
+      "owner": "inline-orchestrator",
+      "globs": [
+        ".gitignore",
+        ".gitmodules",
+        "CMakeLists.txt",
+        "CMakePresets.json",
+        "LICENSE",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "DSP_RESEARCH_ANALYSIS.md",
+        "THIRD_PARTY_NOTICES.md",
+        "Source/Assets/**",
+        "Source/Eq560.h",
+        "Source/MeterPanel.cpp",
+        "Source/MeterPanel.h",
+        "Source/Meters.h",
+        "Source/UiStyle.h",
+        "tools/build_snapshot.py",
+        "tools/install_global.sh",
+        "tools/juce_test_host.cpp",
+        "tools/juce_test_host.h",
+        "tools/research/**",
+        "tools/snapshot_runner.cpp",
+        "tools/snapshot_runner.h",
+        "tools/testbed_adapter.cpp",
+        "tools/testbed_adapter.h",
+        "tools/ui_self_tests.cpp",
+        "tools/ui_self_tests.h",
+        "tools/ui_testbed_main.cpp",
+        "tools/ui_testbed_main.h",
+        "docs/dsp/README.md",
+        "docs/dsp/measurements-raw.md",
+        "docs/dsp/measurements.md",
+        "docs/dsp/module-limiter.md",
+        "docs/dsp/reordering.md",
+        "docs/dsp/research/**",
+        "docs/screenshots/**",
+        "docs/specs/1176-full-width-meter.md",
+        "docs/specs/api560-autogain.md",
+        "docs/specs/compact-rack.md",
+        "docs/specs/enhance-module-redesign.md",
+        "docs/specs/gui-meter-refine.md",
+        "docs/specs/juce-9-upgrade.md",
+        "docs/specs/limiter-window-optimization.md",
+        "docs/specs/photoreal-gui.md",
+        "docs/specs/version-label.md",
+        "docs/specs/zychanstrip-five-fixes.md"
+      ]
+    }
+  ]
+}

@@ -38,8 +38,8 @@ public:
     std::array<int, NumModules> getOrder() const;
     void setOrder (const std::array<int, NumModules>&);
 
-    /** Restore every parameter to its declared default, return the rack to the factory order
-        and clear all metering. Message thread only; the module DSP state itself is cleared on
+    /** Restore every parameter to the Hardware Neutral Starting Profile, return the rack to
+        factory order and clear all metering. Message thread only; module DSP state clears on
         the next audio block so the reset is sample-accurate and RT-safe. */
     void resetToDefaults();
 
@@ -49,11 +49,13 @@ public:
 
     float getLimiterOutput() const { return modules[Limiter]->outPeak.load(); }
 
-    /** Post-chain metering tap (read-only; never alters audio). */
+    /** Final post-UNITY metering tap (read-only; never alters audio). */
     RackMeters& getMeters() noexcept { return meters; }
     const RackMeters& getMeters() const noexcept { return meters; }
 
     juce::AudioProcessorValueTreeState apvts;
+    float getUnityGainDb() const noexcept { return unityGainDb.load (std::memory_order_relaxed); }
+    bool isUnityEnabled() const noexcept { return unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f; }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
@@ -63,6 +65,7 @@ private:
     // ModuleId is Console=0, Opto=1, Fet=2, Limiter=3, so the slots are [0,2,1,3].
     std::atomic<uint32_t> packedOrder { 0x03010200u };
     std::atomic<bool> resetRequested { false };
+    std::atomic<float> unityGainDb { 0.0f };
     RackMeters meters;
     juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
     // Latency compensation for the dry path: the wet signal is delayed by the rack's reported
@@ -82,7 +85,12 @@ private:
     void feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples);
     std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
+    std::atomic<float>* unityEnabled = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };
+    juce::SmoothedValue<float> unityGain { 1.0f };
+    double unityInputEnergy = 0.0;
+    double unityOutputEnergy = 0.0;
+    double unityEnergyCoef = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZychanStripProcessor)
 };

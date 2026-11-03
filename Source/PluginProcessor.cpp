@@ -1,5 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <utility>
 
 //==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout ZychanStripProcessor::createLayout()
@@ -69,6 +73,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ZychanStripProcessor::create
         addF (juce::String ("con_") + rack::Eq560::bandIds[i],
               "EQ560 " + juce::String (rack::Eq560::frequencies[i], 0) + " Hz", -12.0f, 12.0f, 0.0f, "dB");
     addB ("lim_auto_gain", "Enhance Auto Gain", true);
+    // Append-only: the new automation ID must never shift any existing host parameter index.
+    addB ("unity", "UNITY Level Match", false);
 
     return layout;
 }
@@ -86,6 +92,7 @@ ZychanStripProcessor::ZychanStripProcessor()
     modules[Limiter] = std::make_unique<rack::LimiterModule> (apvts, "lim_");
     masterLevel = apvts.getRawParameterValue ("master_level");
     mixAmount   = apvts.getRawParameterValue ("master_mix");
+    unityEnabled = apvts.getRawParameterValue ("unity");
 }
 
 bool ZychanStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -117,6 +124,11 @@ void ZychanStripProcessor::prepareToPlay (double sr, int block)
     prevFinalOut.assign ((size_t) juce::jmax (1, block), 0.0f);
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+    unityGain.reset (sr, 0.05);
+    unityGain.setCurrentAndTargetValue (1.0f);
+    unityInputEnergy = unityOutputEnergy = 0.0;
+    unityEnergyCoef = std::exp (-1.0 / (0.25 * sr));
+    unityGainDb.store (0.0f, std::memory_order_relaxed);
     meters.prepare (sr, block);
 }
 
@@ -131,6 +143,8 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     {
         for (auto& m : modules) m->reset();
         masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
+        unityGain.setCurrentAndTargetValue (1.0f);
+        unityInputEnergy = unityOutputEnergy = 0.0;
     }
 
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
@@ -203,7 +217,62 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    // Metering tap sits AFTER the master and the mix, so the meters show what actually leaves.
+    // Optional final stereo-linked loudness match. It measures the untouched input against
+    // the completed post-master/post-mix output, holds through silence, and ramps gain smoothly.
+    const bool matchUnity = unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f;
+    if (! matchUnity)
+    {
+        unityGain.setTargetValue (1.0f);
+        unityInputEnergy = unityOutputEnergy = 0.0;
+        unityGainDb.store (0.0f, std::memory_order_relaxed);
+    }
+    else if (numSamples == 0)
+        unityGainDb.store (0.0f, std::memory_order_relaxed);
+    else if (unityInputEnergy <= 1.0e-12 || unityOutputEnergy <= 1.0e-12)
+        unityGain.setTargetValue (1.0f);
+    const int matchChannels = juce::jmin (2, buffer.getNumChannels());
+    bool blockHasSignal = false;
+    for (int i = 0; i < numSamples; ++i)
+    {
+        if (matchUnity)
+        {
+            double inPower = 0.0, outPower = 0.0;
+            for (int ch = 0; ch < matchChannels; ++ch)
+            {
+                const double x = dryBuffer.getSample (ch, i);
+                const double y = buffer.getSample (ch, i);
+                inPower += x * x;
+                outPower += y * y;
+            }
+            const double channelScale = matchChannels > 0 ? 1.0 / matchChannels : 1.0;
+            if (inPower <= 1.0e-12)
+                unityInputEnergy = unityOutputEnergy = 0.0;
+            else
+            {
+                unityInputEnergy = unityEnergyCoef * unityInputEnergy + (1.0 - unityEnergyCoef) * inPower * channelScale;
+                unityOutputEnergy = unityEnergyCoef * unityOutputEnergy + (1.0 - unityEnergyCoef) * outPower * channelScale;
+            }
+            blockHasSignal |= inPower > 1.0e-12 && outPower > 1.0e-12;
+            if (unityInputEnergy > 1.0e-12 && unityOutputEnergy > 1.0e-12)
+            {
+                const float targetDb = juce::jlimit (-18.0f, 18.0f,
+                    (float) (10.0 * std::log10 (unityInputEnergy / unityOutputEnergy)));
+                unityGain.setTargetValue (juce::Decibels::decibelsToGain (targetDb));
+            }
+            else if (unityInputEnergy <= 1.0e-12 || unityOutputEnergy <= 1.0e-12)
+                unityGain.setTargetValue (1.0f);
+        }
+        const float g = unityGain.getNextValue();
+        for (int ch = 0; ch < matchChannels; ++ch)
+            buffer.getWritePointer (ch)[i] *= g;
+    }
+    const float gainReadout = 20.0f * std::log10 (std::max (1.0e-9f, unityGain.getCurrentValue()));
+    if (matchUnity && blockHasSignal)
+        unityGainDb.store (gainReadout, std::memory_order_relaxed);
+    else if (matchUnity)
+        unityGainDb.store (0.0f, std::memory_order_relaxed);
+
+    // Metering tap sits after UNITY as well, so the meters show what actually leaves.
     meters.process (buffer);
 
     // Publish the pair the limiter divides next block: the PREVIOUS block's chain input and rack
@@ -279,21 +348,52 @@ void ZychanStripProcessor::setOrder (const std::array<int, NumModules>& o)
 //==============================================================================
 void ZychanStripProcessor::resetToDefaults()
 {
-    // Every registered parameter (module controls, master level and mix) returns to the
-    // default declared in createLayout(). Host automation sees real gestures.
+    // The Hardware Neutral Starting Profile is separate from APVTS defaults for compatibility.
+    // Values are in each parameter's native units; the profile does not claim universal hardware
+    // calibration where the original controls have no fixed numeric unity point.
+    static const std::array<std::pair<const char*, float>, 40> resetProfile {{
+        { "con_bypass", 0 }, { "con_hpf", 20 }, { "con_lf", 0 }, { "con_lmf_f", 600 },
+        { "con_lmf", 0 }, { "con_hmf_f", 3000 }, { "con_hmf", 0 }, { "con_hf", 0 },
+        { "con_thresh", 0 }, { "con_ratio", 3 }, { "con_attack", 10 }, { "con_release", 200 },
+        { "con_out", 0 }, { "opto_bypass", 0 }, { "opto_peak", 0 }, { "opto_gain", 50 },
+        { "opto_mode", 0 }, { "fet_bypass", 0 }, { "fet_input", 12 }, { "fet_output", 0 },
+        { "fet_attack", 3 }, { "fet_release", 4 }, { "lim_bypass", 0 },
+        { "lim_gain", 0 }, { "lim_ceiling", -0.3f }, { "lim_release", 100 },
+        { "lim_enhance", 0 }, { "master_level", 0 }, { "master_mix", 100 },
+        { "lim_auto_gain", 1 }, { "con_eq_16k", 0 }, { "con_eq_8k", 0 },
+        { "con_eq_4k", 0 }, { "con_eq_2k", 0 }, { "con_eq_1k", 0 }, { "con_eq_500", 0 },
+        { "con_eq_250", 0 }, { "con_eq_125", 0 }, { "con_eq_63", 0 }, { "con_eq_31", 0 }
+    }};
     for (auto* parameter : getParameters())
     {
         if (parameter == nullptr) continue;
+        float resetValue = parameter->getDefaultValue();
+        for (const auto& entry : resetProfile)
+            if (auto* target = apvts.getParameter (entry.first); target == parameter)
+                resetValue = target->convertTo0to1 (entry.second);
         parameter->beginChangeGesture();
-        parameter->setValueNotifyingHost (parameter->getDefaultValue());
+        parameter->setValueNotifyingHost (resetValue);
+        parameter->endChangeGesture();
+    }
+    if (auto* parameter = apvts.getParameter ("fet_ratio"); parameter != nullptr)
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (0.0f);
+        parameter->endChangeGesture();
+    }
+    if (auto* parameter = apvts.getParameter ("unity"); parameter != nullptr)
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (0.0f);
         parameter->endChangeGesture();
     }
 
     setOrder (getDefaultOrder());
     meters.reset();
+    unityGainDb.store (0.0f, std::memory_order_relaxed);
 
-    // Module state (envelopes, EQ biquads, limiter delay/energy rings) is cleared by the next
-    // audio block, so this call never touches DSP state from the message thread.
+    // Module/UNITY state (envelopes, filters, delay/energy followers) clears by the next audio
+    // block, so this call never touches DSP state from the message thread.
     resetRequested.store (true);
 }
 
@@ -337,6 +437,7 @@ void ZychanStripProcessor::setStateInformation (const void* data, int size)
                 addMissingParameter (juce::String ("con_") + id, 0.0f);
             // Previously saved sessions retain their original limiter loudness.
             addMissingParameter ("lim_auto_gain", 0.0f);
+            addMissingParameter ("unity", 0.0f);
             apvts.replaceState (state);
 
             auto tokens = juce::StringArray::fromTokens (state.getProperty ("order", "0,1,2,3").toString(), ",", "");

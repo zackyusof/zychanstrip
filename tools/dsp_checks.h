@@ -315,4 +315,21 @@ void newEditorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor)
         setParam (proc, "lim_auto_gain", 1);
         check (toggle->getToggleState(), "Auto Gain host-to-GUI attachment");
     }
+    auto* unity = editor.getUnityButtonForTest();
+    check (unity != nullptr && unity->getName() == "UNITY", "UNITY host-automatable button exists beside RESET");
+    if (unity != nullptr)
+    {
+        auto mouse = [&] (bool down)
+        {
+            const auto t = juce::Time::getCurrentTime();
+            const juce::Point<float> pt (unity->getWidth() * 0.5f, unity->getHeight() * 0.5f);
+            const juce::MouseEvent ev (juce::Desktop::getInstance().getMainMouseSource(), pt,
+                down ? juce::ModifierKeys::leftButtonModifier : juce::ModifierKeys(), 1, 0, 0, 0, 0,
+                unity, unity, t, pt, t, 1, false);
+            if (down) unity->mouseDown (ev); else unity->mouseUp (ev);
+        };
+        mouse (true); mouse (false);
+        check (proc.apvts.getRawParameterValue ("unity")->load() > 0.5f, "UNITY GUI-to-audio host parameter");
+        setParam (proc, "unity", 0);
+    }
 }

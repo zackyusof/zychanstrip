@@ -28,7 +28,8 @@ host input buffer
                                       │
                                       ├─ master gain (smoothed)
                                       ├─ dry/wet blend
-                                      └─ metering tap (read-only)
+                                       ├─ optional UNITY matcher (stereo-linked)
+                                       └─ metering tap (read-only)
                                               │
                                               ▼
                                         host output
@@ -170,7 +171,8 @@ masterGain.setTargetValue (dB(master_level));  masterGain.applyGain (buffer, num
 // 5. dry/wet blend
 if (wet < 0.9999f) { buffer *= wet; buffer += dryBuffer * (1-wet); }
 
-// 6. metering tap
+// 6. optional final UNITY match, referencing original input and completed output
+// 7. metering tap
 meters.process (buffer);
 ```
 — `PluginProcessor.cpp:113-150`
@@ -184,8 +186,12 @@ Points worth knowing:
 * **The mix is not latency compensated** — `dryBuffer` is read at the same block offset
   (`PluginProcessor.cpp:144`), while the wet path is 71 samples late. That is the
   measured 13.2 dB notch at 50 % mix (`measurements.md` §2).
-* **The metering tap is last and read-only** (`Meters.h:14-16`, `:71`), so the meters show
-  what actually leaves the plugin, after master and mix.
+* **UNITY, when enabled, is last before metering**: its stereo-linked energy follower reads
+  the untouched host input and the completed post-master/post-mix output, applies a smoothed
+  correction limited to ±18 dB, and holds through input silence. It is a level match, not
+  waveform alignment or a true-peak limiter.
+* **The metering tap is after UNITY and read-only** (`Meters.h:14-16`, `:71`), so the meters show
+  what actually leaves the plugin.
 
 ### Block-size growth
 

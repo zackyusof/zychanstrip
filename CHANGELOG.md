@@ -10,6 +10,22 @@ has been published.
 
 ## [Unreleased]
 
+## [1.1.1-beta.1] — 2026-11-03
+
+Beta build from the current Gitea `main` delta since `v1.0.1`, as explicitly confirmed by the user.
+This is a prerelease only: no stable tag or release is created here.
+
+### Added
+
+- Final-stage stereo-linked UNITY loudness matching after rack, master level and dry/wet mix, with smoothed bounded correction, silence handling, and a live gain readout.
+- A documented Hardware Neutral Starting Profile for RESET without changing existing parameter IDs, ranges, or declared defaults.
+- Regression coverage for UNITY matching/toggle/state behavior and reset-profile values.
+
+### Changed
+
+- Corrected LA-2A knob rotation direction and added procedural shadowing; redrew 1176 scales and knob shadows procedurally from the supplied inline references.
+- Updated signal-flow documentation and parameter count (42).
+
 ### Added
 
 - **Installer enforces "build the latest".** `tools/install_global.sh` now refuses to install a
@@ -20,7 +36,7 @@ has been published.
   binary. `ZYCH_ALLOW_STALE=1` overrides for a deliberate experiment.
 
 - **Version / channel label in the GUI header.** The editor now draws the build's version in a recessed
-  pill immediately after the `zychanstrip` wordmark: `v1.0.1` for a stable build, `v1.0.2-beta.1` in
+  pill immediately after the `zychanstrip` wordmark: `v1.1.1` for a stable build, `v1.1.1-beta.1` in
   amber for a prerelease. The string comes from `ZYCHANSTRIP_GUI_VERSION` in `CMakeLists.txt`
   (`PROJECT_VERSION` + optional `-DZYCHANSTRIP_BETA=beta.1`), so the GUI cannot disagree with the
   artefact; `configure` prints it. No parameter, state or DSP change.

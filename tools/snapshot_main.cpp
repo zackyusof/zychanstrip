@@ -6,6 +6,7 @@
 #include <cmath>
 #include <complex>
 #include <iostream>
+#include <utility>
 
 namespace
 {
@@ -285,6 +286,56 @@ void audioTests()
     juce::MidiBuffer midi;
     proc.processBlock (empty, midi);
     check (true, "empty audio block accepted");
+
+    // Final UNITY stage must meter-match the actual input after any master setting, while
+    // remaining smoothly bounded and completely silent on a silent input.
+    ZychanStripProcessor matched;
+    bypassAll (matched);
+    setParam (matched, "master_level", -9.0f);
+    setParam (matched, "unity", 1.0f);
+    matched.setPlayConfigDetails (2, 2, 48000.0, 512);
+    matched.prepareToPlay (48000.0, 512);
+    juce::AudioBuffer<float> tone (2, 512);
+    for (int block = 0; block < 400; ++block)
+    {
+        for (int i = 0; i < 512; ++i)
+        {
+            const float x = 0.2f * std::sin (2.0f * juce::MathConstants<float>::pi * 440.0f * (block * 512 + i) / 48000.0f);
+            tone.setSample (0, i, x);
+            tone.setSample (1, i, x * 0.5f);
+        }
+        juce::MidiBuffer m;
+        matched.processBlock (tone, m);
+    }
+    double inputPower = 0.0, outputPower = 0.0;
+    for (int i = 0; i < tone.getNumSamples(); ++i)
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            const double in = 0.2 * std::sin (2.0 * juce::MathConstants<double>::pi * 440.0 * (399 * 512 + i) / 48000.0) * (ch == 0 ? 1.0 : 0.5);
+            const double out = tone.getSample (ch, i);
+            inputPower += in * in;
+            outputPower += out * out;
+        }
+    const double unityErrorDb = 10.0 * std::log10 (outputPower / inputPower);
+    check (std::isfinite (unityErrorDb) && std::abs (unityErrorDb) < 1.0,
+           "UNITY matches final post-master output RMS to input (" + juce::String (unityErrorDb, 3) + " dB)");
+    check (std::abs (matched.getUnityGainDb() - 9.0f) < 0.5f, "UNITY readout follows applied correction");
+
+    juce::AudioBuffer<float> silence (2, 512);
+    silence.clear();
+    juce::MidiBuffer silentMidi;
+    for (int block = 0; block < 40; ++block) matched.processBlock (silence, silentMidi);
+    bool allFinite = true;
+    double silencePeak = 0.0;
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < silence.getNumSamples(); ++i)
+        {
+            allFinite &= std::isfinite (silence.getSample (ch, i));
+            silencePeak = std::max (silencePeak, (double) std::abs (silence.getSample (ch, i)));
+        }
+    check (allFinite && silencePeak < 1.0e-7, "UNITY holds safely through silence without gain runaway (peak "
+               + juce::String (silencePeak, 9) + ")");
+    setParam (matched, "unity", 0.0f);
 }
 // RESET must be a full restore: every parameter back to its declared default, the factory rack
 // order, cleared meters and no stale DSP state left in the chain.
@@ -375,6 +426,7 @@ void resetTests()
     setParam (proc, "lim_gain", 9.0f);
     setParam (proc, "lim_ceiling", -6.0f);
     setParam (proc, "lim_auto_gain", 0.0f);
+    setParam (proc, "unity", 1.0f);
     setParam (proc, "master_level", -12.0f);
     setParam (proc, "master_mix", 40.0f);
     proc.setOrder ({ 3, 1, 2, 0 });
@@ -382,18 +434,38 @@ void resetTests()
 
     proc.resetToDefaults();
 
-    bool everyParameterDefault = true;
+    const std::array<std::pair<const char*, float>, 42> resetExpected {{
+        { "con_bypass", 0 }, { "con_hpf", 20 }, { "con_lf", 0 }, { "con_lmf_f", 600 },
+        { "con_lmf", 0 }, { "con_hmf_f", 3000 }, { "con_hmf", 0 }, { "con_hf", 0 },
+        { "con_thresh", 0 }, { "con_ratio", 3 }, { "con_attack", 10 }, { "con_release", 200 },
+        { "con_out", 0 }, { "opto_bypass", 0 }, { "opto_peak", 0 }, { "opto_gain", 50 },
+        { "opto_mode", 0 }, { "fet_bypass", 0 }, { "fet_input", 12 }, { "fet_output", 0 },
+        { "fet_attack", 3 }, { "fet_release", 4 }, { "fet_ratio", 0 }, { "lim_bypass", 0 },
+        { "lim_gain", 0 }, { "lim_ceiling", -0.3f }, { "lim_release", 100 }, { "lim_enhance", 0 },
+        { "master_level", 0 }, { "master_mix", 100 }, { "lim_auto_gain", 1 }, { "unity", 0 },
+        { "con_eq_16k", 0 }, { "con_eq_8k", 0 }, { "con_eq_4k", 0 }, { "con_eq_2k", 0 },
+        { "con_eq_1k", 0 }, { "con_eq_500", 0 }, { "con_eq_250", 0 }, { "con_eq_125", 0 },
+        { "con_eq_63", 0 }, { "con_eq_31", 0 }
+    }};
+    bool everyProfileValue = true;
     juce::String drifted;
-    for (auto* p : proc.getParameters())
+    for (const auto& expected : resetExpected)
     {
-        if (std::abs (p->getValue() - p->getDefaultValue()) > 1.0e-6f)
+        const auto* p = proc.apvts.getParameter (expected.first);
+        float actual = 0.0f;
+        if (auto* choice = dynamic_cast<const juce::AudioParameterChoice*> (p))
+            actual = (float) choice->getIndex();
+        else if (p != nullptr)
+            actual = p->convertFrom0to1 (p->getValue());
+        if (p == nullptr || std::abs (actual - expected.second) > 1.0e-4f)
         {
-            everyParameterDefault = false;
-            drifted << p->getName (64) << " ";
+            everyProfileValue = false;
+            drifted << expected.first << " ";
         }
     }
-    check (everyParameterDefault, "reset returns every parameter to its default " + drifted);
+    check (everyProfileValue, "reset applies all 42 Hardware Neutral Starting Profile values " + drifted);
     check (proc.getOrder() == ZychanStripProcessor::getDefaultOrder(), "reset restores the factory rack order");
+    check (proc.apvts.getRawParameterValue ("unity")->load() < 0.5f, "RESET disables final UNITY stage");
 
     // A loud block just before the reset must not leak through the limiter's look-ahead delay
     // afterwards: the reset is consumed at the start of the next block.

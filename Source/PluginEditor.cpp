@@ -816,10 +816,13 @@ public:
 
         if (knobImage.isValid())
         {
-            const float side = radius * 2.0f;
+        const float side = radius * 2.0f;
             const auto dest = Rectangle<float> (side, side).withCentre (c);
+            g.setColour (Colours::black.withAlpha (0.62f));
+            g.fillEllipse (Rectangle<float> (side * 0.88f, side * 0.54f)
+                               .withCentre (c.translated (0.0f, side * 0.25f)));
             g.saveState();
-            g.addTransform (AffineTransform::rotation (-angle,
+            g.addTransform (AffineTransform::rotation (angle,
                                                        c.x, c.y));
             g.drawImage (knobImage, dest, RectanglePlacement::centred);
             g.restoreState();
@@ -849,6 +852,10 @@ public:
         const float pos = (float) s.valueToProportionOfLength (s.getValue());
         const float angle = a0 + pos * (a1 - a0);
 
+        const bool fetInputScale = s.getProperties().contains ("fetInputScale");
+        const bool fetOutputScale = s.getProperties().contains ("fetOutputScale");
+        const bool fetNumberScale = s.getProperties().contains ("fetNumberScale");
+
         // ---- Skirt: heavy machined ring with scale marks
         const float skirtR = d * knobScale * 0.50f;
         g.setColour (Colours::black.withAlpha (0.55f));
@@ -862,6 +869,26 @@ public:
 
         KnobScale sc; sc.a0 = a0; sc.a1 = a1;
         paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.85f), knobScale);
+
+        if (fetInputScale || fetOutputScale || fetNumberScale)
+        {
+            g.setFont (fnt (jmax (7.0f, 8.0f * knobScale), true));
+            for (int i = 0; i <= 8; ++i)
+            {
+                const float t = (float) i / 8.0f;
+                const float a = a0 + (a1 - a0) * t;
+                const Point<float> dir (std::sin (a), -std::cos (a));
+                const float labelRadius = fetNumberScale ? skirtR * 0.88f : skirtR * 0.97f;
+                const int value = fetNumberScale ? roundToInt (juce::jmap (t, 1.0f, 7.0f))
+                                                  : roundToInt (juce::jmap (t, 0.0f, 48.0f));
+                const auto p = c + dir * labelRadius;
+                const auto text = Rectangle<float> (p.x - 10.0f, p.y - 7.0f, 20.0f, 12.0f);
+                g.setColour (Colours::black.withAlpha (0.8f));
+                g.drawText (String (value), text.translated (0.0f, 1.0f), Justification::centred);
+                g.setColour (Colours::white.withAlpha (0.9f));
+                g.drawText (String (value), text, Justification::centred);
+            }
+        }
 
         // ---- Knob Body
         const float bodyR = d * knobScale * 0.355f;
@@ -1708,6 +1735,10 @@ public:
         // centre axis) stay exactly where they were, only the drawn hardware shrinks.
         setupKnob (atk,    "attack", pal::silverCap, Colour (0xff202020), 0.8f);
         setupKnob (rel,    "release",pal::silverCap, Colour (0xff202020), 0.8f);
+        input.slider.getProperties().set ("fetInputScale", true);
+        output.slider.getProperties().set ("fetOutputScale", true);
+        atk.slider.getProperties().set ("fetNumberScale", true);
+        rel.slider.getProperties().set ("fetNumberScale", true);
 
         ratioParam = proc.apvts.getParameter ("fet_ratio");
         const char* names[] { "4:1", "8:1", "12:1", "20:1", "ALL" };
@@ -2036,6 +2067,12 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     resetButton.setName ("Reset");
     resetButton.onReset = [this] { resetRackToDefaults(); };
     canvas.addAndMakeVisible (resetButton);
+    unityButton = std::make_unique<UnityButton> (proc);
+    unityButton->setName ("UNITY");
+    unityButton->setMouseCursor (MouseCursor::PointingHandCursor);
+    unityButton->setWantsKeyboardFocus (true);
+    unityButton->onChanged = [this] (bool enabled) { setUnityEnabled (enabled); };
+    canvas.addAndMakeVisible (*unityButton);
     masterAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_level", masterFader);
 
     // Dry/wet mix, sits after the master volume in the signal path
@@ -2071,6 +2108,8 @@ ZychanStripEditor::~ZychanStripEditor()
     }
     pageToggle.onChanged = nullptr;
     resetButton.onReset = nullptr;
+    if (unityButton != nullptr) unityButton->onChanged = nullptr;
+    unityButton.reset();
     for (auto& panel : panels)
         if (panel != nullptr)
         {
@@ -2126,6 +2165,7 @@ void ZychanStripEditor::resized()
     mixFader.setBounds (kEditorW - kMargin - 160, 26, 148, 14);
     // Reset button sits on the header, left of the master fader.
     resetButton.setBounds (kEditorW - kMargin - 160 - 150, 10, 84, 30);
+    unityButton->setBounds (kEditorW - kMargin - 160 - 58, 10, 58, 30);
     if (meterPanel != nullptr && metersShown)
         meterPanel->setBounds (getLocalBounds());
 
@@ -2171,6 +2211,17 @@ void ZychanStripEditor::resetRackToDefaults()
     for (auto& panel : panels) panel->repaint();
     if (meterPanel != nullptr) meterPanel->repaint();
     repaint();
+}
+
+void ZychanStripEditor::setUnityEnabled (bool enabled)
+{
+    if (auto* parameter = proc.apvts.getParameter ("unity"); parameter != nullptr)
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost (enabled ? 1.0f : 0.0f);
+        parameter->endChangeGesture();
+    }
+    if (unityButton != nullptr) unityButton->repaint();
 }
 
 //==============================================================================
@@ -2234,6 +2285,45 @@ void ZychanStripEditor::ResetButton::mouseUp (const MouseEvent& e)
         if (onReset) onReset();
         return;
     }
+    armed = false;
+    repaint();
+}
+
+void ZychanStripEditor::UnityButton::paint (Graphics& g)
+{
+    const bool enabled = proc.isUnityEnabled();
+    const auto bounds = getLocalBounds().toFloat();
+    rackui::paintPill (g, bounds, armed, enabled ? "UNITY ON" : "UNITY");
+    if (! enabled)
+    {
+        g.setColour (Colour (0xff57d4c2).withAlpha (0.28f));
+        g.drawRoundedRectangle (bounds.reduced (1.0f), 4.0f, 1.0f);
+    }
+    if (enabled)
+    {
+        g.setColour (Colour (0xff57d4c2).withAlpha (0.95f));
+        g.drawRoundedRectangle (bounds.reduced (1.0f), 4.0f, 1.2f);
+    g.setFont (fnt (8.0f, true));
+        g.drawText (String (proc.getUnityGainDb(), 1) + " dB", bounds.withY (bounds.getY() + 15).withHeight (12), Justification::centred);
+    }
+}
+
+
+void ZychanStripEditor::UnityButton::mouseDown (const MouseEvent&)
+{
+    armed = true;
+    repaint();
+}
+
+void ZychanStripEditor::UnityButton::mouseExit (const MouseEvent&)
+{
+    if (armed) { armed = false; repaint(); }
+}
+
+void ZychanStripEditor::UnityButton::mouseUp (const MouseEvent& e)
+{
+    if (armed && getLocalBounds().contains (e.getPosition()))
+        if (onChanged) onChanged (! proc.isUnityEnabled());
     armed = false;
     repaint();
 }

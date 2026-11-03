@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.0.1-green.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.1-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -45,11 +45,11 @@ Read this before touching code. It is the fastest route from a fresh clone to a 
 git clone https://git.zyusof.net/zack/zychanstrip.git
 cd zychanstrip
 
-# CMake and Ninja are usually installed by pip on this machine, not in PATH by default:
+# CMake and Ninja may be installed by pip on macOS, not in PATH by default:
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-ninja -C build                       # builds AND installs the AU (COPY_PLUGIN_AFTER_BUILD)
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1
+ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
 Verify:
@@ -57,7 +57,7 @@ Verify:
 ```bash
 python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reuses Ninja flags)
 ./build/snapshot/snapshot /tmp/shots # runs all tests, writes PNGs
-# expect: RESULT 246/246 passed
+# expect: RESULT <current total>/<current total> passed
 ```
 
 **Where the code lives**
@@ -75,10 +75,9 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 **Before you change anything**
 
 1. `git pull` — work from the latest `main`, not a stale copy.
-2. Run the harness first and confirm 246/246 so you know your baseline.
-3. After ANY change: `ninja -C build` then re-run the harness. The build auto-installs,
-   so a passing harness means the installed plugin is the code you just wrote.
-4. Commit and push.
+2. Run the harness first and confirm the current documented result.
+3. After ANY change: `ninja -C build` then re-run the harness.
+4. Commit and push. Install globally only from the clean latest commit using the install policy below.
 
 ---
 
@@ -93,7 +92,7 @@ enum ModuleId { Console = 0, Opto = 1, Fet = 2, Limiter = 3, NumModules = 4 };
 // slot i holds module id byte i of packedOrder; default 0x03010200 => [0,2,1,3]
 ```
 
-**Parameters.** A single `AudioProcessorValueTreeState` with **41** parameters (see [Parameters](#parameters)). Adding one is a one-line `addF`/`addB` call in `createLayout()`; **never reorder or re-range an existing ID** — host automation and saved sessions depend on them. New parameters must be appended at the end.
+**Parameters.** A single `AudioProcessorValueTreeState` with **42** parameters (see [Parameters](#parameters)). Adding one is a one-line `addF`/`addB` call in `createLayout()`; **never reorder or re-range an existing ID** — host automation and saved sessions depend on them. New parameters must be appended at the end.
 
 **State migration.** `setStateInformation` patches older session blobs by inserting any parameter that is missing (e.g. `lim_auto_gain`, the EQ560 bands, `master_mix`). If you add a parameter, add it to that migration list too, or old sessions will silently miss it.
 
@@ -119,16 +118,20 @@ Its four fader channels (threshold, ceiling, release, enhance) are recessed blac
 
 **Default rack order is 560 → 1176 → LA-2A → Enhance** (`[0,2,1,3]`). Any saved session keeps its own order — the default only applies to fresh instances.
 
-### RESET
-`RESET` in the header (and `RESET` on the metering page) restores the factory state in one action:
+### UNITY and RESET
+`UNITY` sits beside `RESET` in the header. When enabled, it stereo-links a smoothed short-term RMS matcher at the very end of the signal path, after the rack, master level and dry/wet blend. It matches finished output loudness to host input while limiting correction to ±18 dB, holding through near-silence, and smoothly ramping gain. The readout shows the current correction. This is level matching, not sample-accurate nulling; nonlinear processing and latency remain audible.
 
-* every parameter returns to the default declared in `createLayout()` — module controls, master level and dry/wet mix alike;
+`RESET` in the header (and `RESET` on the metering page) restores the documented **Hardware Neutral Starting Profile** in one action:
+
+* broad EQs and colour controls return to neutral, the API threshold/ratio/attack/release return to 0 dB / 3:1 / 10 ms / 200 ms, LA-2A peak reduction is at minimum and gain at 50% (an approximate unity-gain starting point), 1176 input is at 12 dB with output at 0 dB and attack/release at 3/4, while bypasses, limiter, master and dry/wet return to the profile’s neutral/start values;
 * the rack order returns to `[0,2,1,3]` and the faceplates animate back to those slots;
 * all metering (peaks, holds, RTA, scope, correlation) is cleared.
 
 Both RESET pills, and the metering page `BACK`, share one look (`Source/UiStyle.h`): the RACK/METER teal gradient at rest and matte black while held, so the momentary action visibly bottoms out.
 
 Parameter values are written on the message thread with real gestures, so host automation follows the reset. Module DSP state (EQ biquads, compressor envelopes, limiter delay and energy rings) is cleared at the start of the next audio block via a single atomic request, so the reset is real-time safe and leaves no stale look-ahead tail. `ZychanStripProcessor::resetToDefaults()` is the one implementation; both buttons call it through `ZychanStripEditor::resetRackToDefaults()`.
+
+The reset profile is deliberately separate from each parameter's host-declared default: existing IDs, ranges and declared defaults are unchanged for saved-session and automation compatibility. 1176 input/output marks are source-dependent calibration points, and LA-2A Gain has no universal exact setting, so these are operational starting values rather than claims of exact hardware unity.
 
 ### Parallel dry/wet
 `master_mix` (0–100 %, default 100) blends the untouched input against the finished master output for parallel processing. It is applied **after** master volume.
@@ -143,7 +146,7 @@ at all, and at 0 % it bypasses the ring, so both extremes are bit-exact against 
 
 Selected with the header **RACK / METER** toggle; the METER page has its own **`< RACK`** button to return, so the way back is always present.
 
-**It is a pure analyser.** It observes the signal after the master gain and after the dry/wet mix, and never modifies audio. All numbers come from `RackMeters` (`Source/Meters.h`), which publishes measurements through atomics from the audio thread and is read by the UI at 30 Hz. Nothing on this page is simulated.
+**It is a pure analyser.** It observes the signal after UNITY and never modifies audio. All numbers come from `RackMeters` (`Source/Meters.h`), which publishes measurements through atomics from the audio thread and is read by the UI at 30 Hz. Nothing on this page is simulated.
 
 | Measurement | Implementation |
 | --- | --- |
@@ -174,8 +177,11 @@ master gain  (master_level, −60…+6 dB)
    │
    ▼
 dry/wet blend (master_mix)
-   │
-   ▼
+    │
+    ▼
+UNITY level match (optional, stereo-linked)
+    │
+    ▼
 metering tap (read-only)
    │
    ▼
@@ -190,7 +196,7 @@ Host output
 
 ## Parameters
 
-41 automated parameters. `bypass` is `false` = module active.
+42 automated parameters. `bypass` is `false` = module active.
 
 | Module | Prefix | Parameters |
 | --- | --- | --- |
@@ -198,9 +204,9 @@ Host output
 | Opto | `opto_` | `bypass`, `gain`, `peak`, `mode` |
 | FET | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` |
 | Limiter | `lim_` | `bypass`, `gain`, `ceiling`, `release`, `enhance`, `auto_gain` |
-| Master | — | `master_level`, `master_mix` |
+| Master | — | `master_level`, `master_mix`, `unity` |
 
-**Interaction.** Every knob, fader and slider supports mouse-wheel scrolling; hold ⇧ for fine steps; double-click restores the default.
+**Interaction.** Every knob, fader and slider supports mouse-wheel scrolling; hold ⇧ for fine steps; double-click restores the host-declared default. Header RESET instead restores the documented Hardware Neutral Starting Profile.
 
 ---
 
@@ -277,11 +283,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 
 | Build | Label | Treatment |
 | --- | --- | --- |
-| stable | `v1.0.1` | neutral grey |
-| prerelease | `v1.0.2-beta.1` | amber |
+| stable | `v1.1.1` | neutral grey |
+| prerelease | `v1.1.1-beta.1` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release                    # v<PROJECT_VERSION>
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1  # v1.1.1-beta.1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1   # …-beta.1
 ```
 
@@ -303,7 +309,7 @@ python3 tools/build_snapshot.py
 ./build/snapshot/snapshot <output-dir>
 ```
 
-It runs **230 checks** and writes PNGs to `<output-dir>`:
+It runs **259 checks** and writes PNGs to `<output-dir>`:
 
 - **DSP** (`tools/dsp_checks.h`): EQ band response, limiter behaviour, auto-gain, channel handling, master gain ramp, state roundtrip, legacy-session migration, dry/wet mix law.
 - **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment inside every panel at 864×608 / 1080×760 / 1620×1140, reorder by grip drag, aspect-ratio lock.
@@ -374,4 +380,4 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Version numbers, tags and releases remain the maintainer's decision.
+Current beta target: **1.1.1-beta.1** (user-confirmed). No stable release is authorized; promotion remains the user's decision.

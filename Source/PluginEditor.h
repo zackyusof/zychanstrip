@@ -26,6 +26,7 @@ public:
     void setMeterPageVisible (bool show) { showPage (show); }
     void pumpTimerForTest() { timerCallback(); }
     bool isMeterPageVisible() const { return metersShown; }
+    juce::Component* getUnityButtonForTest() { return unityButton.get(); }
     /** Test seam: perform the RESET action without synthesising a mouse event. */
     void resetForTest() { resetRackToDefaults(); }
 
@@ -37,6 +38,7 @@ private:
     void layoutFor (const std::array<int, 4>& order, int skipId, bool animate);
     /** RESET: every module back to its default control values, factory rack order, meters cleared. */
     void resetRackToDefaults();
+    void setUnityEnabled (bool enabled);
 
     ZychanStripProcessor& proc;
     std::unique_ptr<RackLookAndFeel> laf;
@@ -73,7 +75,7 @@ private:
     PageToggle pageToggle;
     bool metersShown = false;
 
-    // Header reset button, styled like the rack/meter page toggle, sits left of master/dry-wet
+    // Header RESET and UNITY controls sit left of master/dry-wet.
     class ResetButton : public juce::Component
     {
     public:
@@ -85,6 +87,21 @@ private:
         bool armed = false;
     };
     ResetButton resetButton;
+
+    class UnityButton : public juce::Component
+    {
+    public:
+        explicit UnityButton (ZychanStripProcessor& processor) : proc (processor) {}
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        void mouseUp (const juce::MouseEvent&) override;
+        std::function<void (bool)> onChanged;
+        void mouseExit (const juce::MouseEvent&) override;
+    private:
+        ZychanStripProcessor& proc;
+        bool armed = false;
+    };
+    std::unique_ptr<UnityButton> unityButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZychanStripEditor)
 };

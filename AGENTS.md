@@ -28,7 +28,7 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
    a quick test, not "both locations work". A stale user copy shadows a newer global build and
    re-opens `zychanstrip-dupe-au`.
 6. Build and test on macOS only (`cmake`/`ninja`, then `tools/build_snapshot.py` →
-   `RESULT 253/253`). The Linux container can compile the DSP research harness in
+   `RESULT <current total>/<current total>`). The Linux container can compile the DSP research harness in
    `tools/research/` but cannot build the AU.
 7. **Build the latest, always (2026-11-03).** Order is commit → `ninja -C build` →
    `tools/install_global.sh`. The installer refuses a dirty tree, a `HEAD` behind `origin/main`,
@@ -37,6 +37,8 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
    rebuilt or reviewed (`ZYCH_ALLOW_STALE=1` overrides for a deliberate experiment only).
 8. Commit and push every change (`main` on `https://git.zyusof.net/zack/zychanstrip`).
    Keep the harness green before pushing; record what you could not verify.
+9. **Beta builds are never labeled stable.** Keep the numeric project/AU version at the user-authorized
+   line and use `ZYCHANSTRIP_BETA` for the prerelease label. The user decides stable promotion/tag/release.
 
 ## Documentation duties
 

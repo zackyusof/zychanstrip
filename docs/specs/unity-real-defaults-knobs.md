@@ -24,8 +24,8 @@
 | 2 | Design | done | zack | §2 + `unity-real-defaults-knobs.map.json` | `dev_modules.py`: 49 files, 0 unclaimed, 0 overlaps. |
 | 3 | Build | done | zack | §3 | `cmake`/Ninja configure and snapshot harness compiled for arm64; beta label configure verified. |
 | 4 | Test | done | zack | §4 | Full snapshot suite `RESULT 259/259 passed`; see evidence log. |
-| 5 | Deploy | in-progress | zack | §5 | User confirmed beta 1.1.1-beta.1; clean commit/push/build/install/verify pending. |
-| 6 | Maintain | in-progress | zack | §6 | Support path recorded; beta soak begins after install. |
+| 5 | Deploy | done | zack | §5 | Pushed clean HEAD, built arm64 AU, installed globally; codesign, plist, factory Open/Close and hashes verified. |
+| 6 | Maintain | done | zack | §6 | Support intake is the README/project issue path; beta soak begins from commit `25a9200`. |
 
 Status values: `pending` · `in-progress` · `done` · `blocked` · `n/a — <reason>`.
 
@@ -189,7 +189,8 @@ Beta requested: commit and push `main` to Gitea, then build that clean latest HE
 | ID | Step | Command | Evidence |
 | --- | --- | --- | --- |
 | DEP-1 | Build/test | `ninja -C build`; snapshot 259/259 | PASS; pre-beta feature baseline |
-| DEP-2 | Global install latest committed build | `tools/install_global.sh` | PENDING — release requested; complete after push and install |
+| DEP-2 | Global install latest committed build | `tools/install_global.sh` via administrator prompt | PASS — source md5 `ad5ff34a123e2ef215d89d135f7d1813`; installed md5 after ad-hoc reseal `58f5270819355944aec3e684e700155a`; root:wheel; user copy absent |
+| DEP-3 | Installed AU identity and loadability | `codesign -v`; PlistBuddy; direct `zychanstripAUFactory` probe on installed executable | PASS — codesign valid; `net.zyusof.zychanstrip`, `1.1.1`, `aufx`/`Zych`/`ZYUS`, component version `65793`, arm64; `Open=0`, `Close=0`. `validation: user` for DAW/host behavior |
 
 ## 6. Maintain
 

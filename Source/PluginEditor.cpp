@@ -878,7 +878,6 @@ public:
             g.setColour (Colour (0xff171819));
             g.drawText (String (value), labelBox, Justification::centred);
         }
-
     }
 
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,

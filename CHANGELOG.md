@@ -18,6 +18,8 @@ has been published.
   to `/Library/Audio/Plug-Ins/Components/zychanstrip.component`, chowns `root:wheel`, verifies the
   installed md5 against the built artefact and deletes any user-domain copy. Two bundles of one
   subtype confuse the AudioComponentRegistrar and a stale user copy shadows a newer global build.
+  The installer also re-seals the bundle ad-hoc (`codesign --force --sign -`) because JUCE's
+  linker-signed AU fails `codesign -v` on the bundle; it aborts if verification still fails.
   No parameter, state, DSP or GUI change.
 
 - **Project renamed** from RackStrip to ZychanStrip, repo included (`zack/zychanstrip` on Gitea). Code

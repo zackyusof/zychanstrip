@@ -233,6 +233,11 @@ to `~/Library/Audio/Plug-Ins`, and fails if more than one copy exists afterwards
 the same subtype confuse the AudioComponentRegistrar, and a stale user copy silently shadows a
 newer global build — which is exactly how `zychanstrip-dupe-au` came back once.
 
+It also **re-seals the bundle ad-hoc after copying**: JUCE links the AU with a linker-signed
+signature whose stale `Contents/_CodeSignature` makes `codesign -v` fail on the bundle
+(`code has no resources but signature indicates they must be present`). The installer runs
+`codesign --force --sign -` and refuses to finish unless `codesign -v` then passes.
+
 ```bash
 # what the script does, in full
 sudo /usr/bin/ditto build/zychanstrip_artefacts/Release/AU/zychanstrip.component \

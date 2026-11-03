@@ -56,18 +56,26 @@ sudo /usr/bin/ditto "$SRC" "$DEST"
 sudo chown -R root:wheel "$DEST"
 sudo chmod -R go-w "$DEST"
 
-# Verify the bytes actually landed.
+# Verify the bytes actually landed (before signing — codesign rewrites the Mach-O).
 [ -d "$DEST" ] || die "install did not create $DEST" 2
 DEST_MD5="$(md5 -q "$DEST/Contents/MacOS/zychanstrip")"
 [ "$DEST_MD5" = "$SRC_MD5" ] || die "md5 mismatch after install: built=$SRC_MD5 installed=$DEST_MD5" 2
-printf 'installed md5 : %s (matches source)\n' "$DEST_MD5"
+printf 'copied md5    : %s (matches source)\n' "$DEST_MD5"
 
-# Signature sanity (NOT AU validation — that is the maintainer's job).
+# JUCE's build leaves a linker-signed, ad-hoc Mach-O whose Contents/_CodeSignature is
+# stale, so `codesign -v` on the BUNDLE fails with "code has no resources but signature
+# indicates they must be present". Re-seal the installed bundle ad-hoc; README requires
+# codesign -v to pass before the build counts as installed.
+echo "==> ad-hoc sealing the installed bundle"
+sudo codesign --force --sign - "$DEST"
+sudo chown -R root:wheel "$DEST"
+sudo chmod -R go-w "$DEST"
 if codesign -v "$DEST" 2>/dev/null; then
-    echo "codesign      : valid"
+    echo "codesign      : valid (adhoc, sealed)"
 else
-    echo "codesign      : NOT valid — re-sign before release" >&2
+    die "codesign -v still fails on $DEST — do not ship this install" 2
 fi
+printf 'installed md5 : %s\n' "$(md5 -q "$DEST/Contents/MacOS/zychanstrip")"
 printf 'ownership     : %s\n' "$(stat -f '%Su:%Sg' "$DEST")"
 
 # Now remove the user-space copy, if any, so exactly one bundle is registered.
@@ -88,7 +96,8 @@ cat <<EOF
 OK — global install only.
   installed : $DEST
   user copy : none
-  md5       : $DEST_MD5
+  md5       : $(md5 -q "$DEST/Contents/MacOS/zychanstrip")
+  detail    : copied-from md5 $DEST_MD5, re-sealed ad-hoc
 Next: restart the host/DAW (or killall -9 AudioComponentRegistrar) so the registrar rescans.
 AU validation (auval / pluginval / DAW load) remains the maintainer's job.
 EOF

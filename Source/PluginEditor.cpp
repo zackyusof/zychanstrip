@@ -1,7 +1,6 @@
 #include "PluginEditor.h"
 #include "MeterPanel.h"
 #include "UiStyle.h"
-#include <BinaryData.h>
 
 
 using namespace juce;
@@ -801,90 +800,154 @@ public:
     }
 
     //-------------------------------------------------------------------- knobs
-    /** Daka-Ware LA-2A replacement knob: low round base, scalloped grip body, and the
-        characteristic long raised pointer/wing. Geometry follows the product reference. */
-    static void drawDavies1470 (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
-                                float knobScale, float a0, float a1)
+    /** Teletronix LA-2A gain / peak-reduction knob.
+
+        Reference: the Teletronix LA-2A at PatchWerk Recording Studios (Wikimedia Commons,
+        CC-BY-4.0). Measured from that photograph rather than from the Daka-Ware replacement
+        part the previous renderer used, because the two are not the same object:
+
+          * body is a plain glossy black bakelite dome, NOT the scalloped 1470 grip;
+          * the index is a bright butterscotch CREAM line, ~1/4 of the body radius wide,
+            running from near the hub out past the rim;
+          * a solid black FLAT (skirt tab) sits 180 deg opposite the index, bulging only
+            slightly past the rim - it is the real position cue, because a line alone is
+            ambiguous on a round knob;
+          * numerals are individually rotated so their tops face outward.
+
+        Everything is procedural: no bitmap dependency, so the art scales cleanly and the
+        measured proportions live in named constants. */
+    static void drawLa2aKnob (Graphics& g, Rectangle<float> b, Point<float> c, Slider& s,
+                              float knobScale, float a0, float a1)
     {
-        static Image knobImage = []
-        {
-            const auto* bytes = BinaryData::dakawarela2afront_png;
-            const int size = BinaryData::dakawarela2afront_pngSize;
-            return ImageFileFormat::loadFrom (bytes, (size_t) size);
-        }();
-        static Image knobShadow = [] (const Image& source)
-        {
-            if (! source.isValid()) return Image();
-            Image shadow (Image::ARGB, source.getWidth(), source.getHeight(), true);
-            for (int y = 0; y < source.getHeight(); ++y)
-                for (int x = 0; x < source.getWidth(); ++x)
-                {
-                    const auto alpha = source.getPixelAt (x, y).getAlpha();
-                    shadow.setPixelAt (x, y, Colour (0xff090a0b).withAlpha ((uint8) (alpha * 0.58f)));
-                }
-            return shadow;
-        } (knobImage);
         const float pos = jlimit (0.0f, 1.0f, (float) s.valueToProportionOfLength (s.getValue()));
 
-        // Scale geometry. Slider::setRotaryParameters (1.25pi, 2.75pi) defines 0..100 on a
-        // 225 deg sweep from ~7:30 to ~4:30. Everything below is expressed in that same
-        // dial frame so the paddle index and the engraved ring can never drift apart.
-        constexpr float travel = MathConstants<float>::pi * 1.25f;   // 225 deg
-        const float dialA0 = -travel * 0.5f;                        // -112.5 deg from 12 o'clock
-        const float dialA1 =  travel * 0.5f;                        // +112.5 deg
+
+        // Scale. Slider::setRotaryParameters (1.25pi, 2.75pi) puts 0..100 on a 225 deg sweep.
+        constexpr float travel = MathConstants<float>::pi * 1.25f;    // 225 deg
+        const float dialA0 = -travel * 0.5f;                          // -112.5 deg from 12 o'clock
+        const float dialA1 =  travel * 0.5f;                          // +112.5 deg
         const float angle = a0 + pos * (a1 - a0);
-        const float outerR = b.getWidth() * 0.455f;
-        const float tickR = outerR * 1.02f;
-        const Point<float> shadowOffset (2.3f * knobScale, 3.0f * knobScale);
 
-        const float side = outerR * 1.48f;
-        const auto knobDest = Rectangle<float> (side, side).withCentre (c);
+        // The widget is sized for the numeral ring, not the dome. Split the available radius so
+        // everything fits inside the control: dome 0.66, ticks 0.70, numerals 0.82 of half-size.
+        // Getting this ratio wrong is what clipped the knob and hid the left-hand numerals.
+        const float half   = jmin (b.getWidth(), b.getHeight()) * 0.5f;
+        const float outerR   = half * 0.545f;      // dome, indexed parts reach 1.10x this
+        const float tickR    = half * 0.605f;      // tick marks just outside the dome
+        const float numeralR = half * 0.815f;      // numerals clear of both
 
-        // The shadow uses source alpha only; its black RGB is independent of the artwork.
-        // It carries the SAME rotation as the knob and is then displaced by one fixed
-        // lower-right screen-space offset, so the light stays coherent at every angle.
-        // (Rotating the already-offset destination would swing the light around the dial.)
-        if (knobImage.isValid())
+        const Point<float> shadowOffset (1.9f * knobScale, 2.6f * knobScale);
+
+        // NO g.addTransform here. The editor paints the rack canvas through its own
+        // canvasTransform (scale + centring), so adding a rotation on top made every
+        // coordinate ambiguous and the knob vanished at most angles. Instead every rotating
+        // part is built as a LOCAL path and rotated explicitly about the knob centre, in
+        // absolute component coordinates. One rotation, applied in one place, per shape.
+        const auto rot = [&] (float lx, float ly)
         {
-            g.saveState();
-            const auto shadowDest = knobDest.translated (shadowOffset.x, shadowOffset.y)
-                                        .transformedBy (AffineTransform::rotation (
-                                            angle - MathConstants<float>::pi, c.x, c.y));
-            g.drawImage (knobShadow, shadowDest, RectanglePlacement::centred);
-            g.restoreState();
+            return c + Point<float> (lx, ly).transformedBy (AffineTransform::rotation (angle));
+        };
+        const auto makeRotated = [&] (const Path& local)
+        {
+            Path out (local);
+            out.applyTransform (AffineTransform::rotation (angle).translated (c.x, c.y));
+            return out;
+        };
 
-            g.saveState();
-            g.addTransform (AffineTransform::rotation (angle - MathConstants<float>::pi, c.x, c.y));
-            g.drawImage (knobImage, knobDest, RectanglePlacement::centred);
-            g.restoreState();
+        // Cast shadow: soft ellipse displaced toward the lower right. Light is fixed, so the
+        // offset itself does NOT rotate - only the silhouette the shadow is cast from.
+        {
+            const auto sh = Rectangle<float> (outerR * 2.0f, outerR * 2.0f)
+                                .withCentre (c + shadowOffset);
+            g.setColour (Colours::black.withAlpha (0.30f));
+            g.fillEllipse (sh.expanded (outerR * 0.06f));
+            g.setColour (Colours::black.withAlpha (0.20f));
+            g.fillEllipse (sh.expanded (outerR * 0.17f));
         }
 
-        // Ring radius for the engraved numerals: outside the ticks and clear of the longest
-        // knob feature, so no numeral is ever covered by the knob or its pointer.
-        const float numeralR = tickR + 9.0f * knobScale;
+        // Bakelite dome: symmetric, so it needs no rotation. Shaded from a fixed upper-left key.
+        const auto face = Rectangle<float> (outerR * 2.0f, outerR * 2.0f).withCentre (c);
+        g.setGradientFill (ColourGradient (Colour (0xff383b3f),
+                                           c.x - outerR * 0.34f, c.y - outerR * 0.38f,
+                                           Colour (0xff050607),
+                                           c.x + outerR * 0.85f, c.y + outerR * 0.80f, true));
+        g.fillEllipse (face);
 
-        for (int value = 0; value <= 100; value += 10)
+        // The flat: a shallow D-section tab opposite the index. Built in local space at the
+        // "up" edge, then rotated about the centre.
+        {
+            Path flat;
+            flat.addPieSegment (Rectangle<float> (outerR * 2.0f, outerR * 2.0f)
+                                    .withCentre ({ 0.0f, 0.0f }).expanded (outerR * 0.05f),
+                                -0.40f, 0.40f, 0.88f);
+            g.setColour (Colour (0xff0b0c0d));
+            g.fillPath (makeRotated (flat));
+        }
+        g.setColour (Colours::black.withAlpha (0.55f));
+        g.drawEllipse (face, 0.9f * knobScale);
+        g.setColour (Colours::white.withAlpha (0.14f));
+        g.drawEllipse (face.reduced (0.8f), 0.8f * knobScale);
+
+        // Index: cream buttress line from the hub out past the rim, canted so a sliver of black
+        // remains on the lit side - the reference photograph's signature look.
+        {
+            const float len   = outerR * 1.10f;
+            const float width = outerR * 0.145f;
+            const float cant  = outerR * 0.10f;
+            Path idx;
+            idx.startNewSubPath (cant * 0.20f, -outerR * 0.10f);
+            idx.lineTo (cant, -len);
+            idx.lineTo (cant + width, -len);
+            idx.lineTo (width, -outerR * 0.10f);
+            idx.closeSubPath();
+            auto idxAbs = makeRotated (idx);
+            g.setGradientFill (ColourGradient (Colour (0xfff6efd8), rot (cant, -len).x, rot (cant, -len).y,
+                                               Colour (0xffd8c9a0), rot (cant + width, -outerR * 0.10f).x,
+                                               rot (cant + width, -outerR * 0.10f).y, false));
+            g.fillPath (idxAbs);
+            g.setColour (Colours::black.withAlpha (0.45f));
+            g.strokePath (idxAbs, PathStrokeType (0.5f * knobScale));
+        }
+
+        // Specular hotspot ON TOP of the index: a reflection caught by the dome, turning with it.
+        {
+            const auto hi = rot (outerR * 0.34f, -outerR * 0.04f);
+            g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.50f),
+                                               rot (outerR * 0.20f, -outerR * 0.34f).x,
+                                               rot (outerR * 0.20f, -outerR * 0.34f).y,
+                                               Colours::transparentWhite,
+                                               rot (outerR * 0.54f, outerR * 0.06f).x,
+                                               rot (outerR * 0.54f, outerR * 0.06f).y, true));
+            g.fillEllipse (Rectangle<float> (outerR * 0.90f, outerR * 0.90f).withCentre (hi));
+        }
+
+        // ---- scale: ticks then numerals, each glyph rotated to face outward
+        for (int value = 0; value <= 100; value += 5)
         {
             const float markAngle = dialA0 + (dialA1 - dialA0) * ((float) value / 100.0f);
             const Point<float> dir = knobDirection (markAngle);
-            const float markLength = (value % 20 == 0 ? 5.2f : 3.4f) * knobScale;
-            g.setColour (Colours::black.withAlpha (0.92f));
-            g.drawLine (Line<float> (c + dir * tickR,
-                                     c + dir * (tickR + markLength)),
-                        (value % 20 == 0 ? 1.2f : 0.8f) * knobScale);
+            const bool major = (value % 10 == 0);
+            const float inner = tickR + (major ? 1.5f : 4.2f) * knobScale;
+            g.setColour (Colours::black.withAlpha (major ? 0.80f : 0.45f));
+            g.drawLine (Line<float> (c + dir * inner, c + dir * tickR + dir * (major ? 0.0f : 0.0f)),
+                        (major ? 1.1f : 0.7f) * knobScale);
         }
 
-        g.setFont (fnt (jmax (7.0f, 8.0f * knobScale), true));
+        g.setFont (fnt (jmax (7.0f, 8.2f * knobScale), true));
         for (int value = 0; value <= 100; value += 10)
         {
             const float labelAngle = dialA0 + (dialA1 - dialA0) * ((float) value / 100.0f);
             const Point<float> dir = knobDirection (labelAngle);
             const Point<float> labelCentre = c + dir * numeralR;
-            const auto labelBox = Rectangle<float> (22.0f, 13.0f).withCentre (labelCentre);
-            g.setColour (Colours::black.withAlpha (0.30f));
-            g.drawText (String (value), labelBox.translated (0.0f, 0.8f), Justification::centred);
+
+            g.saveState();
+            g.addTransform (AffineTransform::rotation (labelAngle, labelCentre.x, labelCentre.y));
+            const auto labelBox = Rectangle<float> (24.0f, 12.0f).withCentre (labelCentre);
+            g.setColour (Colours::black.withAlpha (0.28f));
+            g.drawText (String (value), labelBox.translated (0.0f, 0.7f), Justification::centred);
             g.setColour (Colour (0xff171819));
             g.drawText (String (value), labelBox, Justification::centred);
+            g.restoreState();
         }
     }
 
@@ -902,9 +965,12 @@ public:
 
         // Davies Molding 1470 (LA-2A / UREI replacement "Daka-Ware" bakelite).
         // Opt-in per slider so the other modules keep their own hardware.
-        if (s.getProperties().contains ("davies1470"))
+        if (s.getProperties().contains ("la2aKnob"))
         {
-            drawDavies1470 (g, b, c, s, knobScale, a0, a1);
+            // The LA-2A control carries a numeral ring outside its body, so it uses nearly the
+            // full component rather than the inset square the other knob families draw into.
+            auto lb = Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
+            drawLa2aKnob (g, lb, lb.getCentre(), s, knobScale, a0, a1);
             return;
         }
 
@@ -1464,16 +1530,16 @@ protected:
     };
 
     void setupKnob (Knob& k, const String& id, Colour cap, Colour indicator = Colours::white,
-                    float scale = 1.0f, bool davies1470 = false)
+                    float scale = 1.0f, bool la2aKnob = false)
     {
-        const float rotaryStart = davies1470 ? MathConstants<float>::pi * -0.75f
+        const float rotaryStart = la2aKnob ? MathConstants<float>::pi * -0.75f
                                               : MathConstants<float>::pi * 1.22f;
-        const float rotaryEnd = davies1470 ? MathConstants<float>::pi * 0.75f
+        const float rotaryEnd = la2aKnob ? MathConstants<float>::pi * 0.75f
                                             : MathConstants<float>::pi * 2.78f;
         k.slider.setRotaryParameters (rotaryStart, rotaryEnd, true);
-        // The Davie1470 renderer derives its tick/label ring from these same bounds, so record
+        // The LA-2A renderer derives its tick/label ring from these same bounds, so record
         // them on the component instead of re-deriving them (the two used to drift apart).
-        if (davies1470)
+        if (la2aKnob)
         {
             k.slider.getProperties().set ("dialA0", rotaryStart);
             k.slider.getProperties().set ("dialA1", rotaryEnd);
@@ -1481,7 +1547,7 @@ protected:
         k.slider.setColour (Slider::rotarySliderFillColourId, cap);
         k.slider.setColour (Slider::thumbColourId, indicator);
         k.slider.getProperties().set ("knobScale", scale);
-        if (davies1470) k.slider.getProperties().set ("davies1470", true);
+        if (la2aKnob) k.slider.getProperties().set ("la2aKnob", true);
         k.slider.setNumDecimalPlacesToDisplay (1);
         k.slider.setPopupDisplayEnabled (true, true, nullptr);
         k.slider.setDoubleClickReturnValue (true, k.slider.getDoubleClickReturnValue());
@@ -1731,10 +1797,14 @@ protected:
         const int nvw = roundToInt ((float) vw * 0.85f);
         vu = fullVu.withSizeKeepingCentre (nvw, nvw);
 
-        const int kw = 84;
-        const int ky = 320;
-        place (gain, { c.getX() + 8,                 ky, kw, kw });
-        place (peak, { c.getRight() - kw - 8,        ky, kw, kw });
+        // The 0..100 numeral ring sits OUTSIDE the dome, so each control must be sized for the
+        // ring, not for the visible knob: a widget the size of the dome clips its own scale at
+        // the panel edge (this is exactly what hid the 20/30/40 numerals). 118 px gives a
+        // 79 px dome inside a 96 px numeral ring inside the 258 px plate.
+        const int kw = 118;
+        const int ky = 312;
+        place (gain, { c.getCentreX() - kw + 4, ky, kw, kw });
+        place (peak, { c.getCentreX() - 4,      ky, kw, kw });
 
         const int ty = 430;
         meterBtn.setBounds (c.getCentreX() - 48, ty, 96, 26);

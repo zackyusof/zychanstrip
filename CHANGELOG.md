@@ -12,6 +12,12 @@ has been published.
 
 ### Fixed
 
+- **LA-2A INPUT GAIN / PEAK REDUCTION knobs were drawn in a transformed frame inside an
+  already-transformed parent**, so the dome rendered as a crescent at most values and vanished
+  entirely at the min/max endpoints. The rack canvas carries its own `canvasTransform`; adding a
+  rotation on top made every coordinate ambiguous. The knob is now drawn entirely in absolute
+  component coordinates — rotating parts are built as local paths and rotated explicitly about the
+  centre — with no `g.addTransform` at all. Verified at 0, 50 and 100.
 - **LA-2A INPUT GAIN / PEAK REDUCTION knobs no longer contradict their own engraved scale.**
   The tick marks and 0–100 numerals were drawn on a hardcoded 1.25π–2.75π arc while the knob index
   rotated on the slider's actual −0.75π–0.75π travel, so the pointer sat a tenth of a turn (≈11°) off

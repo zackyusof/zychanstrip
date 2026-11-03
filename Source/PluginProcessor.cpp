@@ -150,13 +150,21 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
         buffer.clear (c, 0, numSamples);
 
-    // Keep the untouched input for the parallel (dry/wet) blend. Prepared in prepareToPlay;
-    // grown here only if the host sends a larger block than it declared.
+    // Keep the untouched input for the parallel (dry/wet) blend and for UNITY. Prepared in
+    // prepareToPlay; grown here only if the host sends a larger block than it declared.
     if (dryBuffer.getNumChannels() < buffer.getNumChannels() || dryBuffer.getNumSamples() < numSamples)
         dryBuffer.setSize (juce::jmax (buffer.getNumChannels(), dryBuffer.getNumChannels()),
                            juce::jmax (numSamples, dryBuffer.getNumSamples()), false, false, true);
-    for (int c = 0; c < buffer.getNumChannels(); ++c)
-        dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
+
+    // At 100 % wet with UNITY off nothing reads the dry copy (the blend below is skipped and
+    // UNITY is the only other reader), so the copy is pure waste - see prior-art report F7.
+    const float requestedWet = juce::jlimit (0.0f, 1.0f, mixAmount->load() * 0.01f);
+    const bool matchUnity = unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f;
+    const bool needDry = requestedWet < 0.9999f || matchUnity;
+
+    if (needDry)
+        for (int c = 0; c < buffer.getNumChannels(); ++c)
+            dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
 
     // Auto-gain reference: measure the whole chain's input BEFORE any module runs, so the
     // correction cannot depend on where the limiter sits in the rack.
@@ -176,7 +184,7 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // Dry/wet blend AFTER the master, so the mix control scales the finished signal
     // against the original input (classic parallel processing).
-    const float wet = juce::jlimit (0.0f, 1.0f, mixAmount->load() * 0.01f);
+    const float wet = requestedWet;
     if (wet < 0.9999f)
     {
         const float dry = 1.0f - wet;
@@ -219,7 +227,6 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
     // Optional final stereo-linked loudness match. It measures the untouched input against
     // the completed post-master/post-mix output, holds through silence, and ramps gain smoothly.
-    const bool matchUnity = unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f;
     if (! matchUnity)
     {
         unityGain.setTargetValue (1.0f);
@@ -232,9 +239,10 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         unityGain.setTargetValue (1.0f);
     const int matchChannels = juce::jmin (2, buffer.getNumChannels());
     bool blockHasSignal = false;
+    const int unityStep = matchUnity ? numSamples - 1 : numSamples;
     for (int i = 0; i < numSamples; ++i)
     {
-        if (matchUnity)
+        if (matchUnity && i < unityStep)
         {
             double inPower = 0.0, outPower = 0.0;
             for (int ch = 0; ch < matchChannels; ++ch)
@@ -253,6 +261,9 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                 unityOutputEnergy = unityEnergyCoef * unityOutputEnergy + (1.0 - unityEnergyCoef) * outPower * channelScale;
             }
             blockHasSignal |= inPower > 1.0e-12 && outPower > 1.0e-12;
+            // The energy ratio only changes once per block, so the log10 and the gain curve are
+            // evaluated once here rather than per sample (it used to call decibelsToGain 48 000
+            // times a second for a value that moved once every 256 samples).
             if (unityInputEnergy > 1.0e-12 && unityOutputEnergy > 1.0e-12)
             {
                 const float targetDb = juce::jlimit (-18.0f, 18.0f,

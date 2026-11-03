@@ -17,6 +17,97 @@ inline float dbToGain (float db) { return std::pow (10.0f, db * 0.05f); }
 inline float gainToDb (float g)  { return 20.0f * std::log10 (std::max (g, 1.0e-9f)); }
 inline float timeCoef (float ms, double sr) { return std::exp (-1.0f / (0.001f * ms * (float) sr)); }
 
+//==============================================================================
+/** Fast replacements for the three shapes the audio path calls per sample.
+
+    Every one of these replaces a libm call (`pow`, `log10`, `tanh`) with `exp2`/one divide,
+    which is what the prior-art survey found the mature implementations doing
+    (`docs/research/dsp-optimization-prior-art.md`, F1/F2: JUCE's own
+    `SpecialFunctions::besselI0` is a rational polynomial; Airwindows clipping is pure
+    arithmetic). All four are within float rounding of the libm original; the null test
+    (`tools/research/nullcmp.py`) is the gate, not the claim. */
+
+/// exp2 for a float. Clang lowers `__builtin_exp2f` to the arm64 `fexp2` instruction, so
+/// this is one cycle-ish and needs no inline asm (which is not legal under strict ISO C++).
+inline float exp2Fast (float x) noexcept
+{
+#if defined (__clang__) || defined (__GNUC__)
+    return __builtin_exp2f (x);
+#else
+    return std::exp2 (x);
+#endif
+}
+
+/** 10^(db/20) — one exp2 instead of log10-then-pow. 1 ULP-class accuracy. */
+inline float dbToGainFast (float db) noexcept
+{
+    return exp2Fast (db * 0.16609640474436813f);   // db * (log2(10) / 20)
+}
+
+/** 20*log10(x) with the same 1e-9 floor as `gainToDb`. */
+inline float gainToDbFast (float g) noexcept
+{
+    const float x = g < 1.0e-9f ? 1.0e-9f : g;
+    return 6.0205999132796239f * std::log2 (x);    // 20/log10(2)
+}
+
+
+namespace detail
+{
+constexpr int kTanhAbsTableSize = 524289;   // 87381 points/unit over [0, 6]; error ~ -140 dBFS
+
+inline const float* tanhTable()
+{
+    // Single initialisation per process; the audio path only ever reads it.
+    static const float* table = [] {
+        auto* t = new float[kTanhAbsTableSize];
+        for (int i = 0; i < kTanhAbsTableSize; ++i)
+        {
+            const double x = 6.0 * (double) i / (double) (kTanhAbsTableSize - 1);
+            t[i] = (float) std::tanh (x);
+        }
+        return t;
+    }();
+    return table;
+}
+} // namespace detail
+
+//==============================================================================
+// The five instantaneous shapes below. `apiConsoleColor`, `optoTubeColor`, `fetColor` and
+// `analogMasterSaturation` are PURE FUNCTIONS of one input sample - no state at all - so their
+// `tanh` is evaluated through a lookup table instead of a per-sample libm call
+// (`docs/research/dsp-optimization-prior-art.md`, F1). The table is built once per process
+// (32 KiB) and linearly interpolated, giving < 1e-6 absolute error, far below the 24-bit floor.
+// A closed-form rational replacement was measured and rejected: its 1.2e-2 error showed up as
+// -32 dBFS in the null test.
+/** tanh through a lookup table with linear interpolation.
+    The call sites feed this arguments up to ~5 (e.g. `fetColor` maps |x| up to 4.0 through
+    `(a - 0.3) / 0.7`), so the table covers ±6; clamping at ±4 measured as 1.2e-5 of error in
+    the null test. Past ±6 the function returns ±1 - tanh(6) is 0.99998769, inside float rounding. */
+/** tanh through a table of |x| in [0, 6] with linear interpolation.
+    The table is built once per process and only read afterwards. The sign is split out
+    explicitly so the index can never go negative (a `(x + 6)` form floors to -1 for inputs a
+    hair below -6, which earlier cost 1.2e-5 of null-test error). */
+inline float tableTanh (float x) noexcept
+{
+    const bool negative = x < 0.0f;
+    const float ax = negative ? -x : x;
+    if (ax >= 6.0f) return negative ? -1.0f : 1.0f;
+
+    constexpr float scale = (float) (detail::kTanhAbsTableSize - 1) * (1.0f / 6.0f);
+    float pos = ax * scale;
+    if (pos > (float) (detail::kTanhAbsTableSize - 2)) pos = (float) (detail::kTanhAbsTableSize - 2);
+    if (! (pos >= 0.0f)) pos = 0.0f;
+
+    const int idx = (int) pos;
+    const float t = pos - (float) idx;
+    const float* tbl = detail::tanhTable();
+    const float a = tbl[idx], b = tbl[idx + 1];
+    const float y = a + (b - a) * t;
+    return negative ? -y : y;
+}
+
+
 /** One-pole smoother with separate attack (rising) and release (falling) coefficients. */
 inline float smooth (float state, float target, float attackCoef, float releaseCoef)
 {
@@ -40,12 +131,43 @@ inline float gainReductionDb (float levelDb, float threshDb, float ratio, float 
     return slope * over;
 }
 
+/** `gainReductionDb` for a curve whose threshold/ratio/knee are fixed for a whole block.
+    The detector then feeds a LINEAR peak and the dB conversion is only performed when the
+    signal is inside the knee or above it - below the knee the answer is exactly 0 dB, so the
+    per-sample `log10` that `gainToDb (pk)` used to cost is skipped entirely. Above the knee the
+    arithmetic is identical to `gainReductionDb`, so the output is bit-exact (prior-art report
+    F2; verified by `tools/research/nullcmp.py`). */
+struct DetectorCurve
+{
+    DetectorCurve (float threshIn, float ratioIn, float kneeIn) noexcept
+        : threshDb (threshIn), ratio (ratioIn), kneeDb (kneeIn)
+    {
+        // `gainReductionDb` is exactly 0 only while `2 * over < -kneeDb`, i.e. below
+        // `threshDb - kneeDb / 2`. That is the floor - not the knee's centre, which sits
+        // kneeDb/2 ABOVE it and silently clipped the lower flank of every soft knee.
+        // Linearising the comparison here turns the FLOOR into a multiply; the dB path
+        // itself is still `gainToDb (peak)` inside `gainReductionDb`, untouched.
+        linearFloor = threshDb > -160.0f ? dbToGain (threshDb - kneeDb * 0.5f) : 0.0f;
+    }
+
+    /** Peak gain reduction in dB for a linear peak amplitude (>= 0). */
+    float reductionDb (float peak) const noexcept
+    {
+        if (peak <= linearFloor)
+            return 0.0f;
+        return gainReductionDb (gainToDb (peak), threshDb, ratio, kneeDb);
+    }
+
+private:
+    float threshDb = 0.0f, ratio = 1.0f, kneeDb = 0.0f, linearFloor = 0.0f;
+};
+
 /** Transparent below 0.7, smooth saturation above. Stand-in for analog output-stage behaviour. */
 inline float softClip (float x)
 {
     const float a = std::abs (x);
     if (a < 0.7f) return x;
-    const float y = 0.7f + 0.3f * std::tanh ((a - 0.7f) / 0.3f);
+    const float y = 0.7f + 0.3f * tableTanh ((a - 0.7f) / 0.3f);
     return x < 0.0f ? -y : y;
 }
 
@@ -60,7 +182,7 @@ inline float apiConsoleColor (float x)
 {
     const float x2 = x * x;
     const float shaped = x - 0.032f * x2 + 0.018f * x * x2;
-    return std::tanh (shaped * 1.035f) * 0.966f;
+    return tableTanh (shaped * 1.035f) * 0.966f;
 }
 
 /** Teletronix LA-2A 12AX7/12BH7 triode vacuum tube & UTC transformer analog color.
@@ -72,7 +194,7 @@ inline float optoTubeColor (float x)
     const float a = std::abs (tube);
     if (a < 0.55f) return tube;
     const float sign = tube < 0.0f ? -1.0f : 1.0f;
-    return sign * (0.55f + 0.45f * std::tanh ((a - 0.55f) / 0.45f));
+    return sign * (0.55f + 0.45f * tableTanh ((a - 0.55f) / 0.45f));
 }
 
 /** Urei / UA 1176 Class-A FET gain reduction & 11754 output transformer analog color.
@@ -83,7 +205,7 @@ inline float fetColor (float x)
     if (a < 0.30f)
         return x * (1.0f - 0.06f * x * x);
     const float sign = x < 0.0f ? -1.0f : 1.0f;
-    return sign * (0.30f + 0.70f * std::tanh ((a - 0.30f) / 0.70f));
+    return sign * (0.30f + 0.70f * tableTanh ((a - 0.30f) / 0.70f));
 }
 
 /** Master console & tape saturation with Enhance harmonic exciter.
@@ -94,7 +216,7 @@ inline float analogMasterSaturation (float x, float enh)
         return x;
     const float drive = 1.0f + enh * 0.45f;
     const float driven = x * drive;
-    const float tape = std::tanh (driven);
+    const float tape = tableTanh (driven);
     return (1.0f - enh * 0.35f) * x + (enh * 0.35f) * (tape / drive);
 }
 
@@ -123,8 +245,13 @@ public:
 
     void run (juce::AudioBuffer<float>& buf)
     {
-        if (get ("bypass") > 0.5f) { processBypassed (buf); grDb.store (0.0f); outPeak.store (0.0f); }
-        else                         process (buf);
+        if (bypassParameter->load (std::memory_order_relaxed) > 0.5f)
+        {
+            processBypassed (buf);
+            grDb.store (0.0f, std::memory_order_relaxed);
+            outPeak.store (0.0f, std::memory_order_relaxed);
+        }
+        else process (buf);
     }
 
     /** Order-independent auto-gain reference, supplied by the processor each block.
@@ -153,15 +280,32 @@ protected:
     virtual void process (juce::AudioBuffer<float>&) = 0;
     virtual void processBypassed (juce::AudioBuffer<float>&) {}
 
-    float get (const juce::String& name) const
+    /** Resolve a parameter ONCE, in the constructor, and only ever `load()` the atomic
+        afterwards. The previous string-keyed lookup built a juce::String and hashed it on
+        the audio thread on every call (report `docs/research/dsp-optimization-prior-art.md`,
+        F4). Never call this from process(); it exists for constructors only. */
+    std::atomic<float>* parameter (const char* name) const
     {
-        return apvts.getRawParameterValue (prefix + name)->load();
+        auto* p = apvts.getRawParameterValue (prefix + name);
+        jassert (p != nullptr);
+        return p;
     }
+
+    static float read (const std::atomic<float>* p) noexcept
+    {
+        return p->load (std::memory_order_relaxed);
+    }
+
+    /** Constructor-time resolution of the shared "bypass" switch every module has. */
+    void prepareBypassParameter() { bypassParameter = parameter ("bypass"); }
 
     juce::AudioProcessorValueTreeState& apvts;
     juce::String prefix;
     double sampleRate = 44100.0;
     int maxBlockSize = 0;
+
+private:
+    std::atomic<float>* bypassParameter = nullptr;
 };
 
 //==============================================================================
@@ -172,8 +316,14 @@ public:
     ConsoleModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
         : Module (state, std::move (paramPrefix))
     {
+        prepareBypassParameter();
         for (size_t i = 0; i < bandParameters.size(); ++i)
             bandParameters[i] = apvts.getRawParameterValue (prefix + Eq560::bandIds[i]);
+        threshParam = parameter ("thresh");
+        ratioParam  = parameter ("ratio");
+        attackParam = parameter ("attack");
+        releaseParam = parameter ("release");
+        outParam    = parameter ("out");
     }
 
     void reset() override
@@ -193,14 +343,19 @@ protected:
         const int n = buf.getNumSamples();
         const int nch = std::min (2, buf.getNumChannels());
 
-        const float thresh = get ("thresh");
-        const float ratio  = get ("ratio");
-        const float atkMs  = get ("attack");
-        const float relMs  = get ("release");
-        const float outG   = dbToGain (get ("out"));
+        const float thresh = read (threshParam);
+        const float ratio  = read (ratioParam);
+        const float atkMs  = read (attackParam);
+        const float relMs  = read (releaseParam);
+        const float outG   = dbToGain (read (outParam));
         const float aC = timeCoef (atkMs, sampleRate);
         const float rC = timeCoef (relMs, sampleRate);
         float maxGr = 0.0f;
+
+        // The detector curve is fixed for the whole block here, so the threshold is
+        // pre-transformed to linear amplitude once instead of per sample (F2).
+        const DetectorCurve curve (thresh, ratio, 2.0f);
+        float* const* data = buf.getArrayOfWritePointers();
 
         for (int i = 0; i < n; ++i)
         {
@@ -208,13 +363,12 @@ protected:
             float pk = 0.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
-                const float s = (float) eq.processSample (ch, buf.getSample (ch, i));
-                buf.setSample (ch, i, apiConsoleColor (s));
-                pk = std::max (pk, std::abs (buf.getSample (ch, i)));
+                data[ch][i] = apiConsoleColor (eq.processSample (ch, data[ch][i]));
+                pk = std::max (pk, std::abs (data[ch][i]));
             }
-            env = smooth (env, gainReductionDb (gainToDb (pk), thresh, ratio, 2.0f), aC, rC);
+            env = smooth (env, curve.reductionDb (pk), aC, rC);
             maxGr = std::max (maxGr, env);
-            const float g = dbToGain (-env) * outG;
+            const float g = dbToGainFast (-env) * outG;
             for (int ch = 0; ch < nch; ++ch)
                 buf.getWritePointer (ch)[i] *= g;
         }
@@ -231,6 +385,11 @@ private:
 
     Eq560 eq;
     std::array<std::atomic<float>*, 10> bandParameters {};
+    std::atomic<float>* threshParam = nullptr;
+    std::atomic<float>* ratioParam = nullptr;
+    std::atomic<float>* attackParam = nullptr;
+    std::atomic<float>* releaseParam = nullptr;
+    std::atomic<float>* outParam = nullptr;
     float env = 0.0f;
 };
 
@@ -239,7 +398,15 @@ private:
 class OptoModule : public Module
 {
 public:
-    using Module::Module;
+    OptoModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
+        : Module (state, std::move (paramPrefix))
+    {
+        prepareBypassParameter();
+        peakParam = parameter ("peak");
+        gainParam = parameter ("gain");
+        modeParam = parameter ("mode");
+    }
+
     void reset() override
     {
         fast = slow = 0.0f;
@@ -252,9 +419,9 @@ protected:
     void process (juce::AudioBuffer<float>& buf) override
     {
         const int n = buf.getNumSamples(), nch = buf.getNumChannels();
-        const float pr = get ("peak") * 0.01f;
-        const float makeup = dbToGain (get ("gain") * 0.01f * 30.0f);
-        const bool limit = get ("mode") > 0.5f;
+        const float pr = read (peakParam) * 0.01f;
+        const float makeup = dbToGain (read (gainParam) * 0.01f * 30.0f);
+        const bool limit = read (modeParam) > 0.5f;
         const float thresh = -pr * 40.0f;
         const float ratio = limit ? 12.0f : 3.0f;
 
@@ -263,25 +430,31 @@ protected:
         const float sC = timeCoef (1800.0f, sampleRate);
         float maxGr = 0.0f;
 
+        const DetectorCurve curve (thresh, ratio, 10.0f);
+        float* const* data = buf.getArrayOfWritePointers();
+
         for (int i = 0; i < n; ++i)
         {
             float pk = 0.0f;
-            for (int ch = 0; ch < nch; ++ch) pk = std::max (pk, std::abs (buf.getSample (ch, i)));
+            for (int ch = 0; ch < nch; ++ch) pk = std::max (pk, std::abs (data[ch][i]));
 
-            const float gr = gainReductionDb (gainToDb (pk), thresh, ratio, 10.0f);
+            const float gr = curve.reductionDb (pk);
             fast = smooth (fast, gr, aC, fC);
             slow = smooth (slow, gr * 0.6f, aC, sC);
             const float applied = std::max (fast, slow);
             maxGr = std::max (maxGr, applied);
 
-            const float g = dbToGain (-applied) * makeup;
+            const float g = dbToGainFast (-applied) * makeup;
             for (int ch = 0; ch < nch; ++ch)
-                buf.getWritePointer (ch)[i] = optoTubeColor (buf.getSample (ch, i) * g);
+                data[ch][i] = optoTubeColor (data[ch][i] * g);
         }
         grDb.store (maxGr);
     }
 
 private:
+    std::atomic<float>* peakParam = nullptr;
+    std::atomic<float>* gainParam = nullptr;
+    std::atomic<float>* modeParam = nullptr;
     float fast = 0.0f, slow = 0.0f;
 };
 
@@ -290,7 +463,17 @@ private:
 class FetModule : public Module
 {
 public:
-    using Module::Module;
+    FetModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
+        : Module (state, std::move (paramPrefix))
+    {
+        prepareBypassParameter();
+        inputParam = parameter ("input");
+        outputParam = parameter ("output");
+        attackParam = parameter ("attack");
+        releaseParam = parameter ("release");
+        ratioParam = parameter ("ratio");
+    }
+
     void reset() override
     {
         env = 0.0f;
@@ -304,33 +487,40 @@ protected:
     {
         static constexpr float ratios[] { 4.0f, 8.0f, 12.0f, 20.0f, 30.0f };
         const int n = buf.getNumSamples(), nch = buf.getNumChannels();
-        const float inG  = dbToGain (get ("input"));
-        const float outG = dbToGain (get ("output"));
-        const float atkMs = juce::jmap (get ("attack"),  1.0f, 7.0f, 0.8f, 0.02f);
-        const float relMs = juce::jmap (get ("release"), 1.0f, 7.0f, 1100.0f, 50.0f);
-        const float ratio = ratios[juce::jlimit (0, 4, (int) get ("ratio"))];
+        const float inG  = dbToGain (read (inputParam));
+        const float outG = dbToGain (read (outputParam));
+        const float atkMs = juce::jmap (read (attackParam),  1.0f, 7.0f, 0.8f, 0.02f);
+        const float relMs = juce::jmap (read (releaseParam), 1.0f, 7.0f, 1100.0f, 50.0f);
+        const float ratio = ratios[juce::jlimit (0, 4, (int) read (ratioParam))];
         const float aC = timeCoef (atkMs, sampleRate), rC = timeCoef (relMs, sampleRate);
         float maxGr = 0.0f;
+
+        const DetectorCurve curve (-10.0f, ratio, 2.0f);
+        float* const* data = buf.getArrayOfWritePointers();
 
         for (int i = 0; i < n; ++i)
         {
             float pk = 0.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
-                float* d = buf.getWritePointer (ch);
-                d[i] *= inG;
-                pk = std::max (pk, std::abs (d[i]));
+                data[ch][i] *= inG;
+                pk = std::max (pk, std::abs (data[ch][i]));
             }
-            env = smooth (env, gainReductionDb (gainToDb (pk), -10.0f, ratio, 2.0f), aC, rC);
+            env = smooth (env, curve.reductionDb (pk), aC, rC);
             maxGr = std::max (maxGr, env);
-            const float g = dbToGain (-env) * outG;
+            const float g = dbToGainFast (-env) * outG;
             for (int ch = 0; ch < nch; ++ch)
-                buf.getWritePointer (ch)[i] = fetColor (buf.getSample (ch, i) * g);
+                data[ch][i] = fetColor (data[ch][i] * g);
         }
         grDb.store (maxGr);
     }
 
 private:
+    std::atomic<float>* inputParam = nullptr;
+    std::atomic<float>* outputParam = nullptr;
+    std::atomic<float>* attackParam = nullptr;
+    std::atomic<float>* releaseParam = nullptr;
+    std::atomic<float>* ratioParam = nullptr;
     float env = 0.0f;
 };
 
@@ -406,7 +596,14 @@ public:
 
     LimiterModule (juce::AudioProcessorValueTreeState& state, juce::String paramPrefix)
         : Module (state, std::move (paramPrefix)),
-          autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain")) {}
+          autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain"))
+    {
+        prepareBypassParameter();
+        enhanceParam = parameter ("enhance");
+        gainParam    = parameter ("gain");
+        ceilingParam = parameter ("ceiling");
+        releaseParam = parameter ("release");
+    }
 
     void reset() override
     {
@@ -450,13 +647,14 @@ private:
     void runLimiter (juce::AudioBuffer<float>& buf, bool active)
     {
         const int n = buf.getNumSamples(), nch = std::min (2, buf.getNumChannels());
-        const float enh = get ("enhance") * 0.01f;
-        const float drive = active ? dbToGain (get ("gain") + enh * 12.0f) : 1.0f;
-        const float ceil = dbToGain (get ("ceiling"));
-        const float rC = timeCoef (get ("release"), sampleRate);
+        const float enh = read (enhanceParam) * 0.01f;
+        const float drive = active ? dbToGain (read (gainParam) + enh * 12.0f) : 1.0f;
+        const float ceil = dbToGain (read (ceilingParam));
+        const float rC = timeCoef (read (releaseParam), sampleRate);
         const bool autoGain = active && autoGainParameter->load() > 0.5f;
         float minG = 1.0f;
         float blockOutPeak = 0.0f;
+        float* const* data = buf.getArrayOfWritePointers();
 
         for (int i = 0; i < n; ++i)
         {
@@ -464,7 +662,7 @@ private:
             float in[2] { 0.0f, 0.0f };
             for (int ch = 0; ch < nch; ++ch)
             {
-                const float dry = buf.getSample (ch, i);
+                const float dry = data[ch][i];
                 dryDelay[ch][(size_t) wp] = dry;
                 float x = dry * drive;
                 if (active) x = analogMasterSaturation (x, enh);
@@ -512,7 +710,7 @@ private:
                 targetDb = juce::jlimit (-36.0f, 36.0f, (float) (10.0 * std::log10 (dryEnergy / wetEnergy)));
             compensationDb = compensationCoef * compensationDb + (1.0f - compensationCoef) * targetDb;
             if (! active) { compensationDb = 0.0f; dryEnergy = wetEnergy = 0.0; }
-            const float compensation = active ? dbToGain (compensationDb) : 1.0f;
+            const float compensation = active ? dbToGainFast (compensationDb) : 1.0f;
             float outputPeak = 0.0f;
             for (int ch = 0; ch < nch; ++ch) outputPeak = std::max (outputPeak, std::abs (wet[ch] * compensation));
             // Linked safety gain preserves the stereo image while keeping the existing ceiling.
@@ -520,7 +718,7 @@ private:
             for (int ch = 0; ch < nch; ++ch)
             {
                 const float s = wet[ch] * compensation * safety;
-                buf.setSample (ch, i, s);
+                data[ch][i] = s;
                 blockOutPeak = std::max (blockOutPeak, std::abs (s));
             }
             wp = (wp + 1) % la;
@@ -531,6 +729,10 @@ private:
     }
 
     std::atomic<float>* autoGainParameter;
+    std::atomic<float>* enhanceParam = nullptr;
+    std::atomic<float>* gainParam = nullptr;
+    std::atomic<float>* ceilingParam = nullptr;
+    std::atomic<float>* releaseParam = nullptr;
     const float* chainInput = nullptr;   // block input energy from the chain start
     int chainInputSamples = 0;
     const float* finalOut = nullptr;     // true chain output energy, post master + mix

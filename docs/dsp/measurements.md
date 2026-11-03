@@ -182,3 +182,50 @@ tools/research/build.sh
 
 The harness has no JUCE dependency, so it runs on Linux as well as macOS. If module DSP
 changes, re-run and re-read this page — a stale table is worse than none.
+## 8. CPU after the optimisation (measured)
+
+`tools/research/bench` — Apple Silicon macOS, 48 kHz, stereo, 256-sample blocks, best of 5.
+Full method and the null-test gate: `docs/specs/dsp-cpu-optimization.md`.
+
+### preset `unity`
+
+| module | before (ns/sample) | after (ns/sample) | change |
+| --- | --- | --- | --- |
+| Console (EQ560 + detector) | 30.3 | 21.7 | -28.5% |
+| Opto (leveler) | 17.4 | 12.6 | -28.0% |
+| FET (compressor) | 10.0 | 8.2 | -18.2% |
+| Limiter (look-ahead) | 18.2 | 17.6 | -3.2% |
+| FULL CHAIN | 76.0 | 60.4 | -20.6% |
+
+### preset `mastering`
+
+| module | before (ns/sample) | after (ns/sample) | change |
+| --- | --- | --- | --- |
+| Console (EQ560 + detector) | 43.7 | 32.2 | -26.4% |
+| Opto (leveler) | 14.3 | 11.8 | -17.9% |
+| FET (compressor) | 10.8 | 9.8 | -9.6% |
+| Limiter (look-ahead) | 26.8 | 25.3 | -5.4% |
+| FULL CHAIN | 99.5 | 80.2 | -19.5% |
+
+### preset `heavy`
+
+| module | before (ns/sample) | after (ns/sample) | change |
+| --- | --- | --- | --- |
+| Console (EQ560 + detector) | 60.3 | 47.6 | -21.0% |
+| Opto (leveler) | 11.3 | 10.5 | -7.1% |
+| FET (compressor) | 8.9 | 8.1 | -9.3% |
+| Limiter (look-ahead) | 30.3 | 28.3 | -6.8% |
+| FULL CHAIN | 107.0 | 90.8 | -15.1% |
+
+### What moved and what did not
+
+* **Adopted:** cached raw-parameter pointers (no `juce::String` on the audio thread),
+  lookup-table `tanh` for the five colour stages, `exp2` for dB→linear, a detector
+  floor test that skips the per-sample `log10` below the knee, the dry-copy skip at
+  100 % wet, one-pass metering with the analyser FFT moved to the message thread, and
+  a lock-free SPSC scope ring.
+* **Rejected after measuring:** float `Eq560` band state (-117 dBFS on the
+  all-bands-active preset, outside the -120 dB budget for no speed gain); a closed-form
+  rational `tanh` (-32 dBFS).
+* **Unchanged:** the look-ahead limiter's sliding-minimum, the rack order packing, the
+  reported latency (71 samples at 48 kHz) and every parameter ID/range/default.

@@ -57,6 +57,22 @@ public:
     Type getSample (int channel, int index) const { return chans[(size_t) channel][(size_t) index]; }
     void setSample (int channel, int index, Type value) { chans[(size_t) channel][(size_t) index] = value; }
 
+    // Real JUCE returns a `Type* const*` for both; the DSP loops hoist these once per
+    // block so the compiler can see a flat pointer instead of an accessor call.
+    Type* const* getArrayOfWritePointers()
+    {
+        pointers.clear();
+        for (auto& c : chans) pointers.push_back (c.data());
+        return pointers.data();
+    }
+
+    const Type* const* getArrayOfReadPointers() const
+    {
+        readPointers.clear();
+        for (auto& c : chans) readPointers.push_back (c.data());
+        return readPointers.data();
+    }
+
     Type* getWritePointer (int channel) { return chans[(size_t) channel].data(); }
     const Type* getReadPointer (int channel) const { return chans[(size_t) channel].data(); }
 
@@ -85,6 +101,8 @@ public:
 
 private:
     std::vector<std::vector<Type>> chans;
+    mutable std::vector<Type*> pointers;
+    mutable std::vector<const Type*> readPointers;
 };
 
 //==============================================================================
@@ -122,5 +140,17 @@ Type jmap (Type value, Type sourceMin, Type sourceMax, Type targetMin, Type targ
     const Type proportion = (value - sourceMin) / (sourceMax - sourceMin);
     return targetMin + proportion * (targetMax - targetMin);
 }
+
+// Present in the real JUCE (`juce_core`); Modules.h uses it purely as a
+// no-op so unused virtual parameters do not warn.
+template <typename... Args>
+inline void ignoreUnused (const Args&...) noexcept {}
+
+// Real JUCE asserts in debug builds and compiles to nothing in release.
+#ifndef NDEBUG
+#define jassert(condition) do { if (! (condition)) std::fprintf (stderr, "jassert: %s\n", #condition); } while (false)
+#else
+#define jassert(condition) do { (void) sizeof (condition); } while (false)
+#endif
 
 } // namespace juce

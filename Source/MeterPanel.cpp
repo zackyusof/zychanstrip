@@ -92,6 +92,9 @@ float MeterPanel::normForScale (float db) const
 void MeterPanel::tick()
 {
     auto& m = proc.getMeters();
+    // The analyser FFT runs HERE, on the message thread, never in the audio callback
+    // (prior-art report F5). It consumes one published snapshot if the audio thread has one.
+    m.runAnalysis();
     for (int c = 0; c < 2; ++c)
     {
         displayPeakDb[(size_t) c] = m.peakDb (c);

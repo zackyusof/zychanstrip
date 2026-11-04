@@ -9,6 +9,7 @@
 #include <cmath>
 #include <vector>
 #include "Eq560.h"
+#include "ColourEngine.h"
 
 namespace rack
 {
@@ -233,6 +234,9 @@ public:
         sampleRate = sr;
         maxBlockSize = maxBlock;
         outPeak.store (0.0f);
+        colourMode = apvts.getRawParameterValue ("colour_mode");
+        const int model = prefix == "con_" ? 0 : prefix == "opto_" ? 1 : prefix == "fet_" ? 2 : 3;
+        colour.prepare (sr, model, (int) colourMode->load());
         reset();
     }
 
@@ -241,7 +245,7 @@ public:
         the operator's RESET request, so it must not allocate on the audio thread. */
     virtual void reset() {}
 
-    virtual int  getLatencySamples() const { return 0; }
+    virtual int  getLatencySamples() const { return colour.latency(); }
 
     void run (juce::AudioBuffer<float>& buf)
     {
@@ -278,7 +282,20 @@ public:
 
 protected:
     virtual void process (juce::AudioBuffer<float>&) = 0;
-    virtual void processBypassed (juce::AudioBuffer<float>&) {}
+    virtual void processBypassed (juce::AudioBuffer<float>& buf) {
+        const int channels = std::min(2, buf.getNumChannels());
+        for(int i=0;i<buf.getNumSamples();++i) {
+            float raw[2]{},out[2]{};
+            for(int c=0;c<channels;++c) raw[c]=buf.getSample(c,i);
+            colour.frame(raw,raw,out,channels,2);
+            for(int c=0;c<channels;++c) buf.setSample(c,i,out[c]);
+        }
+    }
+    void colourFrame(float* raw, float* algo, float* out, int channels, float amount=1.0f, bool bypass=false, float namDrive=1.0f) {
+        colour.frame(raw,algo,out,channels,bypass?2:(int)colourMode->load(std::memory_order_relaxed),amount,namDrive);
+    }
+    ColourEngine colour;
+    std::atomic<float>* colourMode=nullptr;
 
     /** Resolve a parameter ONCE, in the constructor, and only ever `load()` the atomic
         afterwards. The previous string-keyed lookup built a juce::String and hashed it on
@@ -328,6 +345,7 @@ public:
 
     void reset() override
     {
+        colour.reset();
         updateBands();
         eq.prepare (sampleRate);
         env = 0.0f;
@@ -361,10 +379,15 @@ protected:
         {
             eq.beginSample();
             float pk = 0.0f;
-            for (int ch = 0; ch < nch; ++ch)
-            {
-                data[ch][i] = apiConsoleColor (eq.processSample (ch, data[ch][i]));
-                pk = std::max (pk, std::abs (data[ch][i]));
+            float raw[2]{}, shaped[2]{}, coloured[2]{};
+            for (int ch = 0; ch < nch; ++ch) {
+                raw[ch] = eq.processSample (ch, data[ch][i]);
+                shaped[ch] = apiConsoleColor (raw[ch]);
+            }
+            colourFrame(raw,shaped,coloured,nch);
+            for (int ch = 0; ch < nch; ++ch) {
+                data[ch][i]=coloured[ch];
+                pk = std::max(pk,std::abs(coloured[ch]));
             }
             env = smooth (env, curve.reductionDb (pk), aC, rC);
             maxGr = std::max (maxGr, env);
@@ -409,6 +432,7 @@ public:
 
     void reset() override
     {
+        colour.reset();
         fast = slow = 0.0f;
         grDb.store (0.0f);
         gainCompDb.store (0.0f);
@@ -445,8 +469,10 @@ protected:
             maxGr = std::max (maxGr, applied);
 
             const float g = dbToGainFast (-applied) * makeup;
-            for (int ch = 0; ch < nch; ++ch)
-                data[ch][i] = optoTubeColor (data[ch][i] * g);
+            float raw[2]{}, shaped[2]{}, coloured[2]{};
+            for (int ch=0;ch<nch;++ch) { raw[ch]=data[ch][i]*g; shaped[ch]=optoTubeColor(raw[ch]); }
+            colourFrame(raw,shaped,coloured,nch);
+            for (int ch=0;ch<nch;++ch) data[ch][i]=coloured[ch];
         }
         grDb.store (maxGr);
     }
@@ -476,6 +502,7 @@ public:
 
     void reset() override
     {
+        colour.reset();
         env = 0.0f;
         grDb.store (0.0f);
         gainCompDb.store (0.0f);
@@ -509,8 +536,10 @@ protected:
             env = smooth (env, curve.reductionDb (pk), aC, rC);
             maxGr = std::max (maxGr, env);
             const float g = dbToGainFast (-env) * outG;
-            for (int ch = 0; ch < nch; ++ch)
-                data[ch][i] = fetColor (data[ch][i] * g);
+            float raw[2]{}, shaped[2]{}, coloured[2]{};
+            for (int ch=0;ch<nch;++ch) { raw[ch]=data[ch][i]*g; shaped[ch]=fetColor(raw[ch]); }
+            colourFrame(raw,shaped,coloured,nch);
+            for (int ch=0;ch<nch;++ch) data[ch][i]=coloured[ch];
         }
         grDb.store (maxGr);
     }
@@ -607,6 +636,7 @@ public:
 
     void reset() override
     {
+        colour.reset();
         // Ring sizes follow the sample rate; resize only when the rate actually changed so a
         // reset from the audio thread cannot allocate in the common case.
         const int wanted = std::max (2, (int) std::ceil (0.0015 * sampleRate));
@@ -625,7 +655,7 @@ public:
         outPeak.store (0.0f);
     }
 
-    int getLatencySamples() const override { return la - 1; }
+    int getLatencySamples() const override { return la - 1 + colour.latency(); }
 
     void setChainReference (const float* chainInputRaw, int numSamples) override
     {
@@ -648,7 +678,9 @@ private:
     {
         const int n = buf.getNumSamples(), nch = std::min (2, buf.getNumChannels());
         const float enh = read (enhanceParam) * 0.01f;
+        const float manualGain = active ? dbToGain (read (gainParam)) : 1.0f;
         const float drive = active ? dbToGain (read (gainParam) + enh * 12.0f) : 1.0f;
+        const float neuralDrive = drive / manualGain;
         const float ceil = dbToGain (read (ceilingParam));
         const float rC = timeCoef (read (releaseParam), sampleRate);
         const bool autoGain = active && autoGainParameter->load() > 0.5f;
@@ -660,14 +692,19 @@ private:
         {
             float pk = 0.0f;
             float in[2] { 0.0f, 0.0f };
-            for (int ch = 0; ch < nch; ++ch)
-            {
-                const float dry = data[ch][i];
-                dryDelay[ch][(size_t) wp] = dry;
-                float x = dry * drive;
-                if (active) x = analogMasterSaturation (x, enh);
-                in[ch] = x;
-                pk = std::max (pk, std::abs (x));
+            float raw[2]{}, shaped[2]{};
+            for (int ch=0;ch<nch;++ch) {
+                const float dry=data[ch][i];
+
+                // CLEAN disables Enhance's colour drive; limiter gain remains active.
+                raw[ch]=dry*manualGain;
+                const float driven=active?dry*drive:dry;
+                shaped[ch]=active?analogMasterSaturation(driven,enh):raw[ch];
+            }
+            colourFrame(raw,shaped,in,nch,enh,!active,neuralDrive);
+            for (int ch=0;ch<nch;++ch) {
+                pk=std::max(pk,std::abs(in[ch]));
+                dryDelay[ch][(size_t)wp]=colour.delayedClean(ch)/manualGain;
             }
 
             const float req = (active && pk > ceil) ? ceil / pk : 1.0f;

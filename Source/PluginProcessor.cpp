@@ -76,6 +76,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout ZychanStripProcessor::create
     // Append-only: the new automation ID must never shift any existing host parameter index.
     addB ("unity", "UNITY Level Match", false);
 
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "colour_mode", 1 }, "Colour Engine",
+        juce::StringArray { "ALGO", "NAM", "CLEAN" }, 0));
     return layout;
 }
 
@@ -449,6 +452,7 @@ void ZychanStripProcessor::setStateInformation (const void* data, int size)
             // Previously saved sessions retain their original limiter loudness.
             addMissingParameter ("lim_auto_gain", 0.0f);
             addMissingParameter ("unity", 0.0f);
+            addMissingParameter ("colour_mode", 0.0f);
             apvts.replaceState (state);
 
             auto tokens = juce::StringArray::fromTokens (state.getProperty ("order", "0,1,2,3").toString(), ",", "");

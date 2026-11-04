@@ -10,6 +10,22 @@ has been published.
 
 ## [Unreleased]
 
+### Added — 1.1.1-beta.2 local evaluation (2026-11-04)
+
+- Master ALGO / NAM / CLEAN selector on rack and meter headers, append-only automation and old-session migration.
+- Four fixed A2-Lite profiles with independent stereo state, fixed level calibration, DC correction and offline resources.
+- Prepared polyphase Blackman-sinc conversion around 48 kHz NAM stages, 16-frame adapter, matched bypass/colour delays and 20 ms switching.
+- Measured six-rate latency/CPU, all 24 active/bypassed orders, maximum Enhance ceiling, SRC rejection and mode/GUI tests: 297/297 passed.
+- Local-only T3K capture setup with SHA256-pinned downloads; third-party notices packaged in AU. No restricted weights/binary in Git.
+- Updated README feature inventory, routing/interaction docs, screenshots and current research harness linking.
+
+### Changed
+
+- All modes now report the fixed colour-engine plus limiter delay. At 48 kHz total latency is 135 samples (2.81 ms); 96 kHz is 991 (10.32 ms).
+- NAM remains warm in ALGO/CLEAN. CPU at high rates is substantial; profile audition and DAW soak remain beta work.
+- Enhance CLEAN removes extra colour drive while retaining limiter input gain/ceiling. Limiter fallback dry reference includes colour delay.
+- Earlier GUI work retained: horizontal white Enhance fader stripes and softened LA-2A silhouette/contact shadows with stationary lighting.
+
 ### Fixed
 
 - **LA-2A INPUT GAIN / PEAK REDUCTION knobs were drawn in a transformed frame inside an

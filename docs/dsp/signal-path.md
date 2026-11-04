@@ -1,5 +1,12 @@
 # Signal path — from host buffer to output
 
+> **Beta.2 update:** global `colour_mode` selects ALGO, embedded NAM, or CLEAN.
+> The routing and latency changes in [NAM colour DSP](nam-colour.md) supersede older
+> colour-only/zero-latency statements and historical measurements below. NAM is stateful;
+> ALGO retains the documented legacy shaping. CLEAN removes added colour, retaining
+> functional EQ/dynamics/limiting and a matched delay. Module order remains user-controlled.
+
+
 This is the frame every other document in `docs/dsp/` lives in: what owns the audio,
 what order things happen in, and which properties are invariant under re-ordering.
 

@@ -1,5 +1,12 @@
 # Limiter / Enhance DSP
 
+> **Beta.2 update:** global `colour_mode` selects ALGO, embedded NAM, or CLEAN.
+> The routing and latency changes in [NAM colour DSP](nam-colour.md) supersede older
+> colour-only/zero-latency statements and historical measurements below. NAM is stateful;
+> ALGO retains the documented legacy shaping. CLEAN removes added colour, retaining
+> functional EQ/dynamics/limiting and a matched delay. Module order remains user-controlled.
+
+
 The `LimiterModule` in `Source/Modules.h` is a stereo-linked look-ahead limiter. It derives a per-sample request `req` in `[0,1]`, tracks the minimum request over its `la`-sample window, averages that minimum through `avgRing`, then applies the existing release, saturation, delay, ceiling, and optional auto-gain stages. Reported latency remains `la - 1`, with `la = max(2, ceil(0.0015 * sampleRate))`.
 
 ## Sliding minimum

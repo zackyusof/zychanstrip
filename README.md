@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.1-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.2-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -20,6 +20,38 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 - **METER** — an SSL-style analyser page: dual true-peak/RMS meters, Lissajous phase scope, correlation bar and a 31-band real-time analyser.
 
 ---
+
+## Current beta: colour engines and complete feature overview
+
+**1.1.1-beta.2 is a local evaluation beta.** The embedded API/IGS captures require creator
+permission before distributing the binary. Source and documentation can be shared; model
+weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
+
+- Four drag-reorderable modules: 10-band graphic EQ, fast FET compression, opto levelling,
+  and Enhance with look-ahead brick-wall limiting, ceiling, release and linked auto gain.
+- One master **COLOUR — ALGO / NAM / CLEAN** selector, visible on RACK and METER pages,
+  host-automatable and saved with sessions. ALGO preserves existing saturation; NAM uses
+  fixed embedded hardware captures; CLEAN removes added colour while retaining EQ, gain,
+  compression and limiting. Twenty-millisecond mode crossfades; constant mode/bypass latency.
+- Four author-supplied A2-Lite profiles: API 512c gain 3, IGS ONE LA with zero gain reduction,
+  UREI 1176 Rev A clean colour, and Studer A807 tape. No profile loader, login or runtime
+  network connection. Fixed calibration preserves gain interaction between modules.
+- Streaming sample-rate conversion around each NAM stage, to/from its native 48 kHz;
+  EQ, compressor envelopes and limiter keep the DAW sample rate. Native 48 kHz skips SRC.
+  ALGO and CLEAN have matching delays; NAM remains warm in every mode in this beta.
+- Master output level, parallel dry/wet mix, UNITY level matching and one-click RESET to the
+  Hardware Neutral Starting Profile. Individual module bypass and persistent rack order.
+- Meter page with true-peak/RMS, loudness, stereo phase/Lissajous scope, correlation and
+  31-band spectrum with RTA averaging; rack VU/GR and Enhance GR/output LED meters.
+- Resizable 864×608 to 1620×1140 interface, metal faceplates, drag handles, horizontal
+  Enhance fader index stripes, softened LA-2A contact/cast shadows and fixed lighting.
+  Mouse wheel, Shift fine adjustment and double-click parameter defaults.
+- Apple Silicon macOS AUv2 effect, JUCE 9; global-only install with source/hash/signature
+  verification. Existing parameter IDs/ranges/defaults are preserved; old sessions use ALGO.
+
+For routing, actual latency/CPU measurements and validation limits see
+[NAM colour DSP](docs/dsp/nam-colour.md) and [implementation specification](docs/specs/embedded-nam-colour.md).
+This beta has not been auditioned by a human and is not a stable release.
 
 ## Contents
 
@@ -48,7 +80,8 @@ cd zychanstrip
 # CMake and Ninja may be installed by pip on macOS, not in PATH by default:
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1
+python3 tools/nam/prepare_profiles.py
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -72,6 +105,10 @@ python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reus
 | Rack UI, panels, LookAndFeel, page switch | `Source/PluginEditor.{h,cpp}` |
 | Headless test + snapshot harness | `tools/snapshot_main.cpp`, `tools/dsp_checks.h`, `tools/build_snapshot.py` |
 
+The NAM dependency is fetched at a pinned revision with its Eigen submodule. Profile setup
+requires network once; plugin use is offline. T3K profiles are for a local evaluation build;
+obtain creator permission before publishing any binary containing them.
+
 **Before you change anything**
 
 1. `git pull` — work from the latest `main`, not a stale copy.
@@ -92,7 +129,7 @@ enum ModuleId { Console = 0, Opto = 1, Fet = 2, Limiter = 3, NumModules = 4 };
 // slot i holds module id byte i of packedOrder; default 0x03010200 => [0,2,1,3]
 ```
 
-**Parameters.** A single `AudioProcessorValueTreeState` with **42** parameters (see [Parameters](#parameters)). Adding one is a one-line `addF`/`addB` call in `createLayout()`; **never reorder or re-range an existing ID** — host automation and saved sessions depend on them. New parameters must be appended at the end.
+**Parameters.** A single `AudioProcessorValueTreeState` with **43** parameters (see [Parameters](#parameters)). Adding one is a one-line `addF`/`addB` call in `createLayout()`; **never reorder or re-range an existing ID** — host automation and saved sessions depend on them. New parameters must be appended at the end.
 
 **State migration.** `setStateInformation` patches older session blobs by inserting any parameter that is missing (e.g. `lim_auto_gain`, the EQ560 bands, `master_mix`). If you add a parameter, add it to that migration list too, or old sessions will silently miss it.
 
@@ -190,18 +227,25 @@ metering tap (read-only)
 Host output
 ```
 
-**Latency.** Only the limiter adds latency: `la = ceil(0.0015 · sr)` with reported latency `la − 1` — **71 samples ≈ 1.48 ms at 48 kHz**. It is reported to the host and is constant regardless of module order or bypass, so the rack never drifts against parallel tracks.
+**Latency (beta.2).** Each colour stage reports its fixed neural/SRC delay in every mode,
+including CLEAN and bypass. The rack adds those four delays to the limiter's `ceil(0.0015·sr)-1`
+look-ahead. At 48 kHz the total is **135 samples / 2.81 ms**. Other rates use longer FIR
+conversions; see the measured table in [NAM colour DSP](docs/dsp/nam-colour.md). This supersedes
+the earlier prototype latency estimates. The host is notified once during preparation.
 
-**Phase.** The limiter is latency-compensated internally (its own `dryDelay` ring aligns its auto-gain measurement). **The dry/wet mix is currently NOT compensated** — see [Known issues](#known-issues--next-work).
+**Phase.** The partial dry/wet path is delayed by the reported rack latency. NAM captures have
+their own frequency-dependent phase response, which is intentional colour; latency compensation
+cannot remove that. At 0% wet, the existing untouched-input/no-added-delay behaviour is retained.
 
 ---
 
 ## Parameters
 
-42 automated parameters. `bypass` is `false` = module active.
+43 automated parameters. `bypass` is `false` = module active.
 
 | Module | Prefix | Parameters |
 | --- | --- | --- |
+| Colour | `colour_` | `mode`: ALGO / NAM / CLEAN |
 | Console | `con_` | `bypass`, `eq_16k`, `eq_8k`, `eq_4k`, `eq_2k`, `eq_1k`, `eq_500`, `eq_250`, `eq_125`, `eq_63`, `eq_31`, `hpf`, `lf`, `lmf_f`, `lmf`, `hmf_f`, `hmf`, `hf`, `thresh`, `ratio`, `attack`, `release`, `out` |
 | Opto | `opto_` | `bypass`, `gain`, `peak`, `mode` |
 | FET | `fet_` | `bypass`, `input`, `output`, `attack`, `release`, `ratio` |
@@ -286,11 +330,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.1.1` | neutral grey |
-| prerelease | `v1.1.1-beta.1` | amber |
+| prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1  # v1.1.1-beta.1
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1   # …-beta.1
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -349,6 +393,8 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
+| `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
+| `zychanstrip-nam-validation` | **Beta validation limits** | No human listening, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
 | `zychanstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
 | `zychanstrip-autogain-order` | ~~**Auto-gain is order-dependent**~~ **FIXED** | Auto Gain now divides the energy of the **chain input** (measured before any module) by the **rack output** (after every module, before master gain), both captured as one pair from the previous block. Measured spread across all 24 permutations: **0.000 dB** (was 7.6 dB). Harness: *"Auto Gain is order-independent across 24 permutations"*. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
@@ -377,6 +423,17 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 ## Changelog
 
+### 2026-11-04 — 1.1.1-beta.2 local NAM evaluation
+
+- Added global ALGO / NAM / CLEAN colour selection, automation, session migration and smooth transitions.
+- Embedded four pinned A2-Lite hardware colour profiles with fixed calibration and DC correction.
+- Added streaming sinc sample-rate conversion, SIMD FIR processing, matched bypass/dry paths and fixed latency.
+- Preserved existing EQ/compressor/limiter controls; CLEAN removes extra colour and Enhance drive.
+- Retained the horizontal Enhance cap stripes and improved LA-2A shadows/lighting from today's earlier commits.
+- Updated profile attribution, routing, measured latency/CPU, tests, build helpers and the rack screenshot.
+- Local evaluation binary only: API/IGS redistribution rights and human listening validation remain open.
+
+
 ### 2026-11-03 — Limiter fader bank bezel
 
 - Added one shared meter-style recessed frame around the limiter's complete 2×2 fader bank; individual faders remain unframed within it.
@@ -384,4 +441,4 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current beta target: **1.1.1-beta.1** (user-confirmed). No stable release is authorized; promotion remains the user's decision.
+Current beta target: **1.1.1-beta.2** (user-confirmed). No stable release is authorized; promotion remains the user's decision.

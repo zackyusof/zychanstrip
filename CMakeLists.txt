@@ -15,6 +15,17 @@ FetchContent_Declare(JUCE
     GIT_SHALLOW ON)
 FetchContent_MakeAvailable(JUCE)
 
+# Pinned MIT NAM engine. Profile weights stay in build/ for local evaluation;
+# T3K model redistribution requires the creators' permission.
+FetchContent_Declare(namcore
+    GIT_REPOSITORY https://github.com/sdatkinson/NeuralAmpModelerCore.git
+    GIT_TAG 0b3d3c97b0859a3a8c92a8628c4dd89a25eb5842
+    SOURCE_SUBDIR no-build)
+FetchContent_MakeAvailable(namcore)
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/nam-assets/EmbeddedNam.h")
+    message(FATAL_ERROR "Run: python3 tools/nam/prepare_profiles.py ${CMAKE_BINARY_DIR}/nam-assets (local evaluation profiles)")
+endif()
+
 # AU is only built on macOS
 if(APPLE)
     set(PLUGIN_FORMATS AU)
@@ -43,6 +54,7 @@ juce_add_plugin(zychanstrip
     VST3_CATEGORIES Fx Dynamics EQ)
 
 target_sources(zychanstrip PRIVATE
+    Source/ColourEngine.cpp
     Source/Modules.h
     Source/Meters.h
     Source/MeterPanel.h
@@ -51,6 +63,14 @@ target_sources(zychanstrip PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.h
     Source/PluginEditor.cpp)
+
+file(GLOB NAM_ENGINE_SOURCES "${namcore_SOURCE_DIR}/NAM/*.cpp" "${namcore_SOURCE_DIR}/NAM/*/*.cpp")
+target_sources(zychanstrip PRIVATE ${NAM_ENGINE_SOURCES})
+target_compile_features(zychanstrip PUBLIC cxx_std_20)
+target_compile_definitions(zychanstrip PRIVATE NAM_ENABLE_A2_FAST)
+target_include_directories(zychanstrip SYSTEM PRIVATE
+    "${namcore_SOURCE_DIR}" "${namcore_SOURCE_DIR}/Dependencies/eigen"
+    "${namcore_SOURCE_DIR}/Dependencies/nlohmann" "${CMAKE_BINARY_DIR}/nam-assets")
 
 target_compile_definitions(zychanstrip PUBLIC
     JUCE_WEB_BROWSER=0

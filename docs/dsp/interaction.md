@@ -1,5 +1,12 @@
 # Module interaction — what couples, what does not
 
+> **Beta.2 update:** global `colour_mode` selects ALGO, embedded NAM, or CLEAN.
+> The routing and latency changes in [NAM colour DSP](nam-colour.md) supersede older
+> colour-only/zero-latency statements and historical measurements below. NAM is stateful;
+> ALGO retains the documented legacy shaping. CLEAN removes added colour, retaining
+> functional EQ/dynamics/limiting and a matched delay. Module order remains user-controlled.
+
+
 Source of truth: `Source/Modules.h`, `Source/PluginProcessor.cpp`.
 Line numbers refer to commit `8151aa9`; re-check if the files moved.
 

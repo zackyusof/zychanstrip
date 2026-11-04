@@ -4,6 +4,7 @@
 #include "PluginEditor.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 #include <cmath>
+#include <chrono>
 #include <complex>
 #include <iostream>
 #include <utility>
@@ -78,6 +79,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 }
 // Test-only implementations remain separate from production DSP.
 #include "dsp_checks.h"
+#include "colour_checks.h"
 
 void audioTests()
 {
@@ -786,6 +788,7 @@ public:
         const auto output = args.isEmpty() ? juce::File::getCurrentWorkingDirectory()
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
+        colourTests();
         eqTests();
         limiterTests();
         audioTests();
@@ -793,6 +796,7 @@ public:
         resetTests();
         ZychanStripProcessor proc;
         auto editor = std::unique_ptr<ZychanStripEditor> (static_cast<ZychanStripEditor*> (proc.createEditor()));
+        colourGuiTests (proc, *editor);
         newEditorTests (proc, *editor);
         meterPageTests (proc, *editor, output);
         editorTests (proc, *editor, output);

@@ -2194,6 +2194,11 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     : AudioProcessorEditor (p), proc (p), laf (std::make_unique<RackLookAndFeel>())
 {
     setLookAndFeel (laf.get());
+    colourSelector.setName("Colour: ALGO / NAM / CLEAN");
+    colourSelector.setWantsKeyboardFocus(true);
+    colourSelector.setMouseCursor(MouseCursor::PointingHandCursor);
+    colourSelector.connect(*proc.apvts.getParameter("colour_mode"));
+    addAndMakeVisible(colourSelector);
     meterPanel = std::make_unique<MeterPanel> (proc);
     // The meter page carries its own way back to the rack, mirroring the RACK/METER switch.
     meterPanel->onBack = [this] { showPage (false); };
@@ -2361,6 +2366,11 @@ void ZychanStripEditor::resized()
         ((float) getWidth() - kEditorW * scale) * 0.5f,
         ((float) getHeight() - kEditorH * scale) * 0.5f);
     canvas.setTransform (canvasTransform);
+    if(metersShown)
+        colourSelector.setBounds(roundToInt(getWidth()*0.59f),16,roundToInt(getWidth()*0.23f),26);
+    else
+        colourSelector.setBounds(Rectangle<float>(330,8,230,32).transformedBy(canvasTransform).toNearestInt());
+    colourSelector.toFront(false);
     repaint();
 }
 
@@ -2602,21 +2612,8 @@ void ZychanStripEditor::paint (Graphics& g)
     const Rectangle<float> zyMarkBox (versionBox.getRight() + 9.0f, logoY + 1.0f, 44.0f, 20.0f);
     drawZyLogo (g, zyMarkBox);
 
-    // Subtitle badge — placed clear of the page toggle. It used to start right after the
-    // monogram and ran underneath the RACK/METER toggle, so only "MAST" and "RIP" showed.
-    const int subtitleX = pageToggle.getRight() + 14;
-    const int subtitleRight = (int) (full.getWidth() * 0.5f) - 14;   // stop before the power jewel
-    if (subtitleRight - subtitleX > 80)
-    {
-        g.setFont (fnt (9.0f, false));
-        g.setColour (pal::engraveDim);
-        g.drawText ("MASTERING & TRACKING STRIP",
-                    Rectangle<int> (subtitleX, (int) (logoY + 3.0f), subtitleRight - subtitleX, 18),
-                    Justification::centredLeft, true);
-    }
-
     // Power jewel LED on header
-    const Point<float> pwrC (full.getWidth() * 0.5f, header.getCentreY());    g.setColour (Colour (0xff08090a));
+    const Point<float> pwrC (full.getWidth() * 0.58f, header.getCentreY());    g.setColour (Colour (0xff08090a));
     g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC));
     g.setColour (Colours::white.withAlpha (0.25f));
     g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC), 0.8f);
@@ -2661,4 +2658,40 @@ void ZychanStripEditor::paintOverChildren (Graphics& g)
     g.setColour (Colours::black.withAlpha (0.95f));
     g.drawRoundedRectangle (full.reduced (0.5f), 9.0f, 1.5f);
     g.restoreState();
+}
+
+void ZychanStripEditor::ColourSelector::connect(RangedAudioParameter& p)
+{
+    attachment=std::make_unique<ParameterAttachment>(p,[this](float v){mode=jlimit(0,2,roundToInt(v));repaint();},nullptr);
+    attachment->sendInitialUpdate();
+}
+void ZychanStripEditor::ColourSelector::paint(Graphics& g)
+{
+    auto r=getLocalBounds().toFloat();
+    const float labelWidth=r.getWidth()*0.25f;
+    g.setFont(fnt(jmax(7.0f,r.getHeight()*0.27f),true));
+    g.setColour(Colour(0xffc8ccd0));
+    g.drawText("COLOUR",r.removeFromLeft(labelWidth),Justification::centredLeft);
+    g.setColour(Colour(0xff101719));g.fillRoundedRectangle(r,3);
+    const char* labels[]{"ALGO","NAM","CLEAN"};
+    const float w=r.getWidth()/3;
+    for(int i=0;i<3;++i){
+        auto cell=Rectangle<float>(r.getX()+i*w,r.getY()+2,w,r.getHeight()-4).reduced(1,0);
+        if(i==mode){g.setColour(Colour(0xff36b9a6));g.fillRoundedRectangle(cell,2);}
+        g.setColour(i==mode?Colour(0xff071c1a):Colour(0xffdce3e2));
+        g.drawText(labels[i],cell,Justification::centred);
+    }
+}
+void ZychanStripEditor::ColourSelector::mouseDown(const MouseEvent& e)
+{
+    const float labelWidth=getWidth()*0.25f;
+    if(e.position.x<labelWidth || attachment==nullptr)return;
+    attachment->setValueAsCompleteGesture((float)jlimit(0,2,(int)((e.position.x-labelWidth)/((getWidth()-labelWidth)/3))));
+}
+bool ZychanStripEditor::ColourSelector::keyPressed(const KeyPress& key)
+{
+    if(attachment==nullptr)return false;
+    if(key.getKeyCode()!=KeyPress::leftKey && key.getKeyCode()!=KeyPress::rightKey)return false;
+    attachment->setValueAsCompleteGesture((float)jlimit(0,2,mode+(key.getKeyCode()==KeyPress::rightKey?1:-1)));
+    return true;
 }

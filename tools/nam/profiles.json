@@ -1,0 +1,34 @@
+[
+  {
+    "id": "api",
+    "url": "https://www.tone3000.com/api/files/models/379982/rtqtyg3tmy_a2.nam",
+    "sha256": "b9e13e7bb51d70c64dacfb6796fc94605f70800907384b5a9072834dd4c4c63b",
+    "name": "API 512c - right mic gain 3",
+    "author": "tone3000",
+    "license": "T3K"
+  },
+  {
+    "id": "opto",
+    "url": "https://www.tone3000.com/api/files/models/764295/8bbywwrm8k3.nam",
+    "sha256": "d67f07588376c8e06d124c2a8c852e6428f7733b2fb2473cc91ce23e767ff6fc",
+    "name": "ONE_LA_GR=0db_Comp",
+    "author": "burtbombast",
+    "license": "T3K"
+  },
+  {
+    "id": "fet",
+    "url": "https://www.tone3000.com/api/files/models/420079/88f12bc85126ff4b_a2.nam",
+    "sha256": "035f12862bc87f697ac055d50311e38bb419cd559546f4c44788a2c8262024d2",
+    "name": "1176 L",
+    "author": "yulokchan",
+    "license": "CC BY"
+  },
+  {
+    "id": "tape",
+    "url": "https://www.tone3000.com/api/files/models/420081/fbcc2d98a933b9d5_a2.nam",
+    "sha256": "b0aed0195745745fed1d71808a048d0575fba17e548e8a83623aaf058622a312",
+    "name": "Studer A807 L",
+    "author": "yulokchan",
+    "license": "CC BY"
+  }
+]

@@ -1,5 +1,12 @@
 # Re-ordering — what actually changes when you drag a module
 
+> **Beta.2 update:** global `colour_mode` selects ALGO, embedded NAM, or CLEAN.
+> The routing and latency changes in [NAM colour DSP](nam-colour.md) supersede older
+> colour-only/zero-latency statements and historical measurements below. NAM is stateful;
+> ALGO retains the documented legacy shaping. CLEAN removes added colour, retaining
+> functional EQ/dynamics/limiting and a matched delay. Module order remains user-controlled.
+
+
 The rack is a permutation of four modules (`Console`, `Opto`, `Fet`, `Limiter`) stored in
 one atomic word (`Source/PluginProcessor.h:58`). The UI reorders by drag; the audio thread
 picks the new order up on the next block boundary. Nothing is re-prepared, nothing is

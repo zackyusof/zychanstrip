@@ -27,6 +27,8 @@ public:
     String operator+ (const String& other) const { return String (text + other.text); }
     String operator+ (const char* other) const { return String (text + (other ? other : "")); }
 
+    bool operator== (const char* other) const { return text == other; }
+
     const std::string& toStdString() const { return text; }
 
 private:

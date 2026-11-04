@@ -37,3 +37,5 @@ Every quantitative statement is either
 
 Where a claim is reasoning rather than measurement it is marked *(inference)*.
 Nothing in this folder is copied from marketing copy or from the hardware manuals.
+
+- [Beta.2 NAM colour engines, resampling, calibration, latency and validation](nam-colour.md)

@@ -28,6 +28,7 @@ public:
     bool isMeterPageVisible() const { return metersShown; }
     juce::Component* getUnityButtonForTest() { return unityButton.get(); }
     juce::Component* getModulePanelForTest (int id);
+    juce::Component* getColourSelectorForTest() { return &colourSelector; }
     /** Test seam: perform the RESET action without synthesising a mouse event. */
     void resetForTest() { resetRackToDefaults(); }
 
@@ -75,6 +76,19 @@ private:
     };
     PageToggle pageToggle;
     bool metersShown = false;
+
+    class ColourSelector : public juce::Component
+    {
+    public:
+        void connect (juce::RangedAudioParameter& p);
+        void paint (juce::Graphics&) override;
+        void mouseDown (const juce::MouseEvent&) override;
+        bool keyPressed (const juce::KeyPress&) override;
+    private:
+        int mode = 0;
+        std::unique_ptr<juce::ParameterAttachment> attachment;
+    };
+    ColourSelector colourSelector;
 
     // Header RESET and UNITY controls sit left of master/dry-wet.
     class ResetButton : public juce::Component

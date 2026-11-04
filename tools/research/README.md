@@ -1,3 +1,11 @@
+# Beta.2 build update
+
+The NAM engine is no longer header-only. On macOS, build the current plugin first; the
+legacy build.sh/build_bench.sh now link its pinned engine objects through build_current.py.
+Use C++20. The earlier dependency-free/Linux build instructions below describe the pre-NAM
+baseline and are historical. Production beta checks are tools/build_snapshot.py plus the
+snapshot executable; its colour tests cover rates, modes, routing, latency and CPU.
+
 # tools/research — headless DSP research harness
 
 `permute.cpp` measures how the rack behaves under every one of the 24 module orders.

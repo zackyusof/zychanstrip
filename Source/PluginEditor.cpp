@@ -1225,9 +1225,9 @@ public:
                                             Colour (0xff6a7480), well.getX(), well.getBottom(), false));
         g.fillRoundedRectangle (well, 3.0f);
 
-        // Bright white central index line
+        // Bright white horizontal index line through the cap centre
         g.setColour (Colours::white);
-        g.fillRect (Rectangle<float> (cap.getCentreX() - 1.0f, cap.getY() + 2.0f, 2.0f, cap.getHeight() - 4.0f));
+        g.fillRect (Rectangle<float> (cap.getX() + 2.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 4.0f, 2.0f));
 
         // Knurl grooves on sides
         g.setColour (Colour (0xff20303a).withAlpha (0.50f));

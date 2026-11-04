@@ -28,6 +28,8 @@ has been published.
 
 ### Fixed
 
+- Explicit WaveNet factory linkage prevents the AU static archive from discarding neural model initialization code retained by the headless harness.
+
 - **LA-2A INPUT GAIN / PEAK REDUCTION knobs were drawn in a transformed frame inside an
   already-transformed parent**, so the dome rendered as a crescent at most values and vanished
   entirely at the min/max endpoints. The rack canvas carries its own `canvasTransform`; adding a

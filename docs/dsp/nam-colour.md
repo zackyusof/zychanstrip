@@ -112,3 +112,19 @@ ALGO/CLEAN keep NAM warm and therefore do not provide a CPU-saving mode in beta.
 Herdr FreeLLMAPI review was attempted in an OpenCode sibling pane. It returned "Invalid API key";
 local provisioning confirmed missing unified key and missing DB bootstrap credential. No model
 review result is counted as evidence. Validation above is deterministic local code execution.
+
+### AU package validation follow-up
+
+The first installed beta opened its AU factory but Initialize returned -1. Investigation found
+that static-archive linking discarded NAM's registration-only WaveNet object, although the
+headless harness linked it directly. The embedded engine now calls the fixed WaveNet config
+factory explicitly, making its linkage mandatory. Direct installed-bundle factory initialization
+is required in addition to the headless harness. System auval discovery also failed after a
+registrar restart; do not count that as a validation pass.
+
+Direct built-bundle regression now passes at 44.1, 48, 96 and 192 kHz: factory open=0,
+initialize=0, COLOUR parameter found, and finite nonzero audio rendered in ALGO/NAM/CLEAN.
+Reported latencies match the table. Repeat with `tools/check_au_bundle.sh [AU executable path]`;
+without an argument it tests the global installed bundle. This catches the factory-link defect
+that direct-object headless linking did not. System auval discovery remains a separate open
+machine/registrar validation issue; direct registration in the test is not a claim that discovery works.

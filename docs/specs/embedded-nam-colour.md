@@ -63,3 +63,5 @@ Record final measured results and limitations in docs/dsp/nam-colour.md before i
 Build/install policy remains commit -> build -> harness -> push -> global installer.
 
 Verification: production harness RESULT 297/297 passed; measured CPU/latency in docs/dsp/nam-colour.md. Global installation/signature and AU validation are recorded in the task delivery.
+
+Packaged-AU regression added after a static-link factory omission was caught. Explicit WaveNet factory construction fixes initialization. Built AU passes open/init/render at 44.1/48/96/192 kHz and all modes; system auval discovery remains unresolved on this host.

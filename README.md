@@ -90,6 +90,7 @@ Verify:
 ```bash
 python3 tools/build_snapshot.py      # builds the headless GUI/DSP harness (reuses Ninja flags)
 ./build/snapshot/snapshot /tmp/shots # runs all tests, writes PNGs
+tools/check_au_bundle.sh "$PWD/build/zychanstrip_artefacts/Release/AU/zychanstrip.component/Contents/MacOS/zychanstrip" # packaged factory/render test
 # expect: RESULT <current total>/<current total> passed
 ```
 
@@ -393,6 +394,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
+| `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
 | `zychanstrip-nam-validation` | **Beta validation limits** | No human listening, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
 | `zychanstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |

@@ -3,7 +3,7 @@
 #include <Accelerate/Accelerate.h>
 #endif
 #include "EmbeddedNam.h"
-#include "NAM/get_dsp.h"
+#include "NAM/wavenet/model.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -134,7 +134,12 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     x.fadeLength=std::max(1,(int)(0.02*sr));
     x.preGain=model==1?0.177827941: model==3?0.354813389:1.0;
     const auto config=nlohmann::json::parse(embeddedNam[model]);
-    for(auto& m:x.models){m=nam::get_dsp(config,nam::DspLoadOptions{false});m->Reset(48000,1024);}
+    // Reference the fixed WaveNet factory explicitly. Static-archive AU linking
+    // otherwise discards registration-only objects that the headless tool retains.
+    nam::ScopedPrewarmOnResetDefault prewarmDefault(false);
+    auto parsed=nam::wavenet::create_config(config.at("config"),48000);
+    const auto weights=config.at("weights").get<std::vector<float>>();
+    for(auto& m:x.models){m=parsed->create(weights,48000);m->Reset(48000,1024);}
     // Fixed small-signal calibration, not a running loudness normalizer: inter-module
     // drive and level-dependent harmonic behaviour remain intact.
     std::array<double,1024> in{},out{};double* ip=in.data();double* op=out.data();

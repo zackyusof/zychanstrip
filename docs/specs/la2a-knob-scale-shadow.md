@@ -21,6 +21,16 @@
 
 ## 7. Correction (2026-11-03) — why the first pass still looked wrong
 
+### Follow-up (2026-11-04) — procedural dome shadow and lighting
+
+The current procedural dome renderer had superseded the alpha-image implementation below
+with two solid offset ellipses. These produced a grey ring and omitted the moving tab/index.
+Replace them with two feathered JUCE path shadows from the same dome, tab and index geometry:
+a tight contact shadow plus a softer lower-right cast shadow, sized from the dome radius.
+Keep the dome highlight fixed upper-left as the knob turns. This is a GUI-only correction;
+the scale, parameter mapping and DSP remain unchanged. Verify with the full snapshot harness
+and inspect minimum/middle/maximum positions and supported rack sizes before installation.
+
 The "PASS" recorded in §4 was based on a claim, not on the rendered pixels. Re-rendering the panel
 and inspecting `la2a-knobs-{min,mid,max}.png` showed the knob did **not** follow its scale:
 

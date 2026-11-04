@@ -836,8 +836,6 @@ public:
         const float tickR    = half * 0.605f;      // tick marks just outside the dome
         const float numeralR = half * 0.815f;      // numerals clear of both
 
-        const Point<float> shadowOffset (1.9f * knobScale, 2.6f * knobScale);
-
         // NO g.addTransform here. The editor paints the rack canvas through its own
         // canvasTransform (scale + centring), so adding a rotation on top made every
         // coordinate ambiguous and the knob vanished at most angles. Instead every rotating
@@ -854,19 +852,41 @@ public:
             return out;
         };
 
-        // Cast shadow: soft ellipse displaced toward the lower right. Light is fixed, so the
-        // offset itself does NOT rotate - only the silhouette the shadow is cast from.
-        {
-            const auto sh = Rectangle<float> (outerR * 2.0f, outerR * 2.0f)
-                                .withCentre (c + shadowOffset);
-            g.setColour (Colours::black.withAlpha (0.30f));
-            g.fillEllipse (sh.expanded (outerR * 0.06f));
-            g.setColour (Colours::black.withAlpha (0.20f));
-            g.fillEllipse (sh.expanded (outerR * 0.17f));
-        }
+        // Share the actual raised silhouette with the shadow, including both protrusions.
+        Path flat;
+        flat.addPieSegment (Rectangle<float> (outerR * 2.0f, outerR * 2.0f)
+                                .withCentre ({ 0.0f, 0.0f }).expanded (outerR * 0.05f),
+                            -0.40f, 0.40f, 0.88f);
+        const auto flatAbs = makeRotated (flat);
+        const float len   = outerR * 1.10f;
+        const float width = outerR * 0.145f;
+        const float cant  = outerR * 0.10f;
+        Path idx;
+        idx.startNewSubPath (cant * 0.20f, -outerR * 0.10f);
+        idx.lineTo (cant, -len);
+        idx.lineTo (cant + width, -len);
+        idx.lineTo (width, -outerR * 0.10f);
+        idx.closeSubPath();
+        const auto idxAbs = makeRotated (idx);
+
+        const auto face = Rectangle<float> (outerR * 2.0f, outerR * 2.0f).withCentre (c);
+        Path silhouette;
+        silhouette.setUsingNonZeroWinding (true);
+        silhouette.addEllipse (face);
+        silhouette.addPath (flatAbs);
+        silhouette.addPath (idxAbs);
+
+        // Fixed upper-left light: a diffuse lower-right cast shadow and a tight contact
+        // shadow. Both fade smoothly instead of leaving concentric grey rings.
+        const float shadowScale = outerR / 32.0f;
+        DropShadow (Colours::black.withAlpha (0.28f), jmax (2, roundToInt (4.0f * shadowScale)),
+                    { roundToInt (2.0f * shadowScale), roundToInt (3.0f * shadowScale) })
+            .drawForPath (g, silhouette);
+        DropShadow (Colours::black.withAlpha (0.46f), jmax (1, roundToInt (1.5f * shadowScale)),
+                    { 0, jmax (1, roundToInt (shadowScale)) })
+            .drawForPath (g, silhouette);
 
         // Bakelite dome: symmetric, so it needs no rotation. Shaded from a fixed upper-left key.
-        const auto face = Rectangle<float> (outerR * 2.0f, outerR * 2.0f).withCentre (c);
         g.setGradientFill (ColourGradient (Colour (0xff383b3f),
                                            c.x - outerR * 0.34f, c.y - outerR * 0.38f,
                                            Colour (0xff050607),
@@ -876,12 +896,8 @@ public:
         // The flat: a shallow D-section tab opposite the index. Built in local space at the
         // "up" edge, then rotated about the centre.
         {
-            Path flat;
-            flat.addPieSegment (Rectangle<float> (outerR * 2.0f, outerR * 2.0f)
-                                    .withCentre ({ 0.0f, 0.0f }).expanded (outerR * 0.05f),
-                                -0.40f, 0.40f, 0.88f);
             g.setColour (Colour (0xff0b0c0d));
-            g.fillPath (makeRotated (flat));
+            g.fillPath (flatAbs);
         }
         g.setColour (Colours::black.withAlpha (0.55f));
         g.drawEllipse (face, 0.9f * knobScale);
@@ -891,16 +907,6 @@ public:
         // Index: cream buttress line from the hub out past the rim, canted so a sliver of black
         // remains on the lit side - the reference photograph's signature look.
         {
-            const float len   = outerR * 1.10f;
-            const float width = outerR * 0.145f;
-            const float cant  = outerR * 0.10f;
-            Path idx;
-            idx.startNewSubPath (cant * 0.20f, -outerR * 0.10f);
-            idx.lineTo (cant, -len);
-            idx.lineTo (cant + width, -len);
-            idx.lineTo (width, -outerR * 0.10f);
-            idx.closeSubPath();
-            auto idxAbs = makeRotated (idx);
             g.setGradientFill (ColourGradient (Colour (0xfff6efd8), rot (cant, -len).x, rot (cant, -len).y,
                                                Colour (0xffd8c9a0), rot (cant + width, -outerR * 0.10f).x,
                                                rot (cant + width, -outerR * 0.10f).y, false));
@@ -909,15 +915,14 @@ public:
             g.strokePath (idxAbs, PathStrokeType (0.5f * knobScale));
         }
 
-        // Specular hotspot ON TOP of the index: a reflection caught by the dome, turning with it.
+        // The round dome's reflection stays under the same upper-left light as its shadow.
         {
-            const auto hi = rot (outerR * 0.34f, -outerR * 0.04f);
+            const auto hi = c + Point<float> (-outerR * 0.28f, -outerR * 0.32f);
             g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.50f),
-                                               rot (outerR * 0.20f, -outerR * 0.34f).x,
-                                               rot (outerR * 0.20f, -outerR * 0.34f).y,
+                                               hi.x, hi.y,
                                                Colours::transparentWhite,
-                                               rot (outerR * 0.54f, outerR * 0.06f).x,
-                                               rot (outerR * 0.54f, outerR * 0.06f).y, true));
+                                               hi.x + outerR * 0.45f,
+                                               hi.y, true));
             g.fillEllipse (Rectangle<float> (outerR * 0.90f, outerR * 0.90f).withCentre (hi));
         }
 

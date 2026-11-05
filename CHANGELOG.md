@@ -10,6 +10,13 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed — 1.1.1-beta.5 Enhance core repair (2026-11-05)
+
+- Correct full-processor Auto Gain's half-correction error by measuring uncorrected output and applying matching after every rack module, before master/mix. Keep standalone module matching and ceiling safety.
+- Correct physical Threshold direction and show ceiling minus input gain, preserving all existing host parameter IDs/ranges/defaults and stored values.
+- Replace NAM's muffling full tape blend with a bounded level-dependent residual from identical captures at x and 0.5x. Common linear EQ/phase cancels; dry remains intact. An extra stereo reference model increases CPU without adding latency.
+- Add actual MATCH correction / CEILING headroom status and processor-level threshold, irregular-block, headroom and harmonic regressions. Active 24-order tests now require actual level matching, not just bounded audio.
+
 ### Fixed — 1.1.1-beta.4 local evaluation (2026-11-05)
 
 - NAM Enhance now controls a conservative 0–30% blend of the already pushed tape capture at a fixed relative drive. The former simultaneous +12 dB drive/full crossfade caused spectral dips and rebounds as the slider moved.

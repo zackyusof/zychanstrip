@@ -93,6 +93,7 @@ ZychanStripProcessor::ZychanStripProcessor()
     modules[Opto]    = std::make_unique<rack::OptoModule>    (apvts, "opto_");
     modules[Fet]     = std::make_unique<rack::FetModule>     (apvts, "fet_");
     modules[Limiter] = std::make_unique<rack::LimiterModule> (apvts, "lim_");
+    modules[Limiter]->setRackAutoGainManaged (true);
     masterLevel = apvts.getRawParameterValue ("master_level");
     mixAmount   = apvts.getRawParameterValue ("master_mix");
     unityEnabled = apvts.getRawParameterValue ("unity");
@@ -122,9 +123,6 @@ void ZychanStripProcessor::prepareToPlay (double sr, int block)
     for (auto& d : dryDelay) d.assign ((size_t) juce::jmax (1, dryDelayLen), 0.0f);
     dryWp = 0;
     chainInputRef.assign ((size_t) juce::jmax (1, block), 0.0f);
-    finalOutRef.assign ((size_t) juce::jmax (1, block), 0.0f);
-    prevChainInput.assign ((size_t) juce::jmax (1, block), 0.0f);
-    prevFinalOut.assign ((size_t) juce::jmax (1, block), 0.0f);
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     unityGain.reset (sr, 0.05);
@@ -176,10 +174,10 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
 
-    // Auto-gain output reference: the rack output (after every module, before master gain and the
-    // dry/wet mix). Auto Gain normalises the rack to its own input, so the reference must not
-    // include the operator's master level — otherwise the correction chases its own attenuation.
-    measureEnergy(finalOutRef, buffer, numSamples);
+    // Match the complete rack against its untouched input, before master/mix.
+    // The rack output is still uncorrected here: no previous-block feedback and
+    // no gain applied ahead of downstream nonlinear modules when order changes.
+    modules[Limiter]->applyRackAutoGain (buffer, chainInputRef.data(), numSamples);
 
     // The master always follows the complete rack, independently of module order.
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
@@ -289,18 +287,6 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     // Metering tap sits after UNITY as well, so the meters show what actually leaves.
     meters.process (buffer);
 
-    // Publish the pair the limiter divides next block: the PREVIOUS block's chain input and rack
-    // output, captured together, so both sides describe one signal and nothing depends on order.
-    publishAutoGainPair (numSamples);
-}
-
-void ZychanStripProcessor::publishAutoGainPair (int numSamples)
-{
-    // Publish a stable copy: the limiter must never read buffers this block mutates later.
-    prevChainInput.assign (chainInputRef.begin(), chainInputRef.end());
-    prevFinalOut.assign (finalOutRef.begin(), finalOutRef.end());
-    modules[Limiter]->setChainReference (prevChainInput.data(), numSamples);
-    modules[Limiter]->setFinalOutputReference (prevFinalOut.data(), numSamples);
 }
 
 //==============================================================================
@@ -325,15 +311,6 @@ void ZychanStripProcessor::measureEnergy (std::vector<float>& dest, const juce::
         }
         dest[(size_t) i] = nch > 0 ? e / (float) nch : 0.0f;
     }
-}
-
-void ZychanStripProcessor::feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples)
-{
-    measureEnergy (finalOutRef, out, numSamples);
-    modules[Limiter]->setFinalOutputReference (finalOutRef.data(), numSamples);
-    // Roll the pair forward: this block's input + this block's output become the pair the limiter
-    // will divide on the next block, so both sides always describe the same signal.
-    prevChainInput.assign (chainInputRef.begin(), chainInputRef.end());
 }
 
 //==============================================================================

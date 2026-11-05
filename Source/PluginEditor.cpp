@@ -1997,6 +1997,25 @@ private:
 //==============================================================================
 //  Module 4 — master limiter (reference: SSL-style fader + ladders)
 //==============================================================================
+// Preserve the host's positive input-gain parameter, while presenting a real
+// threshold fader: moving down lowers the input-referred threshold / adds drive.
+class ThresholdFader : public Slider
+{
+public:
+    bool keyPressed (const KeyPress& key) override
+    {
+        if (key.getKeyCode() == KeyPress::upKey)
+            return Slider::keyPressed (KeyPress (KeyPress::downKey, key.getModifiers(), 0));
+        if (key.getKeyCode() == KeyPress::downKey)
+            return Slider::keyPressed (KeyPress (KeyPress::upKey, key.getModifiers(), 0));
+        return Slider::keyPressed (key);
+    }
+    double proportionOfLengthToValue (double proportion) override
+    { return Slider::proportionOfLengthToValue (1.0 - proportion); }
+    double valueToProportionOfLength (double value) override
+    { return 1.0 - Slider::valueToProportionOfLength (value); }
+};
+
 class LimiterPanel : public ModulePanel
 {
 public:
@@ -2008,12 +2027,18 @@ public:
         labelColour = Colour (0xffe6e8ea);   // light engraving on the dark blue plate
         bypass.setColour (ToggleButton::textColourId, labelColour);
         setupFader (gain,    "gain");
+        gain.textFromValueFunction = [this] (double value)
+        { return String ((double) proc.apvts.getRawParameterValue ("lim_ceiling")->load() - value, 1) + " dB"; };
+        gain.valueFromTextFunction = [this] (const String& text)
+        { return (double) proc.apvts.getRawParameterValue ("lim_ceiling")->load() - text.getDoubleValue(); };
+        gain.setTooltip ("Lower the threshold to increase drive and gain reduction. Auto Gain matches the rack level when headroom allows.");
         setupFader (ceiling, "ceiling");
         setupFader (release, "release");
         setupFader (fader,   "enhance");
 
         autoGain.setName ("Auto Gain");
         autoGain.setButtonText ("AUTO GAIN");
+        autoGain.setTooltip ("Match the complete rack to its input before master level and mix. The ceiling takes priority when matching is impossible.");
         autoGain.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
         autoGain.setColour (ToggleButton::textColourId, labelColour);
         autoGainAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "lim_auto_gain", autoGain);
@@ -2033,6 +2058,7 @@ protected:
 
         // Control area below the AUTO GAIN switch, split into two equal rows.
         const int gridTop = top + 34;
+        autoGainStatus = { c.getX() + 2, gridTop - 12, bankW - 8, 10 };
         const int bottomReserve = 26;
         const int gridH = c.getBottom() - gridTop - bottomReserve;
         faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
@@ -2154,7 +2180,15 @@ protected:
 
     void paintMeter (Graphics& g) override
     {
-        // Enhance module meter fix: display nothing when not processing
+        const bool matching = proc.apvts.getRawParameterValue ("lim_auto_gain")->load() > 0.5f
+                           && proc.apvts.getRawParameterValue ("lim_bypass")->load() < 0.5f;
+        const bool limited = matching && proc.isAutoGainCeilingLimited();
+        g.setColour (limited ? Colour (0xffffc04a) : Colour (0xffb8c8d2));
+        g.setFont (fnt (7.5f, true));
+        g.drawText (matching ? (limited ? "CEILING  " : "MATCH  ")
+                              + String (proc.getAutoGainCompensation(), 1) + " dB" : "MATCH OFF",
+                    autoGainStatus, Justification::centredLeft, false);
+
         const float red = gr > 0.05f ? jlimit (0.0f, 1.0f, gr / 14.0f) : 0.0f;
         const float outDb = outLevel > 1.0e-5f ? Decibels::gainToDecibels (outLevel) : -100.0f;
         const float outNorm = outDb > -48.0f ? jlimit (0.0f, 1.0f, (outDb + 48.0f) / 48.0f) : 0.0f;
@@ -2184,11 +2218,12 @@ private:
     // Declaration order matters: members are destroyed in reverse, so the sliders must be
     // declared BEFORE the attachments that reference them (otherwise the attachment's
     // destructor calls removeListener() on an already-freed Slider).
-    Slider gain, ceiling, release, fader;
+    ThresholdFader gain;
+    Slider ceiling, release, fader;
     std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;
     ToggleButton autoGain;
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment> autoGainAtt;
-    Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel, faderBank;
+    Rectangle<int> ladderA, ladderB, scaleRect, enhanceLabel, faderBank, autoGainStatus;
     std::array<Rectangle<int>, 2> gridCells {};     // column cells, shared by layout and captions
     Rectangle<int>& gridCell (size_t col) { return gridCells[col < 2 ? col : 0]; }
     float outLevel = 0.0f;

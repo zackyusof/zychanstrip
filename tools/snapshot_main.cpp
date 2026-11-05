@@ -81,6 +81,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 #include "dsp_checks.h"
 #include "colour_checks.h"
 #include "nam_enhance_checks.h"
+#include "enhance_contract_checks.h"
 
 void audioTests()
 {
@@ -739,6 +740,13 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
                     check (topRow && bottomRow && stacked && columns,
                            "limiter faders form a 2x2 grid (threshold/ceiling over release/enhance)");
 
+                    auto* threshold = dynamic_cast<juce::Slider*> (p0);
+                    check (threshold->getPositionOfValue (0) < threshold->getPositionOfValue (18),
+                           "lower Threshold fader increases positive host input gain");
+                    const float ceilingDb = proc.apvts.getRawParameterValue ("lim_ceiling")->load();
+                    check (std::abs (threshold->getTextFromValue (18).getFloatValue() - (ceilingDb - 18)) < 0.06f,
+                           "Threshold readout reports ceiling minus input gain");
+
                     bool capContained = true;
                     for (auto* component : { p0, p1, p2, p3 })
                     {
@@ -820,6 +828,7 @@ public:
         output.createDirectory();
         colourTests();
         namEnhanceTests();
+        enhanceContractTests();
         eqTests();
         limiterTests();
         audioTests();

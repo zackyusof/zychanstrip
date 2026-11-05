@@ -258,26 +258,14 @@ public:
         else process (buf);
     }
 
-    /** Order-independent auto-gain reference, supplied by the processor each block.
-        `chainInputRaw` is the block's per-sample input energy measured at the very start of the
-        whole chain (before any module runs), so a correction derived from it cannot depend on
-        where this module sits in the rack. */
-    virtual void setChainReference (const float* chainInputRaw, int numSamples)
-    {
-        juce::ignoreUnused (chainInputRaw, numSamples);
-    }
-
-    /** True output of the whole chain (post master gain, post dry/wet) for this block.
-        Auto Gain divides the chain input by THIS, never by its own output, so the correction is
-        identical no matter where the module sits in the rack. Called once per block, after every
-        module has run. */
-    virtual void setFinalOutputReference (const float* finalOutEnergy, int numSamples)
-    {
-        juce::ignoreUnused (finalOutEnergy, numSamples);
-    }
+    // The processor manages level matching after the complete reorderable rack.
+    // Standalone module users retain the local input/output matcher.
+    virtual void setRackAutoGainManaged (bool) {}
+    virtual void applyRackAutoGain (juce::AudioBuffer<float>&, const float*, int) {}
 
     std::atomic<float> grDb { 0.0f };   // gain reduction for the UI meter
-    std::atomic<float> gainCompDb { 0.0f }; // Enhance Auto Gain correction, stereo linked
+    std::atomic<float> gainCompDb { 0.0f }; // Actual applied Enhance Auto Gain correction
+    std::atomic<bool> autoGainLimited { false };
     std::atomic<float> outPeak { 0.0f }; // Output peak level for UI meters
 
 protected:
@@ -628,6 +616,7 @@ public:
           autoGainParameter (apvts.getRawParameterValue (prefix + "auto_gain"))
     {
         prepareBypassParameter();
+        parameterBypass = parameter ("bypass");
         enhanceParam = parameter ("enhance");
         gainParam    = parameter ("gain");
         ceilingParam = parameter ("ceiling");
@@ -650,12 +639,13 @@ public:
         dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
         energyCoef = std::exp (-1.0 / (0.2 * sampleRate));
         compensationCoef = timeCoef (100.0f, sampleRate);
-        for (auto* smoother : { &inputGain, &colourDrive, &enhanceAmount, &ceilingGain, &releaseCoef })
+        for (auto* smoother : { &inputGain, &colourDrive, &enhanceAmount, &ceilingGain, &releaseCoef, &autoGainCeiling })
             smoother->reset (sampleRate, 0.02);
         inputGain.setCurrentAndTargetValue (dbToGain (read (gainParam)));
         enhanceAmount.setCurrentAndTargetValue (read (enhanceParam) * 0.01f);
         colourDrive.setCurrentAndTargetValue (dbToGain (read (enhanceParam) * 0.12f));
         ceilingGain.setCurrentAndTargetValue (dbToGain (read (ceilingParam)));
+        autoGainCeiling.setCurrentAndTargetValue (dbToGain (read (ceilingParam)));
         releaseCoef.setCurrentAndTargetValue (timeCoef (read (releaseParam), sampleRate));
         const int referenceSize = colour.latency() + 1;
         for (auto& d : colourDryDelay)
@@ -664,21 +654,50 @@ public:
         colourDryWp = 0;
         grDb.store (0.0f);
         gainCompDb.store (0.0f);
+        autoGainLimited.store (false);
         outPeak.store (0.0f);
     }
 
     int getLatencySamples() const override { return la - 1 + colour.latency(); }
 
-    void setChainReference (const float* chainInputRaw, int numSamples) override
-    {
-        chainInput = chainInputRaw;
-        chainInputSamples = numSamples;
-    }
+    void setRackAutoGainManaged (bool managed) override { rackAutoGainManaged = managed; }
 
-    void setFinalOutputReference (const float* finalOutEnergy, int numSamples) override
+    void applyRackAutoGain (juce::AudioBuffer<float>& buffer, const float* inputEnergy, int count) override
     {
-        finalOut = finalOutEnergy;
-        finalOutSamples = numSamples;
+        if (! rackAutoGainManaged) return;
+        const bool active = read (parameterBypass) < 0.5f;
+        const bool enabled = active && autoGainParameter->load() > 0.5f;
+        const float requestedCeiling = dbToGain (read (ceilingParam));
+        autoGainCeiling.setTargetValue (requestedCeiling);
+        const int channels = std::min (2, buffer.getNumChannels());
+        double rawEnergy = 0, correctedEnergy = 0;
+        float peak = 0;
+        bool limited = false;
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            float wet[2] {};
+            double power = 0;
+            for (int c = 0; c < channels; ++c)
+            {
+                wet[c] = buffer.getSample (c, i);
+                power += (double) wet[c] * wet[c];
+            }
+            power /= std::max (1, channels);
+            const double reference = inputEnergy != nullptr && i < count ? inputEnergy[i] : power;
+            const float ceiling = std::min (requestedCeiling, autoGainCeiling.getNextValue());
+            applyCompensation (wet, channels, reference, power, active, enabled, ceiling, limited);
+            rawEnergy += power;
+            for (int c = 0; c < channels; ++c)
+            {
+                buffer.setSample (c, i, wet[c]);
+                correctedEnergy += (double) wet[c] * wet[c] / std::max (1, channels);
+                peak = std::max (peak, std::abs (wet[c]));
+            }
+        }
+        gainCompDb.store (active && rawEnergy > 1.e-16 && correctedEnergy > 1.e-16
+            ? (float) (10 * std::log10 (correctedEnergy / rawEnergy)) : 0.f);
+        autoGainLimited.store (limited);
+        if (enabled || std::abs (compensationDb) > 1.e-5f) outPeak.store (peak);
     }
 
 protected:
@@ -686,6 +705,27 @@ protected:
     void processBypassed (juce::AudioBuffer<float>& buf) override { runLimiter (buf, false); }
 
 private:
+    void applyCompensation (float* wet, int channels, double reference, double output,
+                            bool active, bool enabled, float ceiling, bool& limited)
+    {
+        // Both powers are measured BEFORE this correction, so this is a feed-forward
+        // ratio. Feeding corrected output back here halves the required dB correction.
+        dryEnergy = energyCoef * dryEnergy + (1.0 - energyCoef) * reference;
+        wetEnergy = energyCoef * wetEnergy + (1.0 - energyCoef) * output;
+        float targetDb = 0;
+        if (enabled && dryEnergy > 1.e-12 && wetEnergy > 1.e-16)
+            targetDb = juce::jlimit (-36.f, 36.f, (float) (10 * std::log10 (dryEnergy / wetEnergy)));
+        compensationDb = compensationCoef * compensationDb + (1.f - compensationCoef) * targetDb;
+        if (! active) { compensationDb = 0; dryEnergy = wetEnergy = 0; }
+        const float correction = active ? dbToGainFast (compensationDb) : 1.f;
+        float peak = 0;
+        for (int c = 0; c < channels; ++c) peak = std::max (peak, std::abs (wet[c] * correction));
+        const bool enforceCeiling = active && (enabled || std::abs (compensationDb) > 1.e-5f);
+        const float safety = enforceCeiling && peak > ceiling ? ceiling / peak : 1.f;
+        limited |= enabled && safety < 0.9999f;
+        for (int c = 0; c < channels; ++c) wet[c] *= correction * safety;
+    }
+
     void runLimiter (juce::AudioBuffer<float>& buf, bool active)
     {
         const int n = buf.getNumSamples(), nch = std::min (2, buf.getNumChannels());
@@ -698,6 +738,8 @@ private:
         const bool autoGain = active && autoGainParameter->load() > 0.5f;
         float minG = 1.0f;
         float blockOutPeak = 0.0f;
+        double blockRawEnergy = 0, blockCorrectedEnergy = 0;
+        bool limited = false;
         float* const* data = buf.getArrayOfWritePointers();
 
         for (int i = 0; i < n; ++i)
@@ -721,12 +763,9 @@ private:
                 const float driven=active?dry*drive:dry;
                 shaped[ch]=active?analogMasterSaturation(driven,enh):raw[ch];
             }
-            // The tape capture is already pushed and has its own phase response.
-            // Keep its operating point fixed relative to this module's input:
-            // sweeping both drive (+12 dB) and a full dry/NAM crossfade produced
-            // spectral dips followed by rebounds. A dry-majority amount control
-            // adds the capture progressively without crossing those blend nulls.
-            // Upstream gain and the manual input gain still drive the model.
+            // NAM supplies the tape's level-dependent residual, not its complete
+            // EQ/phase response. Add a bounded amount to dry; actual input gain
+            // still drives the capture. ALGO retains its own saturation law.
             colourFrame(raw,shaped,in,nch,enh * 0.30f,!active);
             for (int ch=0;ch<nch;++ch) {
                 pk=std::max(pk,std::abs(in[ch]));
@@ -761,43 +800,37 @@ private:
                 dryPower += (double) delayedDry * delayedDry;
                 wetPower += (double) wet[ch] * wet[ch];
             }
-            const double channelScale = nch > 0 ? 1.0 / nch : 1.0;
-            // Reference the TRUE chain input (measured before any module) against the TRUE chain
-            // output (measured after master + mix), so upstream Console/FET/Opto gain and any
-            // module downstream of the limiter cannot skew the correction. Falls back to the
-            // module's own dry/wet pair when the processor supplies no reference (unit use).
-            const bool haveChainRef = chainInput != nullptr && i < chainInputSamples;
-            const double refPower = haveChainRef ? (double) chainInput[i] : dryPower * channelScale;
-            dryEnergy = energyCoef * dryEnergy + (1.0 - energyCoef) * refPower;
-            const bool haveFinal = finalOut != nullptr && i < finalOutSamples;
-            const double outPower = haveFinal ? (double) finalOut[i] : wetPower * channelScale;
-            wetEnergy = energyCoef * wetEnergy + (1.0 - energyCoef) * outPower;
-            float targetDb = 0.0f;
-            if (autoGain && dryEnergy > 1.0e-12 && wetEnergy > 1.0e-16)
-                targetDb = juce::jlimit (-36.0f, 36.0f, (float) (10.0 * std::log10 (dryEnergy / wetEnergy)));
-            compensationDb = compensationCoef * compensationDb + (1.0f - compensationCoef) * targetDb;
-            if (! active) { compensationDb = 0.0f; dryEnergy = wetEnergy = 0.0; }
-            const float compensation = active ? dbToGainFast (compensationDb) : 1.0f;
-            float outputPeak = 0.0f;
-            for (int ch = 0; ch < nch; ++ch) outputPeak = std::max (outputPeak, std::abs (wet[ch] * compensation));
-            // Linked safety gain preserves the stereo image while keeping the existing ceiling.
-            // A lower requested ceiling is a hard safety bound immediately, even
-            // while the detector ceiling ramps. Its unavoidable first clamp must
-            // never be softened at the cost of output exceeding the user's limit.
-            // When raising the ceiling, retain the ramp after Auto Gain too;
-            // otherwise its accumulated compensation can jump as the clamp opens.
-            const float outputCeiling = std::min (safetyCeiling, ceil);
-            const float safety = active && outputPeak > outputCeiling ? outputCeiling / outputPeak : 1.0f;
+            // The module's own ceiling remains a hard bound even when rack
+            // Auto Gain is off or delegated to the processor's final rack tap.
+            float corePeak = 0;
+            for (int ch = 0; ch < nch; ++ch) corePeak = std::max (corePeak, std::abs (wet[ch]));
+            const float coreCeiling = std::min (safetyCeiling, ceil);
+            const float coreSafety = active && corePeak > coreCeiling ? coreCeiling / corePeak : 1.f;
+            wetPower = 0;
             for (int ch = 0; ch < nch; ++ch)
             {
-                const float s = wet[ch] * compensation * safety;
-                data[ch][i] = s;
-                blockOutPeak = std::max (blockOutPeak, std::abs (s));
+                wet[ch] *= coreSafety;
+                wetPower += (double) wet[ch] * wet[ch];
+            }
+            if (! rackAutoGainManaged)
+                applyCompensation (wet, nch, dryPower / std::max (1, nch), wetPower / std::max (1, nch),
+                                   active, autoGain, std::min (safetyCeiling, ceil), limited);
+            blockRawEnergy += wetPower;
+            for (int ch = 0; ch < nch; ++ch)
+            {
+                data[ch][i] = wet[ch];
+                blockCorrectedEnergy += (double) wet[ch] * wet[ch];
+                blockOutPeak = std::max (blockOutPeak, std::abs (wet[ch]));
             }
             wp = (wp + 1) % la;
         }
         grDb.store (active ? -gainToDb (minG) : 0.0f);
-        gainCompDb.store (active ? compensationDb : 0.0f);
+        if (! rackAutoGainManaged)
+        {
+            gainCompDb.store (active && blockRawEnergy > 1.e-16 && blockCorrectedEnergy > 1.e-16
+                ? (float) (10 * std::log10 (blockCorrectedEnergy / blockRawEnergy)) : 0.f);
+            autoGainLimited.store (limited);
+        }
         outPeak.store (active ? blockOutPeak : 0.0f);
     }
 
@@ -806,14 +839,12 @@ private:
     std::atomic<float>* gainParam = nullptr;
     std::atomic<float>* ceilingParam = nullptr;
     std::atomic<float>* releaseParam = nullptr;
-    const float* chainInput = nullptr;   // block input energy from the chain start
-    int chainInputSamples = 0;
-    const float* finalOut = nullptr;     // true chain output energy, post master + mix
-    int finalOutSamples = 0;
+    bool rackAutoGainManaged = false;
+    std::atomic<float>* parameterBypass = nullptr;
     std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
     std::vector<float> colourDryDelay[2];
     int colourDryWp = 0;
-    juce::SmoothedValue<float> inputGain, colourDrive, enhanceAmount, ceilingGain, releaseCoef;
+    juce::SmoothedValue<float> inputGain, colourDrive, enhanceAmount, ceilingGain, releaseCoef, autoGainCeiling;
     SlidingMinimum slidingMin;
     int la = 64, wp = 0;
     double sum = 64.0;

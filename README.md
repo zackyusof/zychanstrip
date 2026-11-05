@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.4-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.5-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.4 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.5 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -82,7 +82,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -153,7 +153,7 @@ Gain, peak reduction, and a compress/limit `mode` switch. Program-dependent rele
 The Gain and Peak Reduction knobs use the Davies 1470/Daka-Ware face, with a correctly aligned 0–100 numbered scale and a cast shadow that follows the control.
 
 ### 4. Enhance / master limiter (`Limiter`, prefix `lim_`)
-Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and a stereo-linked auto-gain that matches its own output level back to its input so you hear tone changes rather than loudness shifts.
+Look-ahead brickwall limiter with tape/console saturation (`lim_enhance`), and stereo-linked Auto Gain after the complete rack that matches uncorrected rack output back to rack input so you hear tone changes rather than loudness shifts.
 
 Its four fader channels (threshold, ceiling, release, enhance) sit inside one shared, meter-style recessed faceplate around the full 2×2 bank. The plate has a dark metallic bezel, black inset, and opposing light/shadow bevels; individual channels retain their narrow recessed slots (`LimiterPanel::paintFaceBase`, `RackLookAndFeel::drawChromeFader`).
 
@@ -335,8 +335,8 @@ version display, taken from CMake so it cannot drift from the artefact:
 | prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -395,14 +395,15 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `zychanstrip-nam-enhance-curve` | **Fixed in beta.4 — progressive NAM amount** | Human feedback found beta.3 NAM Enhance uneven/unnatural. A production tape-engine sweep confirmed dips/rebounds from varying both +12 dB drive and a full dry/NAM blend; at 0.1-peak input, 16 kHz fell to -9.89 dB at 75% then rose to -5.71 dB at 100%. NAM Enhance now blends 0–30% of the fixed-drive capture, retaining at least 70% dry and upstream/manual gain interaction. ALGO/CLEAN retain their prior laws. Frequency/level sweeps and active-rack automation regressions cover the change; human audition of beta.4 is pending. |
+| `zychanstrip-autogain-feedback` | **Fixed in beta.5 — uncorrected rack measurement** | Full-processor Auto Gain left +3/+6/+9 dB from +6/+12/+18 dB input drive: its energy reference included its own correction. Matching now occurs after the complete rack, before master/mix, using uncorrected output. The Threshold fader direction/readout is corrected while host `lim_gain` semantics remain unchanged. MATCH reports actual applied correction; CEILING indicates unavailable headroom. See the Enhance core repair spec. |
+| `zychanstrip-nam-enhance-curve` | **Beta.4 mitigated; beta.5 removes full tape blend** | Human feedback found beta.3 NAM Enhance uneven/unnatural. A production tape-engine sweep confirmed dips/rebounds from varying both +12 dB drive and a full dry/NAM blend; at 0.1-peak input, 16 kHz fell to -9.89 dB at 75% then rose to -5.71 dB at 100%. Beta.4 limited that blend but still muffled the signal. Beta.5 adds a bounded nonlinear residual from matched captures at x and 0.5x to aligned dry, cancelling their common linear EQ/phase response while retaining actual drive interaction. ALGO/CLEAN retain their prior laws. Frequency/level sweeps and active-rack automation regressions cover the change; human audition of beta.5 is pending. |
 | `zychanstrip-enhance-slider-steps` | **Fixed in beta.3 — slider ramps** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). Beta.3 adds 20 ms sample ramps for all four sliders (final ceiling safety remains immediate) and delays the ungained Auto Gain reference directly. New regression checks exercise forward/reverse jumps at 44.1/48/96 kHz in all modes with 32/512-frame blocks. Human listening remains to be confirmed. |
 | `zychanstrip-enhance-cap-clipping` | **Fixed in beta.3 — cap bounds** | `drawChromeFader` paints 30 px wide caps inside 26 px wide slider components, clipping the rim/shadow. The 46 px cap height also extends beyond the component near travel endpoints. Beta.3 widens components to 40 px, reserves 28 px at travel endpoints, and draws grip ridges at fractional positions to avoid integer snapping during movement. Endpoint geometry and min/mid/max snapshots cover the fix. Live DAW drag confirmation remains with the maintainer. |
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
-| `zychanstrip-nam-validation` | **Beta validation limits** | No human listening, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
+| `zychanstrip-nam-validation` | **Beta validation limits** | No listening sign-off for beta.5, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. Earlier beta listening feedback is recorded in the Enhance issues. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
 | `zychanstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
-| `zychanstrip-autogain-order` | ~~**Auto-gain is order-dependent**~~ **FIXED** | Auto Gain now divides the energy of the **chain input** (measured before any module) by the **rack output** (after every module, before master gain), both captured as one pair from the previous block. Measured spread across all 24 permutations: **0.000 dB** (was 7.6 dB). Harness: *"Auto Gain is order-independent across 24 permutations"*. |
+| `zychanstrip-autogain-order` | **Fixed in beta.5 — full-rack matching** | Matching now measures uncorrected output after all four modules and applies correction before master/mix. All 24 active NAM orders must match input RMS when headroom permits. Earlier low-spread permutation tests bypassed the other modules and did not detect the processor's half-correction error; they were insufficient evidence of correct absolute matching. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
 
 Closed work is recorded with evidence; anything unverified stays open deliberately.

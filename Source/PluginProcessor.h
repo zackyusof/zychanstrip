@@ -46,6 +46,7 @@ public:
     float getGainReduction (int moduleId) const { return modules[(size_t) moduleId]->grDb.load(); }
 
     float getAutoGainCompensation() const { return modules[Limiter]->gainCompDb.load(); }
+    bool isAutoGainCeilingLimited() const { return modules[Limiter]->autoGainLimited.load(); }
 
     float getLimiterOutput() const { return modules[Limiter]->outPeak.load(); }
 
@@ -75,14 +76,9 @@ private:
     int dryDelayLen = 0;
     int dryWp = 0;
     // Auto-gain reference: chain input energy, captured before any module runs.
-    std::vector<float> chainInputRef;   // per-sample linear input energy (stereo mean of squares)
-    std::vector<float> finalOutRef;     // per-sample linear output energy (post master + mix)
-    std::vector<float> prevChainInput;  // input energy paired with the output of the previous block
-    std::vector<float> prevFinalOut;    // output energy of the previous block
-    void publishAutoGainPair (int numSamples);
+    std::vector<float> chainInputRef;   // untouched current input energy for the final rack matcher
     static void measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples);
     void feedChainReference (const juce::AudioBuffer<float>& in, int numSamples);
-    void feedFinalOutputReference (const juce::AudioBuffer<float>& out, int numSamples);
     std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
     std::atomic<float>* unityEnabled = nullptr;

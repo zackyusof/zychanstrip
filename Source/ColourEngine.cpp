@@ -70,7 +70,13 @@ struct Sinc {
 };
 }
 struct ColourEngine::Impl {
-    std::array<std::unique_ptr<nam::DSP>,2> models;
+    std::array<std::unique_ptr<nam::DSP>,2> models, referenceModels;
+    // A matched capture at -6 dB supplies its common linear EQ/phase response.
+    // Subtracting the scaled reference leaves level-dependent colour, which the
+    // Enhance stage adds to the unfiltered dry path instead of a full tape blend.
+    static constexpr double referenceScale = 0.5;
+    bool nonlinearOnly = false;
+    std::array<std::array<double,1024>,2> referenceInput{}, referenceOutput{};
     std::array<std::array<double,capacity*2>,2> input{}, neural{}, clean{}, algorithm{};
     std::array<std::array<double,1024>,2> modelInput{}, modelOutput{};
     std::array<std::array<float,quantum>,2> pendingClean{}, pendingAlgo{}, pendingNeural{};
@@ -105,9 +111,15 @@ struct ColourEngine::Impl {
         for(int c=0;c<2;++c) {
             double* in=modelInput[c].data(); double* out=modelOutput[c].data();
             if(count) models[c]->process(&in,&out,count);
+            if(nonlinearOnly && count) {
+                for(int i=0;i<count;++i) referenceInput[c][i]=in[i]*referenceScale;
+                double* refIn=referenceInput[c].data();double* refOut=referenceOutput[c].data();
+                referenceModels[c]->process(&refIn,&refOut,count);
+            }
             for(int i=0;i<count;++i) {
                 const auto index=(size_t)(modelFirst+i)%capacity;
-                neural[c][index]=(out[i]-dc)*postGain;
+                const double ac=out[i]-dc;
+                neural[c][index]=(nonlinearOnly ? ac-(referenceOutput[c][i]-dc)/referenceScale : ac)*postGain;
                 neural[c][index+capacity]=neural[c][index];
             }
         }
@@ -133,6 +145,7 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     x.delay=x.converted?(int)std::ceil(x.toModel.half+(x.toHost.half+2)*x.ratio):0;
     x.fadeLength=std::max(1,(int)(0.02*sr));
     x.preGain=model==1?0.177827941: model==3?0.354813389:1.0;
+    x.nonlinearOnly=model==3;
     const auto config=nlohmann::json::parse(embeddedNam[model]);
     // Reference the fixed WaveNet factory explicitly. Static-archive AU linking
     // otherwise discards registration-only objects that the headless tool retains.
@@ -140,6 +153,7 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     auto parsed=nam::wavenet::create_config(config.at("config"),48000);
     const auto weights=config.at("weights").get<std::vector<float>>();
     for(auto& m:x.models){m=parsed->create(weights,48000);m->Reset(48000,1024);}
+    for(auto& m:x.referenceModels){m.reset();if(x.nonlinearOnly){m=parsed->create(weights,48000);m->Reset(48000,1024);m->prewarm();}}
     // Fixed small-signal calibration, not a running loudness normalizer: inter-module
     // drive and level-dependent harmonic behaviour remain intact.
     std::array<double,1024> in{},out{};double* ip=in.data();double* op=out.data();
@@ -177,7 +191,7 @@ void ColourEngine::frame(const float* clean,const float* algo,float* output,int 
     for(int c=0;c<2;++c){
         const float dry=x.ready[2][c][x.position];
         x.latestClean[c]=dry;
-        const float neural=dry+x.readyAmount[x.position]*(x.ready[1][c][x.position]-dry);
+        const float neural=dry+x.readyAmount[x.position]*(x.ready[1][c][x.position]-(x.nonlinearOnly?0.f:dry));
         if(c<channels)output[c]=dry+x.weights[0]*(x.ready[0][c][x.position]-dry)+x.weights[1]*(neural-dry);
         x.pendingClean[c][x.position]=c<channels?clean[c]:clean[0];
         x.pendingAlgo[c][x.position]=c<channels?algo[c]:algo[0];

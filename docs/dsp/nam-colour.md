@@ -147,3 +147,21 @@ the old full crossfade. ALGO and CLEAN behavior, 20 ms ramps, fixed latency, byp
 ceiling safety are unchanged. Existing NAM session values now use the revised, gentler law.
 See [the specification](../specs/embedded-nam-colour.md#beta4-correction--nam-enhance-amount)
 for scope and measurement coverage. Beta.4 still requires human listening confirmation.
+
+## Beta.5 core repair — current behavior
+
+This supersedes the beta.3/4 routing and blend descriptions above. Auto Gain now measures
+uncorrected output after **every** rack module and applies stereo-linked matching there,
+before master/mix. It no longer feeds corrected output back into its own energy ratio.
+The limiter's colour/drive/gain reduction still runs in its selected slot; downstream
+modules receive that uncorrected output. With Auto Gain on, final rack safety obeys the
+ceiling and reports headroom limitation. With it off, downstream processing can change peaks.
+The Threshold fader now moves down for increased input drive and displays ceiling minus gain,
+while the existing positive `lim_gain` automation values stay compatible.
+
+NAM Enhance adds 0–30% of a matched-capture nonlinear residual, rather than blending the
+full tape EQ/phase response. Identical models run at x and 0.5x; subtracting twice the latter
+cancels their common linear response. True input gain still affects level-dependent colour.
+An extra stereo model increases CPU; SRC, bypass timing and fixed reported delay are unchanged.
+See [Enhance core repair](../specs/enhance-core-repair.md) for formula, ceiling semantics,
+compatibility changes and processor-level regression coverage. Beta.5 listening sign-off is pending.

@@ -57,7 +57,7 @@ void namEnhanceTests()
                     largestStep = std::max (largestStep, std::abs (step));
                     largestDeviation = std::max (largestDeviation, std::abs (gains[(size_t) point]));
                 }
-                check (finite && neutral && progressive && largestStep < 0.65 && largestDeviation < 4.5
+                check (finite && neutral && progressive && largestStep < 0.65 && largestDeviation < (level <= 0.1f ? 1.0 : 4.5)
                            && limiter.getLatencySamples() == latency,
                     "NAM Enhance tone progression rate=" + juce::String (sr) + " Hz=" + juce::String (hz)
                     + " peak=" + juce::String (level) + " maxStepDb=" + juce::String (largestStep, 4)
@@ -72,7 +72,7 @@ void namEnhanceTests()
             std::array<int, 4> order { 0, 1, 2, 3 };
             bool valid = true;
             float maxJump = 0;
-            double leastResponse = 1.e9;
+            double leastResponse = 1.e9, worstMatchError = 0;
             int orders = 0;
             do
             {
@@ -91,13 +91,14 @@ void namEnhanceTests()
                     instance->prepareToPlay (sr, 128);
                 }
                 const int latency = p.getLatencySamples();
-                double difference = 0, reference = 0;
+                double difference = 0, reference = 0, matchedInput = 0, matchedOutput = 0;
                 float previous = 0;
                 juce::MidiBuffer midi;
                 for (int segment = 0; segment < 3; ++segment)
                 {
                     setParam (p, "lim_enhance", segment == 1 ? 100.f : 0.f);
-                    for (int sample = 0; sample < 16384; sample += 128)
+                    const int segmentSamples = autoGain && segment == 0 ? (int) (sr * 2) : 16384;
+                    for (int sample = 0; sample < segmentSamples; sample += 128)
                     {
                         juce::AudioBuffer<float> b (2, 128);
                         for (int i = 0; i < 128; ++i)
@@ -110,7 +111,15 @@ void namEnhanceTests()
                         }
                         juce::AudioBuffer<float> control;
                         control.makeCopyOf (b);
+                        if (segment == 0 && sample >= segmentSamples - 4096)
+                            for (int c = 0; c < 2; ++c)
+                                for (int i = 0; i < 128; ++i)
+                                    matchedInput += (double) b.getSample (c, i) * b.getSample (c, i);
                         p.processBlock (b, midi);
+                        if (segment == 0 && sample >= segmentSamples - 4096)
+                            for (int c = 0; c < 2; ++c)
+                                for (int i = 0; i < 128; ++i)
+                                    matchedOutput += (double) b.getSample (c, i) * b.getSample (c, i);
                         unchanged.processBlock (control, midi);
                         for (int i = 0; i < 128; ++i)
                         {
@@ -131,14 +140,17 @@ void namEnhanceTests()
                         }
                     }
                 }
+                const double matchError = std::abs (10 * std::log10 (matchedOutput / std::max (matchedInput, 1.e-20)));
+                if (autoGain) worstMatchError = std::max (worstMatchError, matchError);
                 const double response = std::sqrt (difference / std::max (reference, 1.e-20));
                 leastResponse = std::min (leastResponse, response);
-                valid &= response > 1.e-4 && p.getLatencySamples() == latency && p.getOrder() == order;
+                valid &= response > 1.e-4 && (! autoGain || matchError < 0.3)
+                      && p.getLatencySamples() == latency && p.getOrder() == order;
                 ++orders;
             } while (std::next_permutation (order.begin(), order.end()));
             check (valid && orders == 24 && maxJump < 0.1f,
                 "NAM moving Enhance responds through all 24 active orders rate=" + juce::String (sr)
                 + " auto=" + juce::String ((int) autoGain) + " minRelativeResponse=" + juce::String (leastResponse, 5)
-                + " maxJump=" + juce::String (maxJump, 6));
+                + " maxJump=" + juce::String (maxJump, 6) + " matchErrorDb=" + juce::String (worstMatchError, 4));
         }
 }

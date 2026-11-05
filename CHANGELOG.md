@@ -10,6 +10,12 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed — 1.1.1-beta.4 local evaluation (2026-11-05)
+
+- NAM Enhance now controls a conservative 0–30% blend of the already pushed tape capture at a fixed relative drive. The former simultaneous +12 dB drive/full crossfade caused spectral dips and rebounds as the slider moved.
+- Preserve real input gain interaction, all parameter ranges/defaults, ALGO/CLEAN laws, smoothing, safety ceiling and latency. Existing NAM sessions retain slider values with the revised, gentler tone law.
+- Add frequency/level progression measurements and moving Enhance tests through every active NAM rack order with Auto Gain on/off.
+
 ### Fixed — 1.1.1-beta.3 local evaluation (2026-11-05)
 
 - Ramp Enhance input gain, colour drive/blend, detector ceiling and release over 20 ms (final ceiling safety remains immediate) during slider automation; reset initializes controls immediately.

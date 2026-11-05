@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.3-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.4-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.3 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.4 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -82,7 +82,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -335,8 +335,8 @@ version display, taken from CMake so it cannot drift from the artefact:
 | prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.4   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -395,6 +395,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
+| `zychanstrip-nam-enhance-curve` | **Fixed in beta.4 — progressive NAM amount** | Human feedback found beta.3 NAM Enhance uneven/unnatural. A production tape-engine sweep confirmed dips/rebounds from varying both +12 dB drive and a full dry/NAM blend; at 0.1-peak input, 16 kHz fell to -9.89 dB at 75% then rose to -5.71 dB at 100%. NAM Enhance now blends 0–30% of the fixed-drive capture, retaining at least 70% dry and upstream/manual gain interaction. ALGO/CLEAN retain their prior laws. Frequency/level sweeps and active-rack automation regressions cover the change; human audition of beta.4 is pending. |
 | `zychanstrip-enhance-slider-steps` | **Fixed in beta.3 — slider ramps** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). Beta.3 adds 20 ms sample ramps for all four sliders (final ceiling safety remains immediate) and delays the ungained Auto Gain reference directly. New regression checks exercise forward/reverse jumps at 44.1/48/96 kHz in all modes with 32/512-frame blocks. Human listening remains to be confirmed. |
 | `zychanstrip-enhance-cap-clipping` | **Fixed in beta.3 — cap bounds** | `drawChromeFader` paints 30 px wide caps inside 26 px wide slider components, clipping the rim/shadow. The 46 px cap height also extends beyond the component near travel endpoints. Beta.3 widens components to 40 px, reserves 28 px at travel endpoints, and draws grip ridges at fractional positions to avoid integer snapping during movement. Endpoint geometry and min/mid/max snapshots cover the fix. Live DAW drag confirmation remains with the maintainer. |
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |

@@ -709,7 +709,6 @@ private:
             const float rC = releaseCoef.getNextValue();
             const float manualGain = active ? gain : 1.0f;
             const float drive = active ? gain * colourGain : 1.0f;
-            const float neuralDrive = active ? colourGain : 1.0f;
             float pk = 0.0f;
             float in[2] { 0.0f, 0.0f };
             float raw[2]{}, shaped[2]{};
@@ -722,7 +721,13 @@ private:
                 const float driven=active?dry*drive:dry;
                 shaped[ch]=active?analogMasterSaturation(driven,enh):raw[ch];
             }
-            colourFrame(raw,shaped,in,nch,enh,!active,neuralDrive);
+            // The tape capture is already pushed and has its own phase response.
+            // Keep its operating point fixed relative to this module's input:
+            // sweeping both drive (+12 dB) and a full dry/NAM crossfade produced
+            // spectral dips followed by rebounds. A dry-majority amount control
+            // adds the capture progressively without crossing those blend nulls.
+            // Upstream gain and the manual input gain still drive the model.
+            colourFrame(raw,shaped,in,nch,enh * 0.30f,!active);
             for (int ch=0;ch<nch;++ch) {
                 pk=std::max(pk,std::abs(in[ch]));
                 // Delay the ungained input itself: dividing delayed audio by the

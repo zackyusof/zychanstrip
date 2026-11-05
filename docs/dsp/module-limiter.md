@@ -32,3 +32,14 @@ gain. Processor-supplied chain references, rack order packing, read-only meter t
 reported latency are unchanged. Forward/reverse slider regression tests cover all three colour
 modes at 44.1/48/96 kHz and 32/512-frame blocks. Live listening/DAW automation soak remains
 maintainer validation.
+
+## Beta.4 NAM Enhance progression
+
+In NAM, Enhance now varies only the tape capture amount from 0 to 30%; its extra +12 dB
+slider-dependent neural drive is removed. The model still receives the module's real input
+gain, so upstream gain, EQ/compression and module order continue to affect its response.
+At least 70% of aligned dry remains to avoid the deep cancellations/rebounds observed with
+the old full crossfade. ALGO and CLEAN behavior, 20 ms ramps, fixed latency, bypass and
+ceiling safety are unchanged. Existing NAM session values now use the revised, gentler law.
+See [the specification](../specs/embedded-nam-colour.md#beta4-correction--nam-enhance-amount)
+for scope and measurement coverage. Beta.4 still requires human listening confirmation.

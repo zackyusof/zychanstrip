@@ -80,6 +80,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 // Test-only implementations remain separate from production DSP.
 #include "dsp_checks.h"
 #include "colour_checks.h"
+#include "nam_enhance_checks.h"
 
 void audioTests()
 {
@@ -818,6 +819,7 @@ public:
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
         colourTests();
+        namEnhanceTests();
         eqTests();
         limiterTests();
         audioTests();

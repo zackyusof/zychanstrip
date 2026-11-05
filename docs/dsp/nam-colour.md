@@ -136,3 +136,14 @@ do ceiling and release coefficient. CLEAN ignores the colour amount/drive; ALGO 
 receive the smoothed values. The directly delayed ungained Auto Gain reference avoids mixing
 delayed samples with a newly changing gain. Colour-engine/SRC delay and mode crossfades are
 unchanged. See [Limiter / Enhance](module-limiter.md#beta3-enhance-slider-transitions).
+
+## Beta.4 NAM Enhance progression
+
+In NAM, Enhance now varies only the tape capture amount from 0 to 30%; its extra +12 dB
+slider-dependent neural drive is removed. The model still receives the module's real input
+gain, so upstream gain, EQ/compression and module order continue to affect its response.
+At least 70% of aligned dry remains to avoid the deep cancellations/rebounds observed with
+the old full crossfade. ALGO and CLEAN behavior, 20 ms ramps, fixed latency, bypass and
+ceiling safety are unchanged. Existing NAM session values now use the revised, gentler law.
+See [the specification](../specs/embedded-nam-colour.md#beta4-correction--nam-enhance-amount)
+for scope and measurement coverage. Beta.4 still requires human listening confirmation.

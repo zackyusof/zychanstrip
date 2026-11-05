@@ -65,3 +65,23 @@ Build/install policy remains commit -> build -> harness -> push -> global instal
 Verification: production harness RESULT 297/297 passed; measured CPU/latency in docs/dsp/nam-colour.md. Global installation/signature and AU validation are recorded in the task delivery.
 
 Packaged-AU regression added after a static-link factory omission was caught. Explicit WaveNet factory construction fixes initialization. Built AU passes open/init/render at 44.1/48/96/192 kHz and all modes; system auval discovery remains unresolved on this host.
+
+## Beta.4 correction — NAM Enhance amount
+
+Human listening feedback identified an uneven, unnatural Enhance sweep in NAM. The pushed
+Studer capture was being driven up to +12 dB while simultaneously crossfading from dry to
+100% capture. Its frequency-dependent phase and level response make that compound control
+produce spectral dips/rebounds.
+
+For NAM only, map the existing 0–100 Enhance parameter linearly to a 0–0.30 wet amount,
+with no extra Enhance-dependent neural drive. Keep the full capture, fixed calibration and
+upstream/manual input gain interaction. At least 70% of the aligned dry signal remains.
+Enhance=0 is still exact clean delayed audio before limiting. ALGO's drive/saturation and
+CLEAN are unchanged. No running spectral normalizer, extra model, parameter, or audio delay
+is introduced. Existing sessions retain their slider values but use this revised NAM law.
+
+Acceptance: steady tone progression without dip/rebound across 0–100 at 50/100/1k/8k/16k Hz,
+0.01/0.1/0.5-peak input and 44.1/48/96 kHz; active full-rack Enhance automation and nonzero
+response across all 24 orders with Auto Gain on/off; existing mode, ceiling and latency checks.
+These measurements establish bounded progression for the tested signals, not perceived quality
+for all music. Human audition of the revised beta remains necessary.

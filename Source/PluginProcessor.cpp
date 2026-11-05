@@ -206,7 +206,7 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         {
             const float dry = dryBuffer.getSample (c, i);
             buffer.setSample (c, i, wet == 0.f ? dry
-                : wet * buffer.getSample (c, i) + (1.f - wet) * dry);
+                : dry + wet * (buffer.getSample (c, i) - dry));
         }
     }
 

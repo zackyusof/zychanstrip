@@ -2073,7 +2073,8 @@ protected:
         const int bankW = c.getWidth() - meterZone;
 
         const int top = c.getY() + 24;                 // room for the captions above
-        autoGain.setBounds (c.getRight() - 92, top - 17, 92, 24);
+        // Mirror bypass across the header with identical dimensions and aspect ratio.
+        autoGain.setBounds (c.getX() + 4, bypass.getY(), bypass.getWidth(), bypass.getHeight());
 
         // Control area below the AUTO GAIN switch, split into two equal rows.
         const int gridTop = top + 80;

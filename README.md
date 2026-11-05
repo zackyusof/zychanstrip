@@ -460,4 +460,4 @@ Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI 
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
 Current local beta: **1.1.1-beta.7**. No stable release is authorized; promotion remains the user's decision.
 
-Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-right Auto Gain, ivory illuminated switches and twin-column OUT LEDs with a dB readout.
+Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs with a dB readout.

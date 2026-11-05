@@ -2,6 +2,8 @@
   <img src="docs/screenshots/zychanstrip-rack.png" alt="zychanstrip — Mastering & Tracking Rack" width="100%">
 </p>
 
+<p align="center"><a href="docs/zychanstrip-dsp-flow.html"><strong>Explore the interactive DSP signal flow ↗</strong></a></p>
+
 # zychanstrip
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS

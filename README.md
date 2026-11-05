@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.2-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.3-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.2 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.3 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -45,6 +45,7 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
   31-band spectrum with RTA averaging; rack VU/GR and Enhance GR/output LED meters.
 - Resizable 864×608 to 1620×1140 interface, metal faceplates, drag handles, horizontal
   Enhance fader index stripes, softened LA-2A contact/cast shadows and fixed lighting.
+  Beta.3 adds smoothed Enhance slider transitions and complete fader cap/shadow bounds.
   Mouse wheel, Shift fine adjustment and double-click parameter defaults.
 - Apple Silicon macOS AUv2 effect, JUCE 9; global-only install with source/hash/signature
   verification. Existing parameter IDs/ranges/defaults are preserved; old sessions use ALGO.
@@ -81,7 +82,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -334,8 +335,8 @@ version display, taken from CMake so it cannot drift from the artefact:
 | prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.2   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.3   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -394,8 +395,8 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `zychanstrip-enhance-slider-steps` | **Open — Enhance automation has abrupt transitions** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). These synthetic step tests establish discontinuities, not a human listening verdict. Existing 297 checks pass and do not cover these gestures. |
-| `zychanstrip-enhance-cap-clipping` | **Open — Enhance fader caps clip** | `drawChromeFader` paints 30 px wide caps inside 26 px wide slider components, clipping the rim/shadow. The 46 px cap height also extends beyond the component near travel endpoints. Visible in the beta.2 rack snapshot; live drag/repaint behaviour still needs host confirmation. |
+| `zychanstrip-enhance-slider-steps` | **Fixed in beta.3 — slider ramps** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). Beta.3 adds 20 ms sample ramps for all four sliders (final ceiling safety remains immediate) and delays the ungained Auto Gain reference directly. New regression checks exercise forward/reverse jumps at 44.1/48/96 kHz in all modes with 32/512-frame blocks. Human listening remains to be confirmed. |
+| `zychanstrip-enhance-cap-clipping` | **Fixed in beta.3 — cap bounds** | `drawChromeFader` paints 30 px wide caps inside 26 px wide slider components, clipping the rim/shadow. The 46 px cap height also extends beyond the component near travel endpoints. Beta.3 widens components to 40 px, reserves 28 px at travel endpoints, and draws grip ridges at fractional positions to avoid integer snapping during movement. Endpoint geometry and min/mid/max snapshots cover the fix. Live DAW drag confirmation remains with the maintainer. |
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
 | `zychanstrip-nam-validation` | **Beta validation limits** | No human listening, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |

@@ -208,3 +208,11 @@ Consequences across modules:
 | Harmonic character | **Yes** | Non-commuting nonlinearities |
 | EQ-before vs EQ-after dynamics | **Yes** | Console's EQ is inside its module |
 | Meter readings | Derived | Meters measure the true output, so they move with any coupling above |
+
+## Beta.3 Enhance automation
+
+All four Enhance sliders ramp per sample over 20 ms; CLEAN retains smoothed input gain
+and limiting but ignores added colour. Auto Gain's standalone reference delays the ungained
+input directly, so moving gain cannot skew its delay calibration. Processor chain references
+are unchanged. See [Limiter / Enhance](module-limiter.md#beta3-enhance-slider-transitions)
+for ceiling automation semantics and regression coverage.

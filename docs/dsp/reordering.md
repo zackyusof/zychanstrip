@@ -161,3 +161,10 @@ either linear-ish (EQ after? no — EQ is first) or the output limiter itself.
 5. **Re-run the harness** (`tools/research/build.sh && ./build/permute`) if the DSP itself
    changed — the tables in `measurements.md` are only valid for the commit that produced
    them.
+
+## Beta.3 slider ramps and rack order
+
+Enhance's 20 ms slider ramps and directly delayed standalone Auto Gain reference travel with
+the module in every rack position. They add no audio delay and do not change rack packing,
+processor chain references or the fixed reported latency. Existing order/bypass regressions
+still apply; see [Limiter / Enhance](module-limiter.md#beta3-enhance-slider-transitions).

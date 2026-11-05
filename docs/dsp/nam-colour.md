@@ -128,3 +128,11 @@ Reported latencies match the table. Repeat with `tools/check_au_bundle.sh [AU ex
 without an argument it tests the global installed bundle. This catches the factory-link defect
 that direct-object headless linking did not. System auval discovery remains a separate open
 machine/registrar validation issue; direct registration in the test is not a claim that discovery works.
+
+## Beta.3 Enhance transitions
+
+Enhance's input gain, extra drive and NAM blend amount now ramp per sample over 20 ms, as
+do ceiling and release coefficient. CLEAN ignores the colour amount/drive; ALGO and NAM
+receive the smoothed values. The directly delayed ungained Auto Gain reference avoids mixing
+delayed samples with a newly changing gain. Colour-engine/SRC delay and mode crossfades are
+unchanged. See [Limiter / Enhance](module-limiter.md#beta3-enhance-slider-transitions).

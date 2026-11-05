@@ -10,6 +10,13 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed — 1.1.1-beta.3 local evaluation (2026-11-05)
+
+- Ramp Enhance input gain, colour drive/blend, detector ceiling and release over 20 ms (final ceiling safety remains immediate) during slider automation; reset initializes controls immediately.
+- Delay the ungained input directly for the limiter Auto Gain fallback, avoiding a mismatched gain division during movement.
+- Keep Enhance fader caps, rims and shadows inside their components across the whole travel; retain fractional grip coordinates during dragging.
+- Add multi-rate, multi-block forward/reverse slider transition regressions and endpoint geometry/snapshots. Numeric AU version remains 1.1.1.
+
 ### Added — 1.1.1-beta.2 local evaluation (2026-11-04)
 
 - Master ALGO / NAM / CLEAN selector on rack and meter headers, append-only automation and old-session migration.

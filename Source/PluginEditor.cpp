@@ -1107,6 +1107,13 @@ public:
     }
 
     //-------------------------------------------------------------------- faders
+    int getSliderThumbRadius (Slider& s) override
+    {
+        // Reserve the full cap, rim and shadow at both travel endpoints.
+        return s.getSliderStyle() == Slider::LinearVertical ? 28
+                                                           : LookAndFeel_V4::getSliderThumbRadius (s);
+    }
+
     void drawLinearSlider (Graphics& g, int x, int y, int w, int h,
                            float pos, float minPos, float maxPos,
                            Slider::SliderStyle style, Slider& s) override
@@ -1222,7 +1229,7 @@ public:
         // Ribbed grip ridges
         g.setColour (Colour (0xff5a6470).withAlpha (0.6f));
         for (float ry = cap.getY() + 6.0f; ry < cap.getBottom() - 6.0f; ry += 3.0f)
-            g.drawHorizontalLine ((int) ry, cap.getX() + 3.0f, cap.getRight() - 3.0f);
+            g.fillRect (Rectangle<float> (cap.getX() + 3.0f, ry, cap.getWidth() - 6.0f, 1.0f));
 
         // Ergonomic center finger concave well
         const Rectangle<float> well (cap.getX() + 4.0f, cap.getY() + 6.0f, cap.getWidth() - 8.0f, cap.getHeight() - 12.0f);
@@ -1237,7 +1244,7 @@ public:
         // Knurl grooves on sides
         g.setColour (Colour (0xff20303a).withAlpha (0.50f));
         for (float gy = cap.getY() + 5.0f; gy < cap.getBottom() - 4.0f; gy += 4.0f)
-            g.drawHorizontalLine ((int) gy, cap.getX() + 2.0f, cap.getX() + 4.0f);
+            g.fillRect (Rectangle<float> (cap.getX() + 2.0f, gy, 2.0f, 1.0f));
 
         // Outer specular rim
         g.setColour (Colours::white.withAlpha (0.95f));
@@ -2048,8 +2055,8 @@ protected:
             // would truncate "THRESHOLD").
             gridCell ((size_t) col) = { cellX, cellY, cellW, rowH };
 
-            // Centre the narrow fader inside its cell.
-            all[i]->setBounds (cellX + cellW / 2 - 13, cellY + captionH, 26, faderH);
+            // Include the full cap, rim and drop shadow in the repaint bounds.
+            all[i]->setBounds (cellX + cellW / 2 - 20, cellY + captionH, 40, faderH);
         }
 
         // Both meters together on the right edge, GR then output, spanning both grid rows.

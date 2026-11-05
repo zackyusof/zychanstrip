@@ -738,6 +738,21 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
                     check (topRow && bottomRow && stacked && columns,
                            "limiter faders form a 2x2 grid (threshold/ceiling over release/enhance)");
 
+                    bool capContained = true;
+                    for (auto* component : { p0, p1, p2, p3 })
+                    {
+                        auto* slider = dynamic_cast<juce::Slider*> (component);
+                        const auto bounds = slider->getLocalBounds().toFloat();
+                        for (double value : { slider->getMinimum(), slider->getMaximum() })
+                        {
+                            const float pos = (float) slider->getPositionOfValue (value);
+                            const juce::Rectangle<float> cap (bounds.getCentreX() - 15.f, pos - 23.f, 30.f, 46.f);
+                            capContained &= bounds.contains (cap.expanded (1.5f));
+                            capContained &= bounds.contains (cap.translated (2.f, 3.5f));
+                        }
+                    }
+                    check (capContained, "Enhance cap rim and shadow fit at both travel endpoints");
+
                     // Both rows share one height, so the grid is visually balanced.
                     check (std::abs (a.getHeight() - c2.getHeight()) <= 2,
                            "limiter grid rows are equal height");
@@ -762,6 +777,20 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
                 proc.setOrder (startOrder);
                 editor.resized();
             }
+        }
+        if (size.x == 1080)
+        {
+            auto saved = proc.apvts.copyState();
+            for (int position = 0; position < 3; ++position)
+            {
+                for (const char* id : { "lim_gain", "lim_ceiling", "lim_release", "lim_enhance" })
+                    proc.apvts.getParameter (id)->setValueNotifyingHost (position * 0.5f);
+                auto image = editor.createComponentSnapshot (editor.getLocalBounds());
+                juce::FileOutputStream stream (output.getChildFile ("enhance-position-" + juce::String (position) + ".png"));
+                check (stream.openedOk() && juce::PNGImageFormat().writeImageToStream (image, stream),
+                       "Enhance endpoint/midpoint snapshot " + juce::String (position));
+            }
+            proc.apvts.replaceState (saved);
         }
         auto img = editor.createComponentSnapshot (editor.getLocalBounds());
         const auto file = output.getChildFile ("rack-" + juce::String (size.x) + "x" + juce::String (size.y) + ".png");

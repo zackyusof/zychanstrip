@@ -650,6 +650,18 @@ public:
         dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
         energyCoef = std::exp (-1.0 / (0.2 * sampleRate));
         compensationCoef = timeCoef (100.0f, sampleRate);
+        for (auto* smoother : { &inputGain, &colourDrive, &enhanceAmount, &ceilingGain, &releaseCoef })
+            smoother->reset (sampleRate, 0.02);
+        inputGain.setCurrentAndTargetValue (dbToGain (read (gainParam)));
+        enhanceAmount.setCurrentAndTargetValue (read (enhanceParam) * 0.01f);
+        colourDrive.setCurrentAndTargetValue (dbToGain (read (enhanceParam) * 0.12f));
+        ceilingGain.setCurrentAndTargetValue (dbToGain (read (ceilingParam)));
+        releaseCoef.setCurrentAndTargetValue (timeCoef (read (releaseParam), sampleRate));
+        const int referenceSize = colour.latency() + 1;
+        for (auto& d : colourDryDelay)
+            if ((int) d.size() != referenceSize) d.assign ((size_t) referenceSize, 0.0f);
+            else std::fill (d.begin(), d.end(), 0.0f);
+        colourDryWp = 0;
         grDb.store (0.0f);
         gainCompDb.store (0.0f);
         outPeak.store (0.0f);
@@ -677,12 +689,12 @@ private:
     void runLimiter (juce::AudioBuffer<float>& buf, bool active)
     {
         const int n = buf.getNumSamples(), nch = std::min (2, buf.getNumChannels());
-        const float enh = read (enhanceParam) * 0.01f;
-        const float manualGain = active ? dbToGain (read (gainParam)) : 1.0f;
-        const float drive = active ? dbToGain (read (gainParam) + enh * 12.0f) : 1.0f;
-        const float neuralDrive = drive / manualGain;
-        const float ceil = dbToGain (read (ceilingParam));
-        const float rC = timeCoef (read (releaseParam), sampleRate);
+        inputGain.setTargetValue (dbToGain (read (gainParam)));
+        enhanceAmount.setTargetValue (read (enhanceParam) * 0.01f);
+        colourDrive.setTargetValue (dbToGain (read (enhanceParam) * 0.12f));
+        const float safetyCeiling = dbToGain (read (ceilingParam));
+        ceilingGain.setTargetValue (safetyCeiling);
+        releaseCoef.setTargetValue (timeCoef (read (releaseParam), sampleRate));
         const bool autoGain = active && autoGainParameter->load() > 0.5f;
         float minG = 1.0f;
         float blockOutPeak = 0.0f;
@@ -690,11 +702,20 @@ private:
 
         for (int i = 0; i < n; ++i)
         {
+            const float gain = inputGain.getNextValue();
+            const float colourGain = colourDrive.getNextValue();
+            const float enh = enhanceAmount.getNextValue();
+            const float ceil = ceilingGain.getNextValue();
+            const float rC = releaseCoef.getNextValue();
+            const float manualGain = active ? gain : 1.0f;
+            const float drive = active ? gain * colourGain : 1.0f;
+            const float neuralDrive = active ? colourGain : 1.0f;
             float pk = 0.0f;
             float in[2] { 0.0f, 0.0f };
             float raw[2]{}, shaped[2]{};
             for (int ch=0;ch<nch;++ch) {
                 const float dry=data[ch][i];
+                colourDryDelay[ch][(size_t) colourDryWp] = dry;
 
                 // CLEAN disables Enhance's colour drive; limiter gain remains active.
                 raw[ch]=dry*manualGain;
@@ -704,9 +725,13 @@ private:
             colourFrame(raw,shaped,in,nch,enh,!active,neuralDrive);
             for (int ch=0;ch<nch;++ch) {
                 pk=std::max(pk,std::abs(in[ch]));
-                dryDelay[ch][(size_t)wp]=colour.delayedClean(ch)/manualGain;
+                // Delay the ungained input itself: dividing delayed audio by the
+                // current moving gain corrupts Auto Gain's automation reference.
+                dryDelay[ch][(size_t)wp] = colourDryDelay[ch][(size_t)
+                    ((colourDryWp + 1) % (int) colourDryDelay[ch].size())];
             }
 
+            colourDryWp = (colourDryWp + 1) % (int) colourDryDelay[0].size();
             const float req = (active && pk > ceil) ? ceil / pk : 1.0f;
             reqRing[(size_t) wp] = req;
             const float mn = slidingMin.push (req);
@@ -751,7 +776,10 @@ private:
             float outputPeak = 0.0f;
             for (int ch = 0; ch < nch; ++ch) outputPeak = std::max (outputPeak, std::abs (wet[ch] * compensation));
             // Linked safety gain preserves the stereo image while keeping the existing ceiling.
-            const float safety = active && outputPeak > ceil ? ceil / outputPeak : 1.0f;
+            // A lower requested ceiling is a hard safety bound immediately, even
+            // while the detector ceiling ramps. Its unavoidable first clamp must
+            // never be softened at the cost of output exceeding the user's limit.
+            const float safety = active && outputPeak > safetyCeiling ? safetyCeiling / outputPeak : 1.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
                 const float s = wet[ch] * compensation * safety;
@@ -775,6 +803,9 @@ private:
     const float* finalOut = nullptr;     // true chain output energy, post master + mix
     int finalOutSamples = 0;
     std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
+    std::vector<float> colourDryDelay[2];
+    int colourDryWp = 0;
+    juce::SmoothedValue<float> inputGain, colourDrive, enhanceAmount, ceilingGain, releaseCoef;
     SlidingMinimum slidingMin;
     int la = 64, wp = 0;
     double sum = 64.0;

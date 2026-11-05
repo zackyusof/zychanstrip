@@ -64,6 +64,54 @@ void colourTests()
         std::cout<<"RACK_BENCH rate="<<sr<<" latency="<<bench.getLatencySamples()<<" ms="<<1000.0*bench.getLatencySamples()/sr<<" cpu_ms_per_second="<<elapsed*sr/(blocks*128)<<"\n";
         check(finite,"full NAM rack finite bounded output @"+juce::String(sr));
     }
+    // Exercise actual parameter jumps, with a constant input isolating automation
+    // discontinuities from the waveform's ordinary sample-to-sample movement.
+    for (double sr : { 44100., 48000., 96000. })
+        for (int mode = 0; mode < 3; ++mode)
+            for (int blockSize : { 32, 512 })
+              for (bool autoGain : { false, true })
+                for (const auto& setting : std::array<std::pair<const char*, float>, 4> {{
+                    { "lim_gain", 6.f }, { "lim_enhance", 50.f },
+                    { "lim_ceiling", -12.f }, { "lim_release", 1000.f } }})
+                {
+                    ZychanStripProcessor test;
+                    setParam (test, "colour_mode", (float) mode);
+                    setParam (test, "lim_auto_gain", autoGain ? 1.f : 0.f);
+                    setParam (test, "lim_ceiling", 0);
+                    rack::LimiterModule limiter (test.apvts, "lim_");
+                    limiter.prepare (sr, blockSize);
+                    const int latency = limiter.getLatencySamples();
+                    float previous = 0, maxJump = 0;
+                    bool finite = true, settledCeiling = true;
+                    for (int sample = 0; sample < 16384; sample += blockSize)
+                    {
+                        if (sample == 4096) setParam (test, setting.first, setting.second);
+                        if (sample == 12288) setParam (test, setting.first,
+                            juce::String (setting.first) == "lim_release" ? 10.f : 0.f);
+                        juce::AudioBuffer<float> b (2, blockSize);
+                        const float level = juce::String (setting.first) == "lim_ceiling" ? 0.6f : 0.2f;
+                        for (int c = 0; c < 2; ++c)
+                            juce::FloatVectorOperations::fill (b.getWritePointer (c), level, blockSize);
+                        limiter.run (b);
+                        for (int i = 0; i < blockSize; ++i)
+                        {
+                            const float value = b.getSample (0, i);
+                            finite &= std::isfinite (value) && value == b.getSample (1, i);
+                            // Lowering below the current signal must clamp immediately;
+                            // exclude only that unavoidable first safety step.
+                            const bool safetyStep = juce::String (setting.first) == "lim_ceiling" && sample + i == 4096;
+                            if (sample + i >= 4096 && ! safetyStep)
+                                maxJump = std::max (maxJump, std::abs (value - previous));
+                            if (juce::String (setting.first) == "lim_ceiling" && sample + i >= 4096 && sample + i < 12288)
+                                settledCeiling &= std::abs (value) <= 0.251189f;
+                            previous = value;
+                        }
+                    }
+                    check (finite && maxJump < 0.01f && settledCeiling && limiter.getLatencySamples() == latency,
+                        "Enhance slider ramp " + juce::String (setting.first) + " mode=" + juce::String (mode)
+                        + " rate=" + juce::String (sr) + " block=" + juce::String (blockSize)
+                        + " auto=" + juce::String ((int) autoGain) + " maxJump=" + juce::String (maxJump, 7));
+                }
     ZychanStripProcessor proc;
     auto* mode=proc.apvts.getParameter("colour_mode");
     check(mode!=nullptr,"global colour parameter exists");

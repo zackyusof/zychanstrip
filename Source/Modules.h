@@ -779,7 +779,10 @@ private:
             // A lower requested ceiling is a hard safety bound immediately, even
             // while the detector ceiling ramps. Its unavoidable first clamp must
             // never be softened at the cost of output exceeding the user's limit.
-            const float safety = active && outputPeak > safetyCeiling ? safetyCeiling / outputPeak : 1.0f;
+            // When raising the ceiling, retain the ramp after Auto Gain too;
+            // otherwise its accumulated compensation can jump as the clamp opens.
+            const float outputCeiling = std::min (safetyCeiling, ceil);
+            const float safety = active && outputPeak > outputCeiling ? outputCeiling / outputPeak : 1.0f;
             for (int ch = 0; ch < nch; ++ch)
             {
                 const float s = wet[ch] * compensation * safety;

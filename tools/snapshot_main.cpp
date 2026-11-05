@@ -82,6 +82,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 #include "colour_checks.h"
 #include "nam_enhance_checks.h"
 #include "enhance_contract_checks.h"
+#include "mix_checks.h"
 
 void audioTests()
 {
@@ -154,8 +155,8 @@ void audioTests()
     check (std::abs (b.getSample (0, 511) - a.getSample (0, 511) * juce::Decibels::decibelsToGain (-6.0f)) < 2.0e-6f,
            "master scales the completed active module chain");
     // ---- Dry/wet parallel mix, applied after master volume.
-    // At 100% the output must equal the fully processed signal; at 0% it must equal the
-    // untouched input; at 50% it must be the exact average of the two.
+    // At both endpoints timing stays fixed. The 50% output is the exact average
+    // of wet and latency-compensated untouched input.
     {
         auto render = [] (float mixPct, float masterDb, juce::AudioBuffer<float>& out)
         {
@@ -174,21 +175,22 @@ void audioTests()
             }
             juce::MidiBuffer midi;
             p.processBlock (out, midi);
+            return p.getLatencySamples();
         };
 
         juce::AudioBuffer<float> dry (2, 512), wet (2, 512), half (2, 512);
-        render (0.0f, 0.0f, dry);
+        const int renderLatency = render (0.0f, 0.0f, dry);
         render (100.0f, -6.0f, wet);
         render (50.0f, -6.0f, half);
 
-        // At 0% the output must be the input, sample for sample (no chain, no latency).
+        // At 0% dry stays untouched and carries the same reported delay as wet.
         bool dryOk = true;
         for (int i = 0; i < 512; ++i)
         {
-            const float expect = 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f);
+            const float expect = i < renderLatency ? 0.f : 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) (i - renderLatency) / 48000.0f);
             dryOk &= std::abs (dry.getSample (0, i) - expect) < 1.0e-6f;
         }
-        check (dryOk, "0% mix returns the untouched input");
+        check (dryOk, "0% mix returns untouched input at the fixed reported latency");
 
         // Total gain only: the module chain adds look-ahead latency, so sample-by-sample
         // comparison of the two renders is meaningless. Compare RMS instead, which is
@@ -275,14 +277,14 @@ void audioTests()
                    "50% mix does not cancel the wet path (" + juce::String (halfRms, 4) + " vs "
                      + juce::String (wetRmsAligned, 4) + ")");
 
-            // Fully dry must still return the untouched input with no latency added.
+            // Fully dry must keep the same latency as every other mix setting.
             bool dryExact = true;
             for (int i = 0; i < 512; ++i)
             {
-                const float in = 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) i / 48000.0f);
+                const float in = i < renderLatency ? 0.f : 0.30f * std::sin (2.0f * juce::MathConstants<float>::pi * 300.0f * (float) (i - renderLatency) / 48000.0f);
                 dryExact &= std::abs (zero50.getSample (0, i) - in) < 1.0e-6f;
             }
-            check (dryExact, "0% mix still returns the untouched input (dry path not delayed)");
+            check (dryExact, "0% mix keeps host compensation consistent (delayed untouched input)");
         }
     }
 
@@ -826,6 +828,7 @@ public:
         const auto output = args.isEmpty() ? juce::File::getCurrentWorkingDirectory()
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
+        parallelMixTests();
         colourTests();
         namEnhanceTests();
         enhanceContractTests();

@@ -123,6 +123,8 @@ void ZychanStripProcessor::prepareToPlay (double sr, int block)
     for (auto& d : dryDelay) d.assign ((size_t) juce::jmax (1, dryDelayLen), 0.0f);
     dryWp = 0;
     chainInputRef.assign ((size_t) juce::jmax (1, block), 0.0f);
+    mixGain.reset (sr, 0.02);
+    mixGain.setCurrentAndTargetValue (mixAmount->load() * 0.01f);
     masterGain.reset (sr, 0.02);
     masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     unityGain.reset (sr, 0.05);
@@ -143,6 +145,9 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (resetRequested.exchange (false))
     {
         for (auto& m : modules) m->reset();
+        for (auto& delay : dryDelay) std::fill (delay.begin(), delay.end(), 0.f);
+        dryWp = 0;
+        mixGain.setCurrentAndTargetValue (mixAmount->load() * 0.01f);
         masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
         unityGain.setCurrentAndTargetValue (1.0f);
         unityInputEnergy = unityOutputEnergy = 0.0;
@@ -157,19 +162,27 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         dryBuffer.setSize (juce::jmax (buffer.getNumChannels(), dryBuffer.getNumChannels()),
                            juce::jmax (numSamples, dryBuffer.getNumSamples()), false, false, true);
 
-    // At 100 % wet with UNITY off nothing reads the dry copy (the blend below is skipped and
-    // UNITY is the only other reader), so the copy is pure waste - see prior-art report F7.
     const float requestedWet = juce::jlimit (0.0f, 1.0f, mixAmount->load() * 0.01f);
     const bool matchUnity = unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f;
-    const bool needDry = requestedWet < 0.9999f || matchUnity;
-
-    if (needDry)
-        for (int c = 0; c < buffer.getNumChannels(); ++c)
-            dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
-
-    // Auto-gain reference: measure the whole chain's input BEFORE any module runs, so the
-    // correction cannot depend on where the limiter sits in the rack.
-    feedChainReference (buffer, numSamples);
+    mixGain.setTargetValue (requestedWet);
+    // Always advance the dry reference, including 0/100% wet. Freezing its ring
+    // at either endpoint leaves stale audio when returning to a parallel blend.
+    for (int c = 0; c < buffer.getNumChannels(); ++c)
+        dryBuffer.copyFrom (c, 0, buffer, c, 0, numSamples);
+    if (dryDelayLen > 0)
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const int read = (dryWp + 1) % dryDelayLen;
+            for (int c = 0; c < std::min (2, buffer.getNumChannels()); ++c)
+            {
+                auto& delay = dryDelay[(size_t) c];
+                delay[(size_t) dryWp] = dryBuffer.getSample (c, i);
+                dryBuffer.setSample (c, i, delay[(size_t) read]);
+            }
+            dryWp = read;
+        }
+    // Both energy references now describe the same delayed input time interval.
+    feedChainReference (dryBuffer, numSamples);
 
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
@@ -183,46 +196,17 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     masterGain.applyGain (buffer, numSamples);
 
-    // Dry/wet blend AFTER the master, so the mix control scales the finished signal
-    // against the original input (classic parallel processing).
-    const float wet = requestedWet;
-    if (wet < 0.9999f)
+    // Keep the host-reported delay at EVERY mix value, including fully dry.
+    // Zero/100% endpoints are exact selections; intermediate targets ramp 20 ms.
+    for (int i = 0; i < numSamples; ++i)
     {
-        const float dry = 1.0f - wet;
-        const int nch = buffer.getNumChannels();
-
-        if (dryDelayLen <= 0 || wet <= 0.0f)
+        const float wet = mixGain.getNextValue();
+        if (wet == 1.f) continue;
+        for (int c = 0; c < buffer.getNumChannels(); ++c)
         {
-            // No rack latency, or fully dry: the untouched copy is already the whole answer and
-            // must not be pushed through the alignment ring (that would add frozen-frame garbage).
-            for (int c = 0; c < nch; ++c)
-            {
-                buffer.applyGain (c, 0, numSamples, wet);
-                buffer.addFrom (c, 0, dryBuffer, c, 0, numSamples, dry);
-            }
-        }
-        else
-        {
-            // Delay the dry path by exactly the reported latency before summing, otherwise a
-            // partial mix combs against the wet path (a 1 kHz tone used to cancel ~24 dB at 50 %).
-            for (int c = 0; c < nch; ++c)
-                if ((int) dryDelay[(size_t) c].size() != dryDelayLen)
-                    dryDelay[(size_t) c].assign ((size_t) dryDelayLen, 0.0f);
-
-            int wp = dryWp;
-            for (int i = 0; i < numSamples; ++i)
-            {
-                const int rd = (wp + 1) % dryDelayLen;
-                for (int c = 0; c < nch; ++c)
-                {
-                    auto& ring = dryDelay[(size_t) juce::jmin (c, 1)];
-                    ring[(size_t) wp] = dryBuffer.getSample (c, i);
-                    const float aligned = ring[(size_t) rd];
-                    buffer.setSample (c, i, buffer.getSample (c, i) * wet + aligned * dry);
-                }
-                wp = rd;
-            }
-            dryWp = wp;
+            const float dry = dryBuffer.getSample (c, i);
+            buffer.setSample (c, i, wet == 0.f ? dry
+                : wet * buffer.getSample (c, i) + (1.f - wet) * dry);
         }
     }
 

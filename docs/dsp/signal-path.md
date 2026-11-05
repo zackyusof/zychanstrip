@@ -190,9 +190,8 @@ Points worth knowing:
   *host input*, never against a partially processed signal.
 * **Master gain and mix are after the rack**, so they cannot be re-ordered. Moving a
   module never changes where the master fader acts.
-* **The mix is not latency compensated** — `dryBuffer` is read at the same block offset
-  (`PluginProcessor.cpp:144`), while the wet path is 71 samples late. That is the
-  measured 13.2 dB notch at 50 % mix (`measurements.md` §2).
+* **The mix uses continuously delayed dry**, matching fixed rack timing at every value.
+  Active flat EQ uses linear-phase oversampling, and capture transport/polarity is normalized.
 * **UNITY, when enabled, is last before metering**: its stereo-linked energy follower reads
   the untouched host input and the completed post-master/post-mix output, applies a smoothed
   correction limited to ±18 dB, and holds through input silence. It is a level match, not
@@ -248,3 +247,17 @@ pollutes the live parameter tree.
 The practical summary: **re-ordering never breaks the plumbing, always changes the
 sound** — because three of the four modules are non-linear or dynamics processors and the
 fourth is a colour stage.
+
+## Beta.6 parallel mix timing — current behavior
+
+This supersedes earlier dry-path/oversampling/capture timing descriptions. EQ560 still runs
+its SVF at 2x, with a symmetric 63-tap FIR pair adding 31 native samples and matching bypass
+padding. The pinned API capture is polarity-normalized; API/opto/FET native transport
+offsets of 16/6/8.5 samples are advanced within fixed causal padding in every mode. The FET
+fractional offset uses the existing double-precision sinc. Tape residual behavior is unchanged.
+
+The dry ring advances continuously at 0/100% as well as partial mix. Even fully dry now
+returns untouched input at the fixed reported latency; RESET clears both wet/dry histories.
+Mix targets ramp 20 ms, and Auto Gain/UNITY compare aligned input time intervals. Phase from
+intentional EQ bands/captured analog response remains; this is not arbitrary phase removal.
+See [parallel mix repair](../specs/parallel-mix-phase-repair.md) for causes, tradeoffs and tests.

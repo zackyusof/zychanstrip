@@ -10,6 +10,13 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed — 1.1.1-beta.6 parallel mix phase repair (2026-11-05)
+
+- Replace EQ oversampling's flat-setting phase rotation with a 63-tap linear-phase halfband pair, retaining the 2x SVF EQ law and matching 31-sample Console bypass delay.
+- Normalize the pinned API capture's polarity and compensate API/opto/FET transport offsets (16/6/8.5 native samples), with causal sinc support for fractional delay and matching ALGO/CLEAN/bypass padding.
+- Keep dry history running at every mix setting, preserve constant reported timing at 0% wet, ramp mix over 20 ms and clear dry history on RESET. Align Auto Gain/UNITY input references.
+- Add active-rack phase/endpoint tests and calibrated NAM phase checks; update the independent EQ Fourier reference for the new FIR oversampler. Captured analog phase and intentional band-EQ phase remain.
+
 ### Fixed — 1.1.1-beta.5 Enhance core repair (2026-11-05)
 
 - Correct full-processor Auto Gain's half-correction error by measuring uncorrected output and applying matching after every rack module, before master/mix. Keep standalone module matching and ceiling safety.

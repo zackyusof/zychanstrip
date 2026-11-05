@@ -84,12 +84,12 @@ struct ColourEngine::Impl {
     std::array<float,maxQuantum> pendingAmount{}, readyAmount{};
     std::array<float,capacity> amounts{};
     Sinc toModel,toHost;
-    double rate=48000,ratio=1,preGain=1,postGain=1,dc=0;
+    double rate=48000,ratio=1,preGain=1,postGain=1,dc=0,captureAdvance=0;
     int quantum=16,delay=0,position=0,fadeLength=960,fadeRemaining=0,lastMode=0;
     int64_t host=0,nextModel=0;
     std::array<float,3> weights{1,0,0},steps{};
     std::array<float,2> latestClean{};
-    bool converted=false;
+    bool converted=false, interpolateNeural=false;
 
     void render() noexcept {
         const int64_t first=host;
@@ -125,11 +125,13 @@ struct ColourEngine::Impl {
         }
         for(int i=0;i<quantum;++i) {
             const int64_t time=first+i-delay;
-            const double modelTime=time/ratio;
+            const double modelTime=time/ratio+captureAdvance;
             for(int c=0;c<2;++c) {
                 ready[0][c][i]=time<0?0:(float)algorithm[c][(size_t)time%capacity];
                 ready[2][c][i]=time<0?0:(float)clean[c][(size_t)time%capacity];
-                const double v=converted?toHost.read(neural[c],modelTime):(time<0?0:neural[c][(size_t)time%capacity]);
+                const int64_t nativeTime=time+(int64_t)captureAdvance;
+                const double v=interpolateNeural?toHost.read(neural[c],modelTime)
+                    :(nativeTime<0?0:neural[c][(size_t)nativeTime%capacity]);
                 ready[1][c][i]=std::isfinite(v)?(float)v:0.0f;
             }
             readyAmount[i]=time<0?0:amounts[(size_t)time%capacity];
@@ -145,8 +147,16 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     // sample batches shrink to four native samples at 192 kHz, making per-call
     // neural overhead dominate. The adapter delay stays fixed for each prepare.
     x.quantum=std::clamp((int)std::ceil(16*x.ratio),16,maxQuantum);
-    if(x.converted){x.toModel.prepare(sr,48000);x.toHost.prepare(48000,sr);}
-    x.delay=x.converted?(int)std::ceil(x.toModel.half+(x.toHost.half+2)*x.ratio):0;
+    x.captureAdvance=embeddedNamDelay[model];
+    const bool fractional=std::abs(x.captureAdvance-std::round(x.captureAdvance))>1.e-9;
+    x.interpolateNeural=x.converted || fractional;
+    if(x.converted) x.toModel.prepare(sr,48000);
+    if(x.interpolateNeural) x.toHost.prepare(48000,sr);
+    const int conversionDelay=x.converted?(int)std::ceil(x.toModel.half+(x.toHost.half+2)*x.ratio)
+                                          :(fractional?x.toHost.half+2:0);
+    // Advance the captured transport offset within a causal lookahead budget.
+    // CLEAN/ALGO/bypass receive the same padding, so every mode reports one delay.
+    x.delay=conversionDelay+(int)std::ceil(x.captureAdvance*x.ratio);
     x.fadeLength=std::max(1,(int)(0.02*sr));
     x.preGain=model==1?0.177827941: model==3?0.354813389:1.0;
     x.nonlinearOnly=model==3;
@@ -168,7 +178,7 @@ void ColourEngine::prepare(double sr,int model,int mode) {
         if(block>=4)for(int i=0;i<1024;++i){energy+=out[i]*out[i];reference+=(in[i]/x.preGain)*(in[i]/x.preGain);}
     }
     if(energy<1e-16 || !std::isfinite(energy))throw std::runtime_error("Invalid NAM calibration");
-    x.postGain=std::sqrt(reference/energy);
+    x.postGain=embeddedNamPolarity[model]*std::sqrt(reference/energy);
     x.dc=0;
     for(auto& m:x.models){m->Reset(48000,1024);m->prewarm();}
     // Measure the profile's steady DC separately from its AC gain.

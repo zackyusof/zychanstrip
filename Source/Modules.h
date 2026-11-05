@@ -336,11 +336,15 @@ public:
         colour.reset();
         updateBands();
         eq.prepare (sampleRate);
+        for (auto& channel : timingDelay) channel.fill (0);
+        timingPosition = 0;
         env = 0.0f;
         grDb.store (0.0f);
         gainCompDb.store (0.0f);
         outPeak.store (0.0f);
     }
+
+    int getLatencySamples() const override { return colour.latency() + Eq560::latencySamples(); }
 
 protected:
     void process (juce::AudioBuffer<float>& buf) override
@@ -369,9 +373,11 @@ protected:
             float pk = 0.0f;
             float raw[2]{}, shaped[2]{}, coloured[2]{};
             for (int ch = 0; ch < nch; ++ch) {
+                timingDelay[(size_t) ch][(size_t) timingPosition] = data[ch][i];
                 raw[ch] = eq.processSample (ch, data[ch][i]);
                 shaped[ch] = apiConsoleColor (raw[ch]);
             }
+            timingPosition = (timingPosition + 1) % timingLength;
             colourFrame(raw,shaped,coloured,nch);
             for (int ch = 0; ch < nch; ++ch) {
                 data[ch][i]=coloured[ch];
@@ -386,6 +392,26 @@ protected:
         grDb.store (maxGr);
     }
 
+    void processBypassed (juce::AudioBuffer<float>& buffer) override
+    {
+        updateBands();
+        const int channels = std::min (2, buffer.getNumChannels());
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            eq.beginSample();
+            const int read = (timingPosition + 1) % timingLength;
+            for (int c = 0; c < channels; ++c)
+            {
+                const float value = buffer.getSample (c, i);
+                (void) eq.processSample (c, value); // keep filter history warm across bypass
+                timingDelay[(size_t) c][(size_t) timingPosition] = value;
+                buffer.setSample (c, i, timingDelay[(size_t) c][(size_t) read]);
+            }
+            timingPosition = read;
+        }
+        Module::processBypassed (buffer);
+    }
+
 private:
     void updateBands()
     {
@@ -395,6 +421,9 @@ private:
     }
 
     Eq560 eq;
+    static constexpr int timingLength = Eq560::latencySamples() + 1;
+    std::array<std::array<float, timingLength>, 2> timingDelay {};
+    int timingPosition = 0;
     std::array<std::atomic<float>*, 10> bandParameters {};
     std::atomic<float>* threshParam = nullptr;
     std::atomic<float>* ratioParam = nullptr;

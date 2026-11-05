@@ -246,3 +246,17 @@ not as working code.
 * Colour stacks with the other modules' colours; three parallel `tanh`-family stages in
   series is what makes an over-driven rack sound "thick" well before any of them alone would
   clip. Order-independent in amplitude terms, not in character terms.
+
+## Beta.6 parallel mix timing — current behavior
+
+This supersedes earlier dry-path/oversampling/capture timing descriptions. EQ560 still runs
+its SVF at 2x, with a symmetric 63-tap FIR pair adding 31 native samples and matching bypass
+padding. The pinned API capture is polarity-normalized; API/opto/FET native transport
+offsets of 16/6/8.5 samples are advanced within fixed causal padding in every mode. The FET
+fractional offset uses the existing double-precision sinc. Tape residual behavior is unchanged.
+
+The dry ring advances continuously at 0/100% as well as partial mix. Even fully dry now
+returns untouched input at the fixed reported latency; RESET clears both wet/dry histories.
+Mix targets ramp 20 ms, and Auto Gain/UNITY compare aligned input time intervals. Phase from
+intentional EQ bands/captured analog response remains; this is not arbitrary phase removal.
+See [parallel mix repair](../specs/parallel-mix-phase-repair.md) for causes, tradeoffs and tests.

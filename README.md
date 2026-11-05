@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.5-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.6-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.5 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.6 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -82,7 +82,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -177,9 +177,14 @@ The reset profile is deliberately separate from each parameter's host-declared d
 ### Parallel dry/wet
 `master_mix` (0–100 %, default 100) blends the untouched input against the finished master output for parallel processing. It is applied **after** master volume.
 
-The dry copy is **latency-compensated**: it passes through a ring sized to `getLatencySamples() + 1` before
-the blend, so partial mixes sum in phase instead of comb-filtering. At 100 % wet the dry path is not summed
-at all, and at 0 % it bypasses the ring, so both extremes are bit-exact against the pre-fix behaviour.
+The dry copy continuously follows the fixed reported rack latency, including at **0% and
+100%** wet. Fully dry returns untouched input at that same delay, so host compensation stays
+correct. Mix targets ramp over 20 ms; RESET clears dry and wet timing histories together.
+
+Beta.6 also removes flat-EQ oversampling phase rotation using a linear-phase 2x FIR pair and
+compensates the pinned NAM captures' transport offsets/API polarity. Intentional band EQ,
+captured frequency-dependent phase and nonlinear processing remain. See
+[parallel mix repair](docs/specs/parallel-mix-phase-repair.md) for exact scope and tradeoffs.
 
 ---
 
@@ -231,13 +236,13 @@ Host output
 
 **Latency (beta.2).** Each colour stage reports its fixed neural/SRC delay in every mode,
 including CLEAN and bypass. The rack adds those four delays to the limiter's `ceil(0.0015·sr)-1`
-look-ahead. At 48 kHz the total is **135 samples / 2.81 ms**. Other rates use longer FIR
+look-ahead. In beta.6 the total is **247 samples / 5.15 ms** at 48 kHz. Other rates use longer FIR
 conversions; see the measured table in [NAM colour DSP](docs/dsp/nam-colour.md). This supersedes
 the earlier prototype latency estimates. The host is notified once during preparation.
 
 **Phase.** The partial dry/wet path is delayed by the reported rack latency. NAM captures have
 their own frequency-dependent phase response, which is intentional colour; latency compensation
-cannot remove that. At 0% wet, the existing untouched-input/no-added-delay behaviour is retained.
+cannot remove that. At 0% wet, untouched input is now delayed by the same reported latency as wet.
 
 ---
 
@@ -335,8 +340,8 @@ version display, taken from CMake so it cannot drift from the artefact:
 | prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.5   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -402,7 +407,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
 | `zychanstrip-nam-validation` | **Beta validation limits** | No listening sign-off for beta.5, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. Earlier beta listening feedback is recorded in the Enhance issues. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
-| `zychanstrip-mix-phase` | ~~**Dry/wet has a phase error**~~ **FIXED** | The dry copy is now delayed by `getLatencySamples()` through a pre-sized ring before the blend. 50 % mix with a bypassed rack reproduces the wet signal to 3e-8; the old code cancelled a 1 kHz tone by ~24 dB. Harness: *"50% mix sums latency-aligned dry"*. |
+| `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.6** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
 | `zychanstrip-autogain-order` | **Fixed in beta.5 — full-rack matching** | Matching now measures uncorrected output after all four modules and applies correction before master/mix. All 24 active NAM orders must match input RMS when headroom permits. Earlier low-spread permutation tests bypassed the other modules and did not detect the processor's half-correction error; they were insufficient evidence of correct absolute matching. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
 

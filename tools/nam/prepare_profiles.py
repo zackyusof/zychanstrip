@@ -8,6 +8,8 @@ root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1] if len(sys.argv)>1 else root/'build'/'nam-assets')
 out.mkdir(parents=True,exist_ok=True)
 models=[]
+delays=[]
+polarities=[]
 for item in json.loads((Path(__file__).with_name('profiles.json')).read_text()):
  p=out/(item['id']+'.nam')
  if not p.exists():subprocess.run(['curl','-fsSL','--retry','2',item['url'],'-o',str(p)],check=True)
@@ -17,5 +19,10 @@ for item in json.loads((Path(__file__).with_name('profiles.json')).read_text()):
  model=data['config']['submodels'][0]['model']
  model['sample_rate']=data['sample_rate']
  models.append(json.dumps(model,separators=(',',':')))
+ delays.append(float(item['transport_delay_samples']))
+ polarities.append(int(item['polarity']))
 (out/'EmbeddedNam.h').write_text('#pragma once\nstatic const char* const embeddedNam[] = {\n'+',\n'.join('R"NAMJSON('+m+')NAMJSON"' for m in models)+'\n};\n')
+with (out/'EmbeddedNam.h').open('a') as header:
+ header.write('static constexpr double embeddedNamDelay[] = {'+','.join(map(str,delays))+'};\n')
+ header.write('static constexpr double embeddedNamPolarity[] = {'+','.join(map(str,polarities))+'};\n')
 print('Prepared four hash-verified A2-Lite models for LOCAL evaluation only.')

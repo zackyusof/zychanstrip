@@ -15,6 +15,8 @@ public:
     static constexpr std::array<const char*, 10> bandIds { "eq_16k", "eq_8k", "eq_4k", "eq_2k", "eq_1k",
                                                          "eq_500", "eq_250", "eq_125", "eq_63", "eq_31" };
 
+    static constexpr int latencySamples() { return 31; }
+
     static double bandWidth (double db)
     {
         const double mu = std::pow (std::abs (db) * 0.08333333333, 2.0);
@@ -37,8 +39,8 @@ public:
         for (auto& channel : channels)
         {
             channel = {};
-            channel.up.prepare (sr * 2.0, sr * 0.49887);
-            channel.down.prepare (sr * 2.0, sr * 0.49887);
+            channel.up.prepare();
+            channel.down.prepare();
         }
         updateCoefficients();
     }
@@ -103,33 +105,41 @@ private:
             return sample + m1 * v1;
         }
     };
-    // Upstream bwLP(order=2): two biquads form a fourth-order Butterworth.
-    struct Butterworth
+    // Symmetric 63-tap halfband interpolation/decimation. The two filters
+    // together add exactly 31 native samples, without the old Butterworth
+    // phase rotation that cancelled a flat EQ against dry at partial mix.
+    struct Halfband
     {
-        struct Stage { double a = 0, d1 = 0, d2 = 0, w1 = 0, w2 = 0; };
-        std::array<Stage, 2> stages;
-        void prepare (double sr, double hz)
+        static constexpr int taps = 63, centre = 31;
+        std::array<double, taps> coefficients {};
+        std::array<double, taps * 2> history {};
+        int position = 0;
+        void prepare()
         {
-            const double a1 = std::tan (pi * hz / sr), a2 = a1 * a1;
-            for (size_t step = 0; step < stages.size(); ++step)
+            history.fill (0); position = 0;
+            double sum = 0;
+            for (int i = 0; i < taps; ++i)
             {
-                const double r = std::sin (pi * (2.0 * (double) step + 1.0) / 8.0);
-                const double ar2 = 2.0 * a1 * r, rs2 = 1.0 / (a2 + ar2 + 1.0);
-                stages[step] = { a2 * rs2, 2.0 * (1.0 - a2) * rs2, -(a2 - ar2 + 1.0) * rs2, 0, 0 };
+                const int offset = i - centre;
+                const double window = 0.42 - 0.5 * std::cos (2 * pi * i / (taps - 1))
+                                           + 0.08 * std::cos (4 * pi * i / (taps - 1));
+                coefficients[(size_t) i] = offset == 0 ? 0.5 : (offset % 2 == 0 ? 0.0
+                    : std::sin (0.5 * pi * offset) / (pi * offset) * window);
+                sum += coefficients[(size_t) i];
             }
+            for (auto& value : coefficients) value /= sum;
         }
         double tick (double sample)
         {
-            for (auto& stage : stages)
-            {
-                const double w0 = stage.d1 * stage.w1 + stage.d2 * stage.w2 + sample;
-                sample = stage.a * (w0 + 2.0 * stage.w1 + stage.w2);
-                stage.w2 = stage.w1; stage.w1 = w0;
-            }
-            return sample;
+            history[(size_t) position] = history[(size_t) (position + taps)] = sample;
+            const double* data = history.data() + position + 1;
+            double output = coefficients[centre] * data[centre];
+            for (int i = 0; i < taps; i += 2) output += coefficients[(size_t) i] * data[i];
+            if (++position == taps) position = 0;
+            return output;
         }
     };
-    struct Channel { Butterworth up, down; std::array<Peak, 10> bands; };
+    struct Channel { Halfband up, down; std::array<Peak, 10> bands; };
     void updateCoefficients()
     {
         for (auto& channel : channels)

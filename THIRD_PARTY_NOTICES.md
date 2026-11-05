@@ -483,3 +483,9 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
   This Source Code Form is "Incompatible With Secondary Licenses", as
   defined by the Mozilla Public License, v. 2.0.
+
+### Beta.6 EQ oversampling adaptation
+
+The adapted EQ560 retains the original 2x SVF/proportional-Q band law and MIT attribution.
+Its historical Butterworth oversampling pair is replaced by a 63-tap Blackman-windowed
+halfband FIR pair to give a fixed linear-phase delay suitable for parallel mixing.

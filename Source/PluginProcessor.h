@@ -68,7 +68,7 @@ private:
     std::atomic<bool> resetRequested { false };
     std::atomic<float> unityGainDb { 0.0f };
     RackMeters meters;
-    juce::AudioBuffer<float> dryBuffer;   // untouched input for the parallel mix
+    juce::AudioBuffer<float> dryBuffer;   // untouched input, delayed to the fixed rack latency
     // Latency compensation for the dry path: the wet signal is delayed by the rack's reported
     // latency, so summing a raw dry copy against it combs (or cancels) partial mixes. This ring
     // holds the most recent `latencySamples` frames of the dry signal.
@@ -83,6 +83,7 @@ private:
     std::atomic<float>* masterLevel = nullptr;
     std::atomic<float>* unityEnabled = nullptr;
     juce::SmoothedValue<float> masterGain { 1.0f };
+    juce::SmoothedValue<float> mixGain { 1.0f };
     juce::SmoothedValue<float> unityGain { 1.0f };
     double unityInputEnergy = 0.0;
     double unityOutputEnergy = 0.0;

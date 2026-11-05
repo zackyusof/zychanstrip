@@ -19,19 +19,23 @@ Complex referenceSvf (double sr, double frequency, double centre, double db)
 }
 Complex referenceResampler (double sr, double frequency)
 {
-    const auto t = std::tan (juce::MathConstants<double>::pi * (sr * 0.49887) / (2.0 * sr));
-    const auto z = std::exp (Complex (0, -2.0 * juce::MathConstants<double>::pi * frequency / (2.0 * sr)));
-    Complex result (1, 0);
-    for (int stage = 0; stage < 2; ++stage)
+    // Analytic Fourier sum of a 63-point Blackman-windowed halfband sinc.
+    // This replaces the historical IIR oversampler reference; the 2x SVF
+    // recurrence and proportional-Q law are unchanged.
+    Complex response {};
+    double dc = 0;
+    for (int n = 0; n < 63; ++n)
     {
-        const auto r = std::sin (juce::MathConstants<double>::pi * (2.0 * stage + 1.0) / 8.0);
-        const auto denominator = t * t + 2.0 * t * r + 1.0;
-        const auto a = t * t / denominator;
-        const auto d1 = 2.0 * (1.0 - t * t) / denominator;
-        const auto d2 = -(t * t - 2.0 * t * r + 1.0) / denominator;
-        result *= a * (1.0 + 2.0 * z + z * z) / (1.0 - d1 * z - d2 * z * z);
+        const double t = n - 31;
+        const double window = 0.42 - 0.5 * std::cos (2 * juce::MathConstants<double>::pi * n / 62)
+                                  + 0.08 * std::cos (4 * juce::MathConstants<double>::pi * n / 62);
+        const double sinc = t == 0 ? 0.5 : std::sin (0.5 * juce::MathConstants<double>::pi * t)
+                                                  / (juce::MathConstants<double>::pi * t);
+        const double coefficient = sinc * window;
+        dc += coefficient;
+        response += coefficient * std::exp (Complex (0, -juce::MathConstants<double>::pi * frequency * n / sr));
     }
-    return result;
+    return response / dc;
 }
 double referenceEqMagnitude (double sr, double frequency, const std::array<float, 10>& gains)
 {
@@ -90,7 +94,7 @@ void eqTests()
                 const auto expected = referenceEqMagnitude (sr, eqFrequencies[band], gains);
                 const auto error = 20.0 * std::log10 (measured / expected);
                 check (std::isfinite (error) && std::abs (error) < 0.025,
-                       "EQ560 upstream response " + juce::String (eqFrequencies[band]) + "Hz "
+                       "EQ560 2x SVF / linear-phase response " + juce::String (eqFrequencies[band]) + "Hz "
                            + juce::String (db) + "dB @" + juce::String (sr) + " error=" + juce::String (error, 4) + "dB");
             }
         }

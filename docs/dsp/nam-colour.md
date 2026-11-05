@@ -53,14 +53,14 @@ ALGO/CLEAN have matched integer delays and mode changes crossfade for 20 ms. The
 remain warm in all modes. CLEAN bypasses SRC filtering and colour and is an exact delayed signal;
 NAM's own frequency-dependent phase is retained. No promise of phase-null against CLEAN.
 
-| Host rate | Colour delay per module | Total rack samples incl. limiter | Total ms |
+| Host rate | Colour delays API/opto/FET/tape | Total rack samples incl. limiter | Total ms |
 |---|---:|---:|---:|
-| 44.1 kHz | 115 | 526 | 11.927 |
-| 48 kHz | 16 | 135 | 2.813 |
-| 88.2 kHz | 211 | 976 | 11.066 |
-| 96 kHz | 228 | 1055 | 10.990 |
-| 176.4 kHz | 420 | 1944 | 11.020 |
-| 192 kHz | 456 | 2111 | 10.995 |
+| 44.1 kHz | 130/121/123/115 | 586 | 13.288 |
+| 48 kHz | 32/22/75/16 | 247 | 5.146 |
+| 88.2 kHz | 241/223/227/211 | 1065 | 12.075 |
+| 96 kHz | 260/240/245/228 | 1147 | 11.948 |
+| 176.4 kHz | 479/443/452/420 | 2089 | 11.842 |
+| 192 kHz | 520/480/490/456 | 2264 | 11.792 |
 
 These replace the earlier short-Lanczos prototype estimates. FIR lengths are longer for improved
 rejection. Delay is reported once in prepareToPlay and remains constant across mode, order and
@@ -175,3 +175,17 @@ budget at 192 kHz with the extra reference model. Sinc design, double precision 
 48 kHz model rate are unchanged. The table above reflects the new per-rate delays;
 48/44.1 kHz delay is unchanged, while 96/192 kHz add 64/192 total rack samples. Latency
 is still reported once at preparation and identical across every mode/order/bypass.
+
+## Beta.6 parallel mix timing — current behavior
+
+This supersedes earlier dry-path/oversampling/capture timing descriptions. EQ560 still runs
+its SVF at 2x, with a symmetric 63-tap FIR pair adding 31 native samples and matching bypass
+padding. The pinned API capture is polarity-normalized; API/opto/FET native transport
+offsets of 16/6/8.5 samples are advanced within fixed causal padding in every mode. The FET
+fractional offset uses the existing double-precision sinc. Tape residual behavior is unchanged.
+
+The dry ring advances continuously at 0/100% as well as partial mix. Even fully dry now
+returns untouched input at the fixed reported latency; RESET clears both wet/dry histories.
+Mix targets ramp 20 ms, and Auto Gain/UNITY compare aligned input time intervals. Phase from
+intentional EQ bands/captured analog response remains; this is not arbitrary phase removal.
+See [parallel mix repair](../specs/parallel-mix-phase-repair.md) for causes, tradeoffs and tests.

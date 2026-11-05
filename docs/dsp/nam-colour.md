@@ -57,10 +57,10 @@ NAM's own frequency-dependent phase is retained. No promise of phase-null agains
 |---|---:|---:|---:|
 | 44.1 kHz | 115 | 526 | 11.927 |
 | 48 kHz | 16 | 135 | 2.813 |
-| 88.2 kHz | 197 | 920 | 10.431 |
-| 96 kHz | 212 | 991 | 10.323 |
-| 176.4 kHz | 377 | 1772 | 10.045 |
-| 192 kHz | 408 | 1919 | 9.995 |
+| 88.2 kHz | 211 | 976 | 11.066 |
+| 96 kHz | 228 | 1055 | 10.990 |
+| 176.4 kHz | 420 | 1944 | 11.020 |
+| 192 kHz | 456 | 2111 | 10.995 |
 
 These replace the earlier short-Lanczos prototype estimates. FIR lengths are longer for improved
 rejection. Delay is reported once in prepareToPlay and remains constant across mode, order and
@@ -165,3 +165,13 @@ cancels their common linear response. True input gain still affects level-depend
 An extra stereo model increases CPU; SRC, bypass timing and fixed reported delay are unchanged.
 See [Enhance core repair](../specs/enhance-core-repair.md) for formula, ceiling semantics,
 compatibility changes and processor-level regression coverage. Beta.5 listening sign-off is pending.
+
+### Beta.5 adapter performance correction
+
+The host adapter is now max(16, ceil(16 × hostRate/48000)) frames, bounded to 128 for
+the supported 8–384 kHz range. This retains approximately 16 native model samples per
+process call above 48 kHz, avoiding the tiny-batch overhead that exceeded a real-time
+budget at 192 kHz with the extra reference model. Sinc design, double precision and
+48 kHz model rate are unchanged. The table above reflects the new per-rate delays;
+48/44.1 kHz delay is unchanged, while 96/192 kHz add 64/192 total rack samples. Latency
+is still reported once at preparation and identical across every mode/order/bypass.

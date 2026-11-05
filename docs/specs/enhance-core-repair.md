@@ -34,9 +34,9 @@ fed corrected rack output back into the same ratio, mathematically leaving half 
   rates. This is a nonlinear residual, not a guarantee of harmonic-only output or perfectly
   flat response at every drive level. Real upstream/manual gain continues to drive the models.
 - ALGO/CLEAN colour laws, parameter IDs/ranges/defaults, bypass timing, packed order checking,
-  read-only final metering tap and fixed reported latency remain intact. The extra matched
+  read-only final metering tap and fixed reported latency across modes/order/bypass remain intact. The extra matched
   reference model has independent stereo state, is prepared off-thread and remains warm like
-  the existing models. CPU rises; no additional SRC or reported delay is introduced.
+  the existing models. Native 48 kHz CPU rises from the extra reference model. Above 48 kHz, the adapter batches approximately 16 native model samples per call, avoiding severe tiny-batch overhead. No additional SRC is introduced; fixed reported latency rises by 64 rack samples at 96 kHz and 192 at 192 kHz. Sinc filtering/double precision are unchanged.
 
 ## Validation
 

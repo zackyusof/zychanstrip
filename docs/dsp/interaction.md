@@ -242,6 +242,6 @@ while the existing positive `lim_gain` automation values stay compatible.
 NAM Enhance adds 0–30% of a matched-capture nonlinear residual, rather than blending the
 full tape EQ/phase response. Identical models run at x and 0.5x; subtracting twice the latter
 cancels their common linear response. True input gain still affects level-dependent colour.
-An extra stereo model increases CPU; SRC, bypass timing and fixed reported delay are unchanged.
+An extra stereo model increases native-rate CPU. Above 48 kHz, larger fixed adapter batches reduce neural call overhead; rack latency increases by 64 samples at 96 kHz and 192 at 192 kHz, and remains constant across mode/order/bypass. Sinc design and double precision are unchanged.
 See [Enhance core repair](../specs/enhance-core-repair.md) for formula, ceiling semantics,
 compatibility changes and processor-level regression coverage. Beta.5 listening sign-off is pending.

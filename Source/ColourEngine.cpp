@@ -12,7 +12,7 @@
 
 namespace rack {
 namespace {
-constexpr int quantum = 16, capacity = 8192, phases = 1024;
+constexpr int maxQuantum = 128, capacity = 8192, phases = 1024;
 constexpr double pi = 3.14159265358979323846;
 double dot(const double* a,const double* b,int n)noexcept {
 #if defined(__APPLE__)
@@ -79,13 +79,13 @@ struct ColourEngine::Impl {
     std::array<std::array<double,1024>,2> referenceInput{}, referenceOutput{};
     std::array<std::array<double,capacity*2>,2> input{}, neural{}, clean{}, algorithm{};
     std::array<std::array<double,1024>,2> modelInput{}, modelOutput{};
-    std::array<std::array<float,quantum>,2> pendingClean{}, pendingAlgo{}, pendingNeural{};
-    std::array<std::array<std::array<float,quantum>,2>,3> ready{};
-    std::array<float,quantum> pendingAmount{}, readyAmount{};
+    std::array<std::array<float,maxQuantum>,2> pendingClean{}, pendingAlgo{}, pendingNeural{};
+    std::array<std::array<std::array<float,maxQuantum>,2>,3> ready{};
+    std::array<float,maxQuantum> pendingAmount{}, readyAmount{};
     std::array<float,capacity> amounts{};
     Sinc toModel,toHost;
     double rate=48000,ratio=1,preGain=1,postGain=1,dc=0;
-    int delay=0,position=0,fadeLength=960,fadeRemaining=0,lastMode=0;
+    int quantum=16,delay=0,position=0,fadeLength=960,fadeRemaining=0,lastMode=0;
     int64_t host=0,nextModel=0;
     std::array<float,3> weights{1,0,0},steps{};
     std::array<float,2> latestClean{};
@@ -141,6 +141,10 @@ ColourEngine::~ColourEngine()=default;
 void ColourEngine::prepare(double sr,int model,int mode) {
     if(sr<8000 || sr>384000) throw std::runtime_error("NAM colour supports 8–384 kHz host rates");
     auto& x=*impl; x.rate=sr;x.ratio=sr/48000.;x.converted=std::abs(sr-48000)>0.01;
+    // Keep at least 16 model-rate samples per processing call. Fixed 16-host-
+    // sample batches shrink to four native samples at 192 kHz, making per-call
+    // neural overhead dominate. The adapter delay stays fixed for each prepare.
+    x.quantum=std::clamp((int)std::ceil(16*x.ratio),16,maxQuantum);
     if(x.converted){x.toModel.prepare(sr,48000);x.toHost.prepare(48000,sr);}
     x.delay=x.converted?(int)std::ceil(x.toModel.half+(x.toHost.half+2)*x.ratio):0;
     x.fadeLength=std::max(1,(int)(0.02*sr));
@@ -182,7 +186,7 @@ void ColourEngine::reset() noexcept {
     x.readyAmount.fill(0);x.amounts.fill(0);
     x.weights={0,0,0};x.weights[(size_t)x.lastMode]=1;
 }
-int ColourEngine::latency()const noexcept{return impl->delay+quantum;}
+int ColourEngine::latency()const noexcept{return impl->delay+impl->quantum;}
 float ColourEngine::delayedClean(int c)const noexcept{return impl->latestClean[(size_t)c];}
 void ColourEngine::frame(const float* clean,const float* algo,float* output,int channels,int mode,float amount,float namDrive)noexcept {
     auto& x=*impl;mode=std::clamp(mode,0,2);
@@ -198,6 +202,6 @@ void ColourEngine::frame(const float* clean,const float* algo,float* output,int 
         x.pendingNeural[c][x.position]=(c<channels?clean[c]:clean[0])*namDrive;
     }
     x.pendingAmount[x.position]=amount;
-    if(++x.position==quantum){x.render();x.position=0;}
+    if(++x.position==x.quantum){x.render();x.position=0;}
 }
 }

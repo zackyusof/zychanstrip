@@ -14,7 +14,7 @@ has been published.
 
 - Correct full-processor Auto Gain's half-correction error by measuring uncorrected output and applying matching after every rack module, before master/mix. Keep standalone module matching and ceiling safety.
 - Correct physical Threshold direction and show ceiling minus input gain, preserving all existing host parameter IDs/ranges/defaults and stored values.
-- Replace NAM's muffling full tape blend with a bounded level-dependent residual from identical captures at x and 0.5x. Common linear EQ/phase cancels; dry remains intact. An extra stereo reference model increases CPU without adding latency.
+- Replace NAM's muffling full tape blend with a bounded level-dependent residual from identical captures at x and 0.5x. Common linear EQ/phase cancels; dry remains intact. An extra stereo reference model increases native-rate CPU. Keep at least 16 native model samples per adapter batch to recover high-rate CPU headroom; this adds 64/192 fixed rack samples at 96/192 kHz, with no change at 48 kHz.
 - Add actual MATCH correction / CEILING headroom status and processor-level threshold, irregular-block, headroom and harmonic regressions. Active 24-order tests now require actual level matching, not just bounded audio.
 
 ### Fixed — 1.1.1-beta.4 local evaluation (2026-11-05)

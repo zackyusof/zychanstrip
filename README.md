@@ -30,7 +30,7 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
 - Four drag-reorderable modules: 10-band graphic EQ, fast FET compression, opto levelling,
   and Enhance with look-ahead brick-wall limiting, ceiling, release and linked auto gain.
 - One master **COLOUR — ALGO / NAM / CLEAN** selector, visible on RACK and METER pages,
-  host-automatable and saved with sessions. ALGO preserves existing saturation; NAM uses
+  host-automatable and saved with sessions. ALGO uses algorithmic saturation; NAM uses
   fixed embedded hardware captures; CLEAN removes added colour while retaining EQ, gain,
   compression and limiting. Twenty-millisecond mode crossfades; constant mode/bypass latency.
 - Four author-supplied A2-Lite profiles: API 512c gain 3, IGS ONE LA with zero gain reduction,
@@ -339,11 +339,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.1.1` | neutral grey |
-| prerelease | `v1.1.1-beta.2` | amber |
+| prerelease | `v1.1.1-beta.7` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7  # v1.1.1-beta.7
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7   # …-beta.7
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -364,7 +364,7 @@ python3 tools/build_snapshot.py
 ./build/snapshot/snapshot <output-dir>
 ```
 
-It runs **259 checks** and writes PNGs to `<output-dir>`:
+It runs **589 checks** and writes PNGs to `<output-dir>`:
 
 - **DSP** (`tools/dsp_checks.h`): EQ band response, limiter behaviour, auto-gain, channel handling, master gain ramp, state roundtrip, legacy-session migration, dry/wet mix law.
 - **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment inside every panel at 864×608 / 1080×760 / 1620×1140, reorder by grip drag, aspect-ratio lock.
@@ -410,7 +410,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
 | `zychanstrip-nam-validation` | **Beta validation limits** | No listening sign-off for beta.5, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. Earlier beta listening feedback is recorded in the Enhance issues. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
-| `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.7** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
+| `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.6** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
 | `zychanstrip-autogain-order` | **Fixed in beta.5 — full-rack matching** | Matching now measures uncorrected output after all four modules and applies correction before master/mix. All 24 active NAM orders must match input RMS when headroom permits. Earlier low-spread permutation tests bypassed the other modules and did not detect the processor's half-correction error; they were insufficient evidence of correct absolute matching. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
 
@@ -456,4 +456,4 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current beta target: **1.1.1-beta.2** (user-confirmed). No stable release is authorized; promotion remains the user's decision.
+Current local beta: **1.1.1-beta.7**. No stable release is authorized; promotion remains the user's decision.

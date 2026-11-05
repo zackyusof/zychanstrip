@@ -27,10 +27,11 @@ placing processing after it can change peaks, as before.
 
 All four profiles use their author-provided A2-Lite WaveNet. For stereo, both channels use the
 same weights and independent state. No loader, network, sign-in, file access or JSON parsing
-occurs during plugin processing. At preparation each model is calibrated at a 1 kHz small-signal
-reference, then prewarmed; its steady DC is removed. This is fixed gain compensation, not a
-running loudness follower. Opto and tape use conservative input scaling to avoid excessive drive
-with existing makeup levels. The effect at other levels/frequencies follows the capture.
+occurs during plugin processing. At preparation each model is calibrated at its 1 kHz nominal
+reference (Console/FET −18 dBFS, Opto/tape −12 dBFS), then prewarmed; its steady DC is
+removed. This is fixed gain compensation, not a running loudness follower. Opto and tape
+use −6 dB input scaling into the shared −18 dBFS software colour coordinate; physical
+capture input calibration remains unknown. The effect at other levels/frequencies follows the capture.
 
 | Module | Capture | Creator | Licence |
 |---|---|---|---|

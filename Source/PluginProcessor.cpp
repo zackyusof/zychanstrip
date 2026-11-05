@@ -324,6 +324,7 @@ void ZychanStripProcessor::setOrder (const std::array<int, NumModules>& o)
 void ZychanStripProcessor::resetToDefaults()
 {
     // The Hardware Neutral Starting Profile is separate from APVTS defaults for compatibility.
+    // Use explicit 0 dB manual gains; hardware knob positions are not dB gain values.
     // Values are in each parameter's native units; the profile does not claim universal hardware
     // calibration where the original controls have no fixed numeric unity point.
     static const std::array<std::pair<const char*, float>, 40> resetProfile {{

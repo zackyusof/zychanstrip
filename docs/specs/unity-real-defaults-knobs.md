@@ -1,5 +1,7 @@
 # SPEC — UNITY level matching, hardware reset defaults and reference knobs
 
+> Beta.7 supersedes the original RESET gain choices: Opto Gain 0 and FET input/output 0 dB provide explicit software unity manual gain. The old Gain 50 claim was unsupported. See [UA operating reference](ua-operating-reference.md); the phase records below are historical.
+
 | Field | Value |
 | --- | --- |
 | Slug | `unity-real-defaults-knobs` |

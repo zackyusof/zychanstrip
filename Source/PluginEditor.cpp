@@ -1845,7 +1845,7 @@ protected:
 
     void paintFaceExtra (Graphics& g) override
     {
-        caption (g, "INPUT GAIN",      { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 30, 120, 24 }, 13.0f);
+        caption (g, "OUTPUT GAIN",      { gain.slider.getBounds().getCentreX() - 60, gain.slider.getY() - 30, 120, 24 }, 13.0f);
         caption (g, "PEAK REDUCTION", { peak.slider.getBounds().getCentreX() - 65, peak.slider.getY() - 30, 130, 24 }, 13.0f);
 
         // Lower vintage sub-plate filling empty negative space with authentic nomenclature

@@ -6,7 +6,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.6-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.7-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.6 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.7 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -54,6 +54,8 @@ For routing, actual latency/CPU measurements and validation limits see
 [NAM colour DSP](docs/dsp/nam-colour.md) and [implementation specification](docs/specs/embedded-nam-colour.md).
 This beta has not been auditioned by a human and is not a stable release.
 
+Beta.7 applies [UA operating references](docs/specs/ua-operating-reference.md) while preserving the extended rack controls. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values.
+
 ## Contents
 
 - [Quick start for a new agent](#quick-start-for-a-new-agent)
@@ -82,7 +84,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -164,7 +166,7 @@ Its four fader channels (threshold, ceiling, release, enhance) sit inside one sh
 
 `RESET` in the header (and `RESET` on the metering page) restores the documented **Hardware Neutral Starting Profile** in one action:
 
-* broad EQs and colour controls return to neutral, the API threshold/ratio/attack/release return to 0 dB / 3:1 / 10 ms / 200 ms, LA-2A peak reduction is at minimum and gain at 50% (an approximate unity-gain starting point), 1176 input is at 12 dB with output at 0 dB and attack/release at 3/4, while bypasses, limiter, master and dry/wet return to the profile’s neutral/start values;
+* broad EQs and colour controls return to neutral, the API threshold/ratio/attack/release return to 0 dB / 3:1 / 10 ms / 200 ms, LA-2A peak reduction and makeup gain are at minimum (0 dB makeup), 1176 input is at 0 dB with output at 0 dB and attack/release at 3/4, while bypasses, limiter, master and dry/wet return to the profile’s neutral/start values;
 * the rack order returns to `[0,2,1,3]` and the faceplates animate back to those slots;
 * all metering (peaks, holds, RTA, scope, correlation) is cleared.
 
@@ -236,7 +238,7 @@ Host output
 
 **Latency (beta.2).** Each colour stage reports its fixed neural/SRC delay in every mode,
 including CLEAN and bypass. The rack adds those four delays to the limiter's `ceil(0.0015·sr)-1`
-look-ahead. In beta.6 the total is **247 samples / 5.15 ms** at 48 kHz. Other rates use longer FIR
+look-ahead. In beta.7 the total is **247 samples / 5.15 ms** at 48 kHz. Other rates use longer FIR
 conversions; see the measured table in [NAM colour DSP](docs/dsp/nam-colour.md). This supersedes
 the earlier prototype latency estimates. The host is notified once during preparation.
 
@@ -340,8 +342,8 @@ version display, taken from CMake so it cannot drift from the artefact:
 | prerelease | `v1.1.1-beta.2` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6  # v1.1.1-beta.2
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.6   # …-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7  # v1.1.1-beta.2
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7   # …-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -400,7 +402,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `zychanstrip-operating-level-calibration` | **Open — hardware operating levels unverified** | Existing hardware-neutral research was only partially applied. RESET Opto Gain 50 maps to +15 dB; NAM uses −40 dBFS-peak / 1 kHz gain normalization and fixed −15/−9 dB opto/tape input scaling, without a recorded physical operating-level calibration. Gain matching and the 559 tests do not establish hardware-correct drive. See [audit](docs/dsp/operating-level-audit.md). |
+| `zychanstrip-operating-level-calibration` | **UA convention applied in beta.7; physical capture calibration open** | Per-module −18/−12 dBFS references, fixed nominal gain calibration and explicit unity RESET gains replace arbitrary trims and the +15 dB Opto RESET. Capture converter/flux calibration is absent, so exact hardware transfer accuracy remains unverified. See [specification](docs/specs/ua-operating-reference.md). |
 | `zychanstrip-autogain-feedback` | **Fixed in beta.5 — uncorrected rack measurement** | Full-processor Auto Gain left +3/+6/+9 dB from +6/+12/+18 dB input drive: its energy reference included its own correction. Matching now occurs after the complete rack, before master/mix, using uncorrected output. The Threshold fader direction/readout is corrected while host `lim_gain` semantics remain unchanged. MATCH reports actual applied correction; CEILING indicates unavailable headroom. See the Enhance core repair spec. |
 | `zychanstrip-nam-enhance-curve` | **Beta.4 mitigated; beta.5 removes full tape blend** | Human feedback found beta.3 NAM Enhance uneven/unnatural. A production tape-engine sweep confirmed dips/rebounds from varying both +12 dB drive and a full dry/NAM blend; at 0.1-peak input, 16 kHz fell to -9.89 dB at 75% then rose to -5.71 dB at 100%. Beta.4 limited that blend but still muffled the signal. Beta.5 adds a bounded nonlinear residual from matched captures at x and 0.5x to aligned dry, cancelling their common linear EQ/phase response while retaining actual drive interaction. ALGO/CLEAN retain their prior laws. Frequency/level sweeps and active-rack automation regressions cover the change; human audition of beta.5 is pending. |
 | `zychanstrip-enhance-slider-steps` | **Fixed in beta.3 — slider ramps** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). Beta.3 adds 20 ms sample ramps for all four sliders (final ceiling safety remains immediate) and delays the ungained Auto Gain reference directly. New regression checks exercise forward/reverse jumps at 44.1/48/96 kHz in all modes with 32/512-frame blocks. Human listening remains to be confirmed. |
@@ -408,7 +410,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `zychanstrip-au-discovery` | **System discovery unresolved on this host** | `auval` cannot find this component after a registrar rescan. The direct packaged-AU test passes open, initialize and real rendering in all three colour modes at 44.1/48/96/192 kHz. DAW discovery/rescan remains to be confirmed. |
 | `zychanstrip-nam-rights` | **Local evaluation only** | API/IGS profiles use T3K. Do not distribute model files or this beta binary without creator permission. Source/manifest are shareable. |
 | `zychanstrip-nam-validation` | **Beta validation limits** | No listening sign-off for beta.5, hardware null reference, live DAW automation soak, or audio-thread allocation instrumentation yet. Earlier beta listening feedback is recorded in the Enhance issues. NAM stays warm in all modes; CPU is not reduced by CLEAN/ALGO. Longer SRC latency outside 48 kHz is deliberate. |
-| `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.6** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
+| `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.7** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
 | `zychanstrip-autogain-order` | **Fixed in beta.5 — full-rack matching** | Matching now measures uncorrected output after all four modules and applies correction before master/mix. All 24 active NAM orders must match input RMS when headroom permits. Earlier low-spread permutation tests bypassed the other modules and did not detect the processor's half-correction error; they were insufficient evidence of correct absolute matching. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
 

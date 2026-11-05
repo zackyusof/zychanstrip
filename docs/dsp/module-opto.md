@@ -150,3 +150,7 @@ transparent at normal levels and only bites on peaks — a deliberately late-ons
 * **RESET** zeroes `fast` and `slow` (`:245`), so the leveller snaps back to no reduction
   instantly rather than gliding down — a deliberate consequence of
   `Source/PluginProcessor.cpp:142-148`.
+
+## Beta.7 operating reference
+
+See [UA reference contract](../specs/ua-operating-reference.md): Console/FET use −18 dBFS, Opto/tape −12 dBFS. Fixed colour input/return calibration preserves upstream drive and all 24 rack orders. Digital thresholds/ceiling, Auto Gain, UNITY, parallel mix and constant latency retain their semantics. Opto/FET RESET manual gains are now explicitly 0 dB. Earlier calibration/reset statements on this page are historical. Physical capture calibration remains unverified.

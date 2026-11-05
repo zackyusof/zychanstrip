@@ -61,3 +61,7 @@ cancels their common linear response. True input gain still affects level-depend
 An extra stereo model increases native-rate CPU. Above 48 kHz, larger fixed adapter batches reduce neural call overhead; rack latency increases by 64 samples at 96 kHz and 192 at 192 kHz, and remains constant across mode/order/bypass. Sinc design and double precision are unchanged.
 See [Enhance core repair](../specs/enhance-core-repair.md) for formula, ceiling semantics,
 compatibility changes and processor-level regression coverage. Beta.5 listening sign-off is pending.
+
+## Beta.7 operating reference
+
+See [UA reference contract](../specs/ua-operating-reference.md): Console/FET use −18 dBFS, Opto/tape −12 dBFS. Fixed colour input/return calibration preserves upstream drive and all 24 rack orders. Digital thresholds/ceiling, Auto Gain, UNITY, parallel mix and constant latency retain their semantics. Opto/FET RESET manual gains are now explicitly 0 dB. Earlier calibration/reset statements on this page are historical. Physical capture calibration remains unverified.

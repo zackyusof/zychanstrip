@@ -133,3 +133,7 @@ The README calls the bank "4:1 / 8:1 / 12:1 / 20:1 / ALL". **"ALL" is `30:1`, no
   Limiter]` the FET's 3rd-harmonic content is what the Opto's tube stage is fed.
 * **RESET** zeroes `env` (`:296`) — the compressor forgets its gain reduction and snaps back
   to unity rather than releasing.
+
+## Beta.7 operating reference
+
+See [UA reference contract](../specs/ua-operating-reference.md): Console/FET use −18 dBFS, Opto/tape −12 dBFS. Fixed colour input/return calibration preserves upstream drive and all 24 rack orders. Digital thresholds/ceiling, Auto Gain, UNITY, parallel mix and constant latency retain their semantics. Opto/FET RESET manual gains are now explicitly 0 dB. Earlier calibration/reset statements on this page are historical. Physical capture calibration remains unverified.

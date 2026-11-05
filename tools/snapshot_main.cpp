@@ -83,6 +83,7 @@ juce::Component* findNamed (juce::Component& root, const juce::String& name)
 #include "nam_enhance_checks.h"
 #include "enhance_contract_checks.h"
 #include "mix_checks.h"
+#include "operating_level_checks.h"
 
 void audioTests()
 {
@@ -444,8 +445,8 @@ void resetTests()
         { "con_bypass", 0 }, { "con_hpf", 20 }, { "con_lf", 0 }, { "con_lmf_f", 600 },
         { "con_lmf", 0 }, { "con_hmf_f", 3000 }, { "con_hmf", 0 }, { "con_hf", 0 },
         { "con_thresh", 0 }, { "con_ratio", 3 }, { "con_attack", 10 }, { "con_release", 200 },
-        { "con_out", 0 }, { "opto_bypass", 0 }, { "opto_peak", 0 }, { "opto_gain", 50 },
-        { "opto_mode", 0 }, { "fet_bypass", 0 }, { "fet_input", 12 }, { "fet_output", 0 },
+        { "con_out", 0 }, { "opto_bypass", 0 }, { "opto_peak", 0 }, { "opto_gain", 0 },
+        { "opto_mode", 0 }, { "fet_bypass", 0 }, { "fet_input", 0 }, { "fet_output", 0 },
         { "fet_attack", 3 }, { "fet_release", 4 }, { "fet_ratio", 0 }, { "lim_bypass", 0 },
         { "lim_gain", 0 }, { "lim_ceiling", -0.3f }, { "lim_release", 100 }, { "lim_enhance", 0 },
         { "master_level", 0 }, { "master_mix", 100 }, { "lim_auto_gain", 1 }, { "unity", 0 },
@@ -828,6 +829,7 @@ public:
         const auto output = args.isEmpty() ? juce::File::getCurrentWorkingDirectory()
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
+        operatingLevelTests();
         parallelMixTests();
         colourTests();
         namEnhanceTests();

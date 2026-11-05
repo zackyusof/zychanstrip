@@ -51,3 +51,7 @@ stages are still being driven at an inappropriate level.
 The existing 559-check suite verifies implemented arithmetic, gain matching, timing,
 parameter/state compatibility and sampled signal behavior. It does **not** validate
 hardware operating levels. Accurate per-module operating-level calibration remains open.
+
+## Beta.7 follow-up
+
+[UA reference implementation](../specs/ua-operating-reference.md) applies the documented per-family digital operating convention and replaces the unsupported RESET unity claim. The table above describes beta.6. Capture converter calibration and exact hardware transfer validation remain open; adopting UA reference levels does not resolve that missing data.

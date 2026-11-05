@@ -189,3 +189,7 @@ returns untouched input at the fixed reported latency; RESET clears both wet/dry
 Mix targets ramp 20 ms, and Auto Gain/UNITY compare aligned input time intervals. Phase from
 intentional EQ bands/captured analog response remains; this is not arbitrary phase removal.
 See [parallel mix repair](../specs/parallel-mix-phase-repair.md) for causes, tradeoffs and tests.
+
+## Beta.7 operating reference
+
+See [UA reference contract](../specs/ua-operating-reference.md): Console/FET use −18 dBFS, Opto/tape −12 dBFS. Fixed colour input/return calibration preserves upstream drive and all 24 rack orders. Digital thresholds/ceiling, Auto Gain, UNITY, parallel mix and constant latency retain their semantics. Opto/FET RESET manual gains are now explicitly 0 dB. Earlier calibration/reset statements on this page are historical. Physical capture calibration remains unverified.

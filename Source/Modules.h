@@ -10,6 +10,7 @@
 #include <vector>
 #include "Eq560.h"
 #include "ColourEngine.h"
+#include "OperatingLevels.h"
 
 namespace rack
 {
@@ -236,6 +237,8 @@ public:
         outPeak.store (0.0f);
         colourMode = apvts.getRawParameterValue ("colour_mode");
         const int model = prefix == "con_" ? 0 : prefix == "opto_" ? 1 : prefix == "fet_" ? 2 : 3;
+        circuitScale = operating::inputScale(model);
+        circuitReturn = 1.0f / circuitScale;
         colour.prepare (sr, model, (int) colourMode->load());
         reset();
     }
@@ -282,6 +285,7 @@ protected:
     void colourFrame(float* raw, float* algo, float* out, int channels, float amount=1.0f, bool bypass=false, float namDrive=1.0f) {
         colour.frame(raw,algo,out,channels,bypass?2:(int)colourMode->load(std::memory_order_relaxed),amount,namDrive);
     }
+    float circuitScale = 1.0f, circuitReturn = 1.0f;
     ColourEngine colour;
     std::atomic<float>* colourMode=nullptr;
 
@@ -487,7 +491,7 @@ protected:
 
             const float g = dbToGainFast (-applied) * makeup;
             float raw[2]{}, shaped[2]{}, coloured[2]{};
-            for (int ch=0;ch<nch;++ch) { raw[ch]=data[ch][i]*g; shaped[ch]=optoTubeColor(raw[ch]); }
+            for (int ch=0;ch<nch;++ch) { raw[ch]=data[ch][i]*g; shaped[ch]=optoTubeColor(raw[ch]*circuitScale)*circuitReturn; }
             colourFrame(raw,shaped,coloured,nch);
             for (int ch=0;ch<nch;++ch) data[ch][i]=coloured[ch];
         }
@@ -790,7 +794,7 @@ private:
                 // CLEAN disables Enhance's colour drive; limiter gain remains active.
                 raw[ch]=dry*manualGain;
                 const float driven=active?dry*drive:dry;
-                shaped[ch]=active?analogMasterSaturation(driven,enh):raw[ch];
+                shaped[ch]=active?analogMasterSaturation(driven*circuitScale,enh)*circuitReturn:raw[ch];
             }
             // NAM supplies the tape's level-dependent residual, not its complete
             // EQ/phase response. Add a bounded amount to dry; actual input gain

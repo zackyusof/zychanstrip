@@ -225,3 +225,9 @@ First tagged release (`v1.0`, commit `abc9872`).
 - `zychanstrip-rta-averaging` — the RTA averaging control is cosmetic.
 - `zychanstrip-vu-ppm` — analog VU/PPM panel not built.
 - `zychanstrip-dupe-au` — duplicate AU install (closed in 1.0.1).
+
+## 1.1.1-beta.7 — 2026-11-05
+
+- Apply UA family nominal references (Console/FET −18 dBFS; Opto/tape −12 dBFS) to colour input and fixed nominal output calibration, preserving extended routing, gains, Enhance residual, mix, matching and latency.
+- Correct RESET Opto/FET manual gains to 0 dB; label Opto OUTPUT GAIN. Parameter IDs/ranges/defaults and saved values remain unchanged.
+- Add nominal renderer level sweeps and all-order interactions across modes, mix and UNITY; document missing physical capture calibration.

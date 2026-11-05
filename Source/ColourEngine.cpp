@@ -1,3 +1,4 @@
+#include "OperatingLevels.h"
 #include "ColourEngine.h"
 #if defined(__APPLE__)
 #include <Accelerate/Accelerate.h>
@@ -158,7 +159,7 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     // CLEAN/ALGO/bypass receive the same padding, so every mode reports one delay.
     x.delay=conversionDelay+(int)std::ceil(x.captureAdvance*x.ratio);
     x.fadeLength=std::max(1,(int)(0.02*sr));
-    x.preGain=model==1?0.177827941: model==3?0.354813389:1.0;
+    x.preGain=operating::inputScale(model);
     x.nonlinearOnly=model==3;
     const auto config=nlohmann::json::parse(embeddedNam[model]);
     // Reference the fixed WaveNet factory explicitly. Static-archive AU linking
@@ -168,12 +169,13 @@ void ColourEngine::prepare(double sr,int model,int mode) {
     const auto weights=config.at("weights").get<std::vector<float>>();
     for(auto& m:x.models){m=parsed->create(weights,48000);m->Reset(48000,1024);}
     for(auto& m:x.referenceModels){m.reset();if(x.nonlinearOnly){m=parsed->create(weights,48000);m->Reset(48000,1024);m->prewarm();}}
-    // Fixed small-signal calibration, not a running loudness normalizer: inter-module
-    // drive and level-dependent harmonic behaviour remain intact.
+    // Fixed unity AC gain at the module nominal reference, not a running loudness
+    // normalizer. Upstream drive and nonlinear behaviour remain intact.
+    const double calibrationPeak=operating::calibrationPeak(model);
     std::array<double,1024> in{},out{};double* ip=in.data();double* op=out.data();
     double energy=0,reference=0;
     for(int block=0;block<8;++block){
-        for(int i=0;i<1024;++i)in[i]=0.01*x.preGain*std::sin(2*pi*1000*(block*1024+i)/48000.);
+        for(int i=0;i<1024;++i)in[i]=calibrationPeak*x.preGain*std::sin(2*pi*1000*(block*1024+i)/48000.);
         x.models[0]->process(&ip,&op,1024);
         if(block>=4)for(int i=0;i<1024;++i){energy+=out[i]*out[i];reference+=(in[i]/x.preGain)*(in[i]/x.preGain);}
     }

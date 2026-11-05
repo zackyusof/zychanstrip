@@ -2016,6 +2016,21 @@ public:
     { return 1.0 - Slider::valueToProportionOfLength (value); }
 };
 
+class EnhanceSwitchLook : public LookAndFeel_V4
+{
+public:
+ void drawToggleButton(Graphics& g, ToggleButton& b, bool over, bool down) override {
+  auto r=b.getLocalBounds().toFloat().reduced(2);
+  g.setColour(Colours::black.withAlpha(.8f));g.fillRoundedRectangle(r.translated(1,2),4);
+  g.setGradientFill(ColourGradient(Colour(0xfffffff2),0,r.getY(),Colour(0xffbdb9a7),0,r.getBottom(),false));g.fillRoundedRectangle(r,4);
+  g.setColour(Colour(0xff33352c));g.drawRoundedRectangle(r,4,1);
+  auto inset=r.reduced(3);g.setColour(down?Colour(0xffd5d0bd):Colour(0xfff8f6e8));g.fillRoundedRectangle(inset,2);
+  if(b.getToggleState()){g.setColour(Colour(0xffff6950).withAlpha(.14f));g.fillRoundedRectangle(inset,2);}
+  g.setColour(b.getToggleState()?Colour(0xffd83c2b):Colour(0xff252924));g.setFont(fnt(9,true));g.drawText(b.getButtonText(),inset,Justification::centred);
+  if(over){g.setColour(Colours::white.withAlpha(.18f));g.drawRoundedRectangle(inset,2,1);}
+ }
+};
+
 class LimiterPanel : public ModulePanel
 {
 public:
@@ -2036,6 +2051,8 @@ public:
         setupFader (release, "release");
         setupFader (fader,   "enhance");
 
+        bypass.setLookAndFeel (&switchLook);
+        autoGain.setLookAndFeel (&switchLook);
         autoGain.setName ("Auto Gain");
         autoGain.setButtonText ("AUTO GAIN");
         autoGain.setTooltip ("Match the complete rack to its input before master level and mix. The ceiling takes priority when matching is impossible.");
@@ -2045,20 +2062,22 @@ public:
         addAndMakeVisible (autoGain);
     }
 
+    ~LimiterPanel() override { bypass.setLookAndFeel(nullptr); autoGain.setLookAndFeel(nullptr); }
+
 protected:
     void layoutContent (Rectangle<int> c) override
     {
         // Two zones: the control area (left) holds a 2x2 fader grid, the metering area (right)
         // keeps both vertical ladders running the full height beside it.
-        const int meterZone = 66;                      // reserves room for the two ladders
+        const int meterZone = 46;                      // reserves room for the two ladders
         const int bankW = c.getWidth() - meterZone;
 
         const int top = c.getY() + 24;                 // room for the captions above
-        autoGain.setBounds (c.getX() + 2, top, bankW - 8, 24);
+        autoGain.setBounds (c.getRight() - 92, top - 17, 92, 24);
 
         // Control area below the AUTO GAIN switch, split into two equal rows.
-        const int gridTop = top + 34;
-        autoGainStatus = { c.getX() + 2, gridTop - 12, bankW - 8, 10 };
+        const int gridTop = top + 80;
+        autoGainStatus = { c.getX() + 2, gridTop - 15, c.getWidth() - 4, 10 };
         const int bottomReserve = 26;
         const int gridH = c.getBottom() - gridTop - bottomReserve;
         faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
@@ -2085,11 +2104,8 @@ protected:
             all[i]->setBounds (cellX + cellW / 2 - 20, cellY + captionH, 40, faderH);
         }
 
-        // Both meters together on the right edge, GR then output, spanning both grid rows.
-        const int mx = c.getRight() - meterZone + 8;
-        ladderA = { mx,      gridTop + 22, 22, gridH - 22 };
-        ladderB = { mx + 34, gridTop + 22, 22, gridH - 22 };
-        scaleRect = { mx - 2, gridTop + 22, meterZone - 6, gridH - 22 };
+        ladderA = { c.getCentreX() - 84, top + 13, 168, 38 };
+        ladderB = { c.getRight() - 30, gridTop + 22, 30, gridH - 42 };
         enhanceLabel = { c.getX(), c.getBottom() - 20, c.getWidth(), 18 };
     }
 
@@ -2106,18 +2122,6 @@ protected:
             caption (g, names[i], Rectangle<int> (cell.getX(), b.getY() - 18, cell.getWidth(), 16), 8.5f);
         }
 
-        // dB scale beside the meters
-        g.setFont (fnt (9.0f, false));
-        for (int i = 0; i <= 6; ++i)
-        {
-            const float t = (float) i / 6.0f;
-            const float y = (float) ladderA.getY() + (float) ladderA.getHeight() * t;
-            const int db = (int) std::round (12.0f - 24.0f * t);
-            g.setColour (Colours::black.withAlpha (0.75f));
-            g.drawText (String (db), Rectangle<float> ((float) ladderA.getX() - 26.0f, y - 6.0f, 24.0f, 13.0f), Justification::centredRight);
-            g.setColour (Colours::white.withAlpha (0.65f));
-            g.drawText (String (db), Rectangle<float> ((float) ladderA.getX() - 26.0f, y - 7.0f, 24.0f, 13.0f), Justification::centredRight);
-        }
 
     }
 
@@ -2149,24 +2153,7 @@ protected:
             g.drawLine (inset.getRight() - 1.0f, inset.getY() + 3.0f,
                         inset.getRight() - 1.0f, inset.getBottom() - 3.0f, 1.3f);
         }
-        if (ladderA.isEmpty()) return;
 
-        const Rectangle<int> frame (ladderA.getX() - 10, ladderA.getY() - 16,
-                                    (ladderB.getRight() - ladderA.getX()) + 20, ladderA.getHeight() + 26);
-        g.setColour (Colour (0xff23282e));
-        g.fillRoundedRectangle (frame.toFloat(), 3.0f);
-        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.10f), 0.0f, (float) frame.getY(),
-                                           Colours::transparentWhite, 0.0f, (float) frame.getCentreY(), false));
-        g.fillRoundedRectangle (frame.toFloat(), 3.0f);
-        g.setColour (Colours::black.withAlpha (0.65f));
-        g.drawRoundedRectangle (frame.toFloat(), 3.0f, 1.0f);
-        g.setColour (Colours::white.withAlpha (0.22f));
-        g.drawRoundedRectangle (frame.reduced (1.0f).toFloat(), 2.5f, 0.8f);
-
-        g.setFont (fnt (7.5f, true));
-        g.setColour (Colour (0xffd4dae0));
-        g.drawText ("GR",  Rectangle<int> (ladderA.getX() - 4, ladderA.getY() - 12, ladderA.getWidth() + 8, 10), Justification::centred, false);
-        g.drawText ("OUT", Rectangle<int> (ladderB.getX() - 4, ladderB.getY() - 12, ladderB.getWidth() + 8, 10), Justification::centred, false);
     }
 
     void tick() override
@@ -2189,18 +2176,31 @@ protected:
                               + String (proc.getAutoGainCompensation(), 1) + " dB" : "MATCH OFF",
                     autoGainStatus, Justification::centredLeft, false);
 
-        const float red = gr > 0.05f ? jlimit (0.0f, 1.0f, gr / 14.0f) : 0.0f;
-        const float outDb = outLevel > 1.0e-5f ? Decibels::gainToDecibels (outLevel) : -100.0f;
-        const float outNorm = outDb > -48.0f ? jlimit (0.0f, 1.0f, (outDb + 48.0f) / 48.0f) : 0.0f;
-
-        paintLadder (g, ladderA.toFloat(), red, Colour (0xffc06a10), Colour (0xffffd23a), 28);
-        paintLadder (g, ladderB.toFloat(), outNorm, Colour (0xff17b04a), Colour (0xff5fe1f5), 28);
-
-        if (gr >= 0.1f)
-        {
-            engraveText (g, "-" + String (gr, 1) + " dB", { ladderA.getX() - 18, ladderA.getBottom() + 8, ladderA.getWidth() + 36, 16 },
-                         Justification::centred, 11.0f, labelColour, false);
+        const float outDb = outLevel > 1.e-5f ? Decibels::gainToDecibels(outLevel) : -100.f;
+        auto led = [&g](float x, float y, Colour colour, bool on, float size) {
+            Rectangle<float> r(x-size*.5f,y-size*.5f,size,size);
+            g.setColour(Colours::black); g.fillEllipse(r.expanded(1));
+            if(on){g.setColour(colour.withAlpha(.23f));g.fillEllipse(r.expanded(2));}
+            g.setGradientFill(ColourGradient(on?colour.brighter(.4f):colour.withMultipliedBrightness(.17f),x,y-size*.5f,
+                                            on?colour:Colours::black,x,y+size*.5f,false));
+            g.fillEllipse(r);g.setColour(Colours::white.withAlpha(on?.55f:.12f));g.fillEllipse(r.reduced(size*.3f).translated(-.5f,-.7f));
+        };
+        const auto bar=ladderA.toFloat();
+        g.setColour(Colour(0xff202a32));g.fillRoundedRectangle(bar,4);
+        g.setColour(Colour(0xffb6bdc3));g.drawRoundedRectangle(bar.reduced(.8f),4,1);
+        g.setFont(fnt(8));g.drawText("GR",bar.withHeight(12),Justification::centred);
+        const float levels[]{1,3,6,9,12,18,24};
+        for(int i=0;i<7;++i){float x=bar.getX()+14+i*(bar.getWidth()-28)/6;
+            led(x,bar.getY()+20,i<4?Colour(0xff34ef60):i<6?Colour(0xffffbc32):Colour(0xffff4235),gr>=levels[i],6);
+            g.setColour(labelColour);g.setFont(fnt(6.5f,false));g.drawText(String((int)levels[i]),Rectangle<float>(x-8,bar.getBottom()-10,16,9),Justification::centred);
         }
+        const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,20),3);
+        g.setColour(labelColour);g.setFont(fnt(9));g.drawText("OUT",out.withY(out.getY()-17).withHeight(12),Justification::centred);
+        for(int i=0;i<10;++i){float db=-48+i*5.3f;float y=out.getBottom()-i*(out.getHeight()-8)/9-4;
+            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,i<7?Colour(0xff35ed37):i<9?Colour(0xffffb438):Colour(0xffff4030),outDb>=db,5);
+        }
+        g.setColour(labelColour);g.setFont(fnt(8,false));g.drawText(outDb<=-99?String("−∞ dB"):String(outDb,1)+" dB",out.withY(out.getBottom()+7).withHeight(12).expanded(8,0),Justification::centred);
+
     }
 
 private:
@@ -2218,6 +2218,7 @@ private:
     // Declaration order matters: members are destroyed in reverse, so the sliders must be
     // declared BEFORE the attachments that reference them (otherwise the attachment's
     // destructor calls removeListener() on an already-freed Slider).
+    EnhanceSwitchLook switchLook;
     ThresholdFader gain;
     Slider ceiling, release, fader;
     std::vector<std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>> attachments;

@@ -459,3 +459,5 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
 Current local beta: **1.1.1-beta.7**. No stable release is authorized; promotion remains the user's decision.
+
+Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-right Auto Gain, ivory illuminated switches and twin-column OUT LEDs with a dB readout.

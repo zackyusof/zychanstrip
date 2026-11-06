@@ -24,6 +24,53 @@ constexpr int kGap = 10;         // gap between plates
 constexpr int kEditorW = ZychanStripEditor::kCanvasWidth;
 constexpr int kEditorH = ZychanStripEditor::kCanvasHeight;
 
+
+// Approved reference coordinates are shared by the skin and every interactive hit target.
+const Image& photoRackImage()
+{
+    static const auto image = ImageCache::getFromMemory (
+        ZychanStripAssets::photorealrackstaticbeta6_png,
+        ZychanStripAssets::photorealrackstaticbeta6_pngSize);
+    return image;
+}
+Rectangle<int> photoPanelSource (int id)
+{
+    const Rectangle<int> panels[] { {39,156,329,870}, {725,156,331,870},
+                                    {382,156,329,870}, {1069,156,330,870} };
+    return panels[jlimit (0, 3, id)];
+}
+Rectangle<float> photoHeaderRect (float x,float y,float w,float h)
+{
+    return { (x-31.0f)*1080.0f/1375.0f,(y-65.0f)*44.0f/59.0f,w*1080.0f/1375.0f,h*44.0f/59.0f };
+}
+void drawPhotoRegion (Graphics& g, Rectangle<int> source, Rectangle<float> dest)
+{
+    g.setImageResamplingQuality (Graphics::highResamplingQuality);
+    g.drawImage (photoRackImage().getClippedImage (source), dest, RectanglePlacement::stretchToFit);
+}
+void photoLamp (Graphics& g, Point<float> centre, float radius, Colour colour)
+{
+    g.setGradientFill (ColourGradient (colour.withAlpha (0.42f), centre.x, centre.y,
+                                       colour.withAlpha (0.0f), centre.x + radius * 2.8f, centre.y, true));
+    g.fillEllipse (Rectangle<float> (radius * 5.6f, radius * 5.6f).withCentre (centre));
+    g.setGradientFill (ColourGradient (colour.brighter (0.85f), centre.x - radius * 0.3f,
+                                       centre.y - radius * 0.4f, colour.darker (0.2f),
+                                       centre.x + radius * 0.5f, centre.y + radius, true));
+    g.fillEllipse (Rectangle<float> (radius * 2.0f, radius * 2.0f).withCentre (centre));
+    g.setColour (Colours::white.withAlpha (0.8f));
+    g.fillEllipse (Rectangle<float> (radius * 0.7f, radius * 0.5f).withCentre (
+        centre.translated (-radius * 0.23f, -radius * 0.35f)));
+}
+bool paintPhotoToggle (Graphics& g, ToggleButton& b)
+{
+    if (! b.getProperties().contains ("photoLampX")) return false;
+    const bool on = b.getToggleState() != (bool) b.getProperties().getWithDefault ("photoInvert", false);
+    if (on)
+        photoLamp (g, { (float) b.getProperties()["photoLampX"], (float) b.getProperties()["photoLampY"] },
+                   (float) b.getProperties()["photoLampR"], b.findColour (ToggleButton::tickColourId));
+    return true;
+}
+
 const Image& woodTopTexture()
 {
     static const Image image = ImageCache::getFromMemory (ZychanStripAssets::wood_top_png,
@@ -1193,6 +1240,21 @@ public:
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,
                            float /*pos*/, float a0, float a1, Slider& s) override
     {
+        if ((bool) s.getProperties().getWithDefault ("photoKnob", false))
+        {
+            const auto c = Rectangle<float>((float)x,(float)y,(float)w,(float)h).getCentre();
+            const float a = a0 + (float)s.valueToProportionOfLength(s.getValue()) * (a1-a0);
+            const float radius = (float)s.getProperties()["photoRadius"];
+            const bool black = (bool)s.getProperties()["photoBlack"];
+            const Point<float> d (std::sin(a),-std::cos(a));
+            const auto from = c + d * radius * (black ? 0.12f : 0.67f);
+            const auto to = c + d * radius * 0.92f;
+            g.setColour (Colours::black.withAlpha(0.35f));
+            g.drawLine (Line<float>(from.translated(0.6f,0.8f),to.translated(0.6f,0.8f)),black ? 3.2f : 1.6f);
+            g.setColour (black ? Colour(0xffeee1b7) : Colour(0xff292923));
+            g.drawLine (Line<float>(from,to),black ? 2.6f : 1.0f);
+            return;
+        }
         auto r = Rectangle<float> ((float) x, (float) y, (float) w, (float) h).reduced (2.0f);
         const float d = jmin (r.getWidth(), r.getHeight());
         // knobScale shrinks the drawn hardware about its own centre (the component bounds,
@@ -1223,7 +1285,7 @@ public:
         // ---- Skirt / photographic knob body
         const float skirtR = d * knobScale * 0.50f;
         const bool isSilver = (cap == pal::silverCap);
-        // The 1176 knobs keep the release-1.1.2 chrome rendering (user directive 2026-11-06).
+        // Generic fallback for non-photographic controls; the rack uses photoKnob above.
         const Image& knobSprite = isSilver ? chromeKnobImage() : blackKnobImage();
 
         if (knobSprite.isValid())
@@ -1354,6 +1416,8 @@ public:
     //-------------------------------------------------------------------- faders
     int getSliderThumbRadius (Slider& s) override
     {
+        if (s.getProperties().contains("photoCapW"))
+            return (int) std::ceil ((float)s.getProperties()[s.getSliderStyle()==Slider::LinearVertical?"photoCapH":"photoCapW"]*0.5f+3.0f);
         // Reserve the full cap, rim and shadow at both travel endpoints.
         return s.getSliderStyle() == Slider::LinearVertical ? 28
                                                            : LookAndFeel_V4::getSliderThumbRadius (s);
@@ -1363,6 +1427,19 @@ public:
                            float pos, float minPos, float maxPos,
                            Slider::SliderStyle style, Slider& s) override
     {
+        if (s.getProperties().contains ("photoCapW"))
+        {
+            const float cw=(float)s.getProperties()["photoCapW"], ch=(float)s.getProperties()["photoCapH"];
+            const bool vertical=style==Slider::LinearVertical;
+            const auto centre=vertical ? Point<float>((float)x+(float)w*0.5f,pos)
+                                       : Point<float>(pos,(float)y+(float)h*0.5f);
+            const auto& image=vertical ? faderCapImage() :
+                (s.findColour(Slider::thumbColourId).getRed()>190 && s.findColour(Slider::thumbColourId).getGreen()<90 ? eqCapRedImage() : eqCapCreamImage());
+            auto rect=Rectangle<float>(cw,ch).withCentre(centre);
+            DropShadow (Colours::black.withAlpha(0.55f),3,{1,2}).drawForRectangle(g,rect.reduced(2).toNearestInt());
+            g.drawImage(image,rect,RectanglePlacement::stretchToFit);
+            return;
+        }
         if (style == Slider::LinearHorizontal && (bool) s.getProperties()["eq560"])
             drawGraphicEqFader (g, x, y, w, h, pos, s);
         else if (style == Slider::LinearVertical) drawChromeFader (g, x, y, w, h, pos, minPos, maxPos, s);
@@ -1573,6 +1650,7 @@ public:
     //-------------------------------------------------------------------- toggles / jewel lamps
     void drawToggleButton (Graphics& g, ToggleButton& b, bool highlighted, bool) override
     {
+        if (paintPhotoToggle (g,b)) return;
         auto r = b.getLocalBounds().toFloat();
         const bool on = b.getToggleState();
         const auto c = b.findColour (ToggleButton::tickColourId);
@@ -1620,6 +1698,7 @@ public:
     //-------------------------------------------------------------------- buttons (1176 Shadow switch bank)
     void drawButtonBackground (Graphics& g, Button& b, const Colour&, bool highlighted, bool) override
     {
+        if ((bool)b.getProperties().getWithDefault("photoRatio",false) && !b.getToggleState() && !b.isDown()) return;
         auto r = b.getLocalBounds().toFloat().reduced (1.0f);
         const bool on = b.getToggleState();
         auto base = on ? b.findColour (TextButton::buttonOnColourId) : b.findColour (TextButton::buttonColourId);
@@ -1650,6 +1729,7 @@ public:
 
     void drawButtonText (Graphics& g, TextButton& b, bool, bool) override
     {
+        if ((bool)b.getProperties().getWithDefault("photoRatio",false) && !b.getToggleState() && !b.isDown()) return;
         g.setFont (fnt (14.0f));
         const bool on = b.getToggleState();
         g.setColour (on ? Colours::white : Colour (0xffa0b8cc));
@@ -1667,6 +1747,7 @@ struct InButtonLookAndFeel : public LookAndFeel_V4
     void drawToggleButton (Graphics& g, ToggleButton& b, bool, bool) override
     {
         auto r = b.getLocalBounds().toFloat();
+        if (paintPhotoToggle (g,b)) return;
         // con_bypass == false means EQ is IN (active in signal chain)
         const bool active = ! b.getToggleState();
 
@@ -1756,34 +1837,15 @@ public:
     void paint (Graphics& g) override
     {
         paintChassisGrip (g);
-        const auto plate = plateBounds().toFloat();
-        paintMetalPlate (g, plate, plateTop, plateLow, 5.0f, 101 + moduleId, moduleId);
-        paintScrewsAndBadge (g, plate);
-        if (faceImage.isValid()) g.drawImageAt (faceImage, 0, 0);
+        drawPhotoRegion (g, photoPanelSource (moduleId), plateBounds().toFloat());
         paintMeter (g);
     }
 
     void resized() override
     {
         content = contentBounds();
-        if (moduleId != ZychanStripProcessor::Console)
-            bypass.setBounds (content.getRight() - 84, plateBounds().getY() + 6, 80, 22);
         layoutContent (content);
-
-        if (getWidth() > 0 && getHeight() > 0)
-        {
-            faceImage = Image (Image::ARGB, getWidth(), getHeight(), true);
-            Graphics fg (faceImage);
-            paintFace (fg);
-
-            Image caps (Image::ARGB, getWidth(), getHeight(), true);
-            Graphics cg (caps);
-            paintFaceExtra (cg);
-            captionLayer.image = caps;
-            captionLayer.setBounds (0, 0, getWidth(), getHeight());
-            captionLayer.setVisible (true);
-            captionLayer.toBack();
-        }
+        captionLayer.setVisible (false);
     }
 
     void cancelDrag() { dragging = false; }
@@ -1862,6 +1924,51 @@ protected:
         addAndMakeVisible (k.slider);
     }
 
+    Rectangle<float> photoRect (float x, float y, float w, float h) const
+    {
+        const auto src = photoPanelSource (moduleId).toFloat();
+        const auto dst = plateBounds().toFloat();
+        return { dst.getX() + (x - src.getX()) * dst.getWidth() / src.getWidth(),
+                 dst.getY() + (y - src.getY()) * dst.getHeight() / src.getHeight(),
+                 w * dst.getWidth() / src.getWidth(), h * dst.getHeight() / src.getHeight() };
+    }
+    Point<float> photoPoint (float x, float y) const { return photoRect (x, y, 0, 0).getPosition(); }
+    void placePhotoKnob (Knob& knob, float cx, float cy, float bodyRadius, float hitRadius, bool black)
+    {
+        const auto r = photoRect (cx-hitRadius, cy-hitRadius, hitRadius*2, hitRadius*2);
+        knob.slider.setBounds (r.toNearestInt());
+        knob.slider.getProperties().set ("photoKnob", true);
+        knob.slider.getProperties().set ("photoBlack", black);
+        knob.slider.getProperties().set ("photoRadius", photoRect (0,0,bodyRadius,bodyRadius).getWidth());
+    }
+    void placePhotoToggle (ToggleButton& b, Rectangle<float> source, float cx, float cy, float radius, bool invert = false)
+    {
+        const auto bounds = photoRect (source.getX(),source.getY(),source.getWidth(),source.getHeight()).toNearestInt();
+        b.setBounds (bounds);
+        const auto centre = photoPoint (cx,cy) - bounds.getPosition().toFloat();
+        b.getProperties().set ("photoLampX", centre.x);
+        b.getProperties().set ("photoLampY", centre.y);
+        b.getProperties().set ("photoLampR", photoRect (0,0,radius,radius).getWidth());
+        b.getProperties().set ("photoInvert", invert);
+    }
+    void paintPhotoNeedle (Graphics& g, bool round)
+    {
+        const auto pivot = round ? photoPoint (890,400) : photoPoint (548,618);
+        const float t = vuDeflectionForDb (-jlimit (0.0f,20.0f,gr));
+        const float angle = round ? jmap (t, -0.86f, 0.86f) : jmap (t, -0.64f, 0.64f);
+        const Point<float> direction (std::sin (angle), -std::cos (angle));
+        const float length = photoRect (0,0,round ? 133.0f : 146.0f,1).getWidth();
+        const auto start = pivot + direction * (round ? photoRect(0,0,10,1).getWidth() : 0.0f);
+        const auto end = pivot + direction * length;
+        g.saveState();
+        if (!round) g.reduceClipRegion (photoRect (391,428,312,133).toNearestInt());
+        g.setColour (Colours::black.withAlpha (0.22f));
+        g.drawLine (Line<float> (start.translated(1.2f,1.5f),end.translated(1.2f,1.5f)), 1.7f);
+        g.setColour (Colour (0xff252316));
+        g.drawLine (Line<float> (start,end), 1.1f);
+        g.restoreState();
+    }
+
     static void place (Knob& k, Rectangle<int> cell)
     {
         k.slider.setBounds (cell);
@@ -1901,7 +2008,11 @@ protected:
     ToggleButton bypass { "BYPASS" };
 
 private:
-    void paintChassisGrip (Graphics& g) { paintGrip (g, gripBounds().toFloat(), gripHot); }
+    void paintChassisGrip (Graphics& g)
+    {
+        drawPhotoRegion (g, { 520, 128, 55, 27 }, gripBounds().toFloat());
+        if (gripHot) { g.setColour (Colours::white.withAlpha (0.14f)); g.fillRoundedRectangle (gripBounds().toFloat(), 3.0f); }
+    }
 
     void paintScrewsAndBadge (Graphics& g, Rectangle<float> plate)
     {
@@ -1970,17 +2081,17 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Spanning the full height of the module
-        const int startY = c.getY() + 72;
-        const int totalH = c.getBottom() - 72 - startY;
-        const int rowSpacing = totalH / 9;
-
-        for (size_t i = 0; i < bands.size(); ++i)
-            bands[i].slider.setBounds (c.getX() + 38, startY + (int) i * rowSpacing, c.getWidth() - 44, 24);
-
-        // Hardware IN switch at bottom
-        const int inY = c.getBottom() - 52;
-        bypass.setBounds (c.getCentreX() - 46, inY, 92, 26);
+        ignoreUnused(c);
+        const float rows[]{294,365,436,506,577,647,718,788,858,928};
+        for (size_t i=0;i<bands.size();++i)
+        {
+            auto& slider=bands[i].slider;
+            slider.setBounds(photoRect(104,rows[i]-16,240,32).toNearestInt());
+            slider.getProperties().set("photoCapW",photoRect(0,0,41,1).getWidth());
+            slider.getProperties().set("photoCapH",photoRect(0,0,1,28).getHeight());
+            slider.resized();
+        }
+        placePhotoToggle(bypass,{149,939,114,36},245,958,7,true);
     }
 
     void paintFaceExtra (Graphics& g) override
@@ -2097,25 +2208,13 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Authentic large round circular VU meter, housing at 85 % of its old diameter about
-        // the same centre point on the plate.
-        const int vw = jmin (c.getWidth() - 8, 214);
-        const Rectangle<int> fullVu { c.getCentreX() - vw / 2, c.getY() + 4, vw, vw };
-        const int nvw = roundToInt ((float) vw * 0.85f);
-        vu = fullVu.withSizeKeepingCentre (nvw, nvw);
-
-        // The 0..100 numeral ring sits OUTSIDE the dome, so each control must be sized for the
-        // ring, not for the visible knob: a widget the size of the dome clips its own scale at
-        // the panel edge (this is exactly what hid the 20/30/40 numerals). 118 px gives a
-        // 79 px dome inside a 96 px numeral ring inside the 258 px plate.
-        const int kw = 118;
-        const int ky = 312;
-        place (gain, { c.getCentreX() - kw + 4, ky, kw, kw });
-        place (peak, { c.getCentreX() - 4,      ky, kw, kw });
-
-        const int ty = 430;
-        meterBtn.setBounds (c.getCentreX() - 48, ty, 96, 26);
-        onBtn.setBounds (c.getCentreX() - 48, ty + 38, 96, 26);
+        ignoreUnused(c);
+        placePhotoKnob(gain,819,604,42,65,true);
+        placePhotoKnob(peak,961,604,42,65,true);
+        placePhotoToggle(bypass,{926,163,94,30},940,178,8);
+        placePhotoToggle(meterBtn,{829,676,105,34},844,693,8);
+        placePhotoToggle(onBtn,{829,725,116,32},844,740,8);
+        vu=photoRect(763,201,254,261).toNearestInt();
     }
 
     void paintFaceBase (Graphics& g) override
@@ -2150,14 +2249,7 @@ protected:
 
     void paintMeter (Graphics& g) override
     {
-        const auto r = vu.toFloat();
-        // Warm glow bloom around round VU housing
-        g.setGradientFill (ColourGradient (Colour (0x38ffd27a), r.getCentreX(), r.getCentreY(),
-                                           Colour (0x00ffd27a), r.getCentreX(), r.getCentreY() - r.getHeight(), true));
-        g.fillEllipse (r.expanded (18.0f));
-
-        const float db = -jlimit (0.0f, 20.0f, gr);
-        paintOptoVuMeter (g, r, vuDeflectionForDb (db));
+        paintPhotoNeedle(g,true);
     }
 
 private:
@@ -2211,24 +2303,18 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        const int kw = 86;
-        const int ky = c.getY() + 26;
-        place (input,  { c.getX() + 6,               ky, kw, kw });
-        place (output, { c.getRight() - kw - 6,      ky, kw, kw });
-
-        ratioLabel = { c.getX(), 170, c.getWidth(), 18 };
-        const int bw = (c.getWidth() - 8 - 4 * 4) / 5;
-        for (int i = 0; i < 5; ++i)
-            ratioBtns[(size_t) i].setBounds (c.getX() + 4 + i * (bw + 4), 192, bw, 26);
-
-        // Span the faceplate edge to edge, independent of the control-area inset.
-        meter = { plateBounds().getX(), 230, plateBounds().getWidth(), 154 };
-
-        const int ay = meter.getBottom() + 32;
-        const int akw = 80;
-        place (atk, { c.getX() + 10,       ay, akw, akw });
-        place (rel, { c.getRight() - akw - 10, ay, akw, akw });
-        grLabel = { c.getX() + c.getWidth() / 2 - 40, ay + 44, 80, 18 };
+        ignoreUnused(c);
+        placePhotoKnob(input,469,276,37,57,false);
+        placePhotoKnob(output,628,276,37,57,false);
+        placePhotoKnob(atk,469,710,29,43,false);
+        placePhotoKnob(rel,628,710,29,43,false);
+        placePhotoToggle(bypass,{582,162,95,31},596,177,8);
+        for (int i=0;i<5;++i)
+        {
+            ratioBtns[(size_t)i].setBounds(photoRect(410.0f+55.0f*(float)i,372,51,35).toNearestInt());
+            ratioBtns[(size_t)i].getProperties().set("photoRatio",true);
+        }
+        meter=photoRect(384,420,327,200).toNearestInt();
     }
 
     void paintFaceExtra (Graphics& g) override
@@ -2267,9 +2353,7 @@ protected:
 
     void paintMeter (Graphics& g) override
     {
-        const auto r = meter.toFloat();
-        const float db = -jlimit (0.0f, 20.0f, gr);
-        paintFetVuMeter (g, r, vuDeflectionForDb (db));
+        paintPhotoNeedle(g,false);
     }
 
 private:
@@ -2353,53 +2437,23 @@ public:
 protected:
     void layoutContent (Rectangle<int> c) override
     {
-        // Two zones: the control area (left) holds a 2x2 fader grid, the metering area (right)
-        // keeps both vertical ladders running the full height beside it.
-        const int meterZone = 46;                      // reserves room for the two ladders
-        const int bankW = c.getWidth() - meterZone;
-
-        const int top = c.getY() + 24;                 // room for the captions above
-        // Mirror bypass across the header with identical dimensions and aspect ratio.
-        autoGain.setBounds (c.getX() + 4, bypass.getY(), bypass.getWidth(), bypass.getHeight());
-
-        // Control area below the AUTO GAIN switch, split into two equal rows.
-        const int gridTop = top + 62;
-        const int bottomReserve = 26;
-        const int gridH = c.getBottom() - gridTop - bottomReserve;
-        faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
-
-        // Leave room for the per-row captions above each fader cell.
-        const int captionH = 16;
-        const int rowH = gridH / 2;
-        const int cellW = bankW / 2;
-
-        // GR meter: thin stereo indicator, two rows of ten LEDs (L on top, R beneath), with the
-        // dB scale printed once under the bottom row. Its left and right edges sit exactly on
-        // the THRESHOLD / CEILING caption block (two fader columns, edge to edge).
-        ladderA = { c.getX(), top + 2, cellW * 2, 42 };
-        autoGainStatus = { c.getX() + 5, top + 46, cellW * 2 - 10, 10 };
-
-        Slider* all[4] { &gain, &ceiling, &release, &fader };
-        for (int i = 0; i < 4; ++i)
+        ignoreUnused(c);
+        bypass.setBounds(photoRect(1273,165,103,30).toNearestInt());
+        autoGain.setBounds(photoRect(1081,165,117,30).toNearestInt());
+        Slider* sliders[]{&gain,&ceiling,&release,&fader};
+        for(int i=0;i<4;++i)
         {
-            const int row = i / 2;                     // 0 = THRESHOLD / CEILING, 1 = RELEASE / ENHANCE
-            const int col = i % 2;
-            const int cellX = c.getX() + cellW * col;
-            const int cellY = gridTop + rowH * row;
-            const int faderH = juce::jmax (24, rowH - captionH - 4);
-
-            // Remember the cell so captions can span it (a caption clipped to the 26 px fader
-            // would truncate "THRESHOLD").
-            gridCell ((size_t) col) = { cellX, cellY, cellW, rowH };
-
-            // Include the full cap, rim and drop shadow in the repaint bounds.
-            all[i]->setBounds (cellX + cellW / 2 - 20, cellY + captionH, 40, faderH);
+            const float cx=i%2==0?1149.0f:1262.0f;
+            const float y=i<2?311.0f:678.0f;
+            const float height=i<2?300.0f:269.0f;
+            sliders[i]->setBounds(photoRect(cx-26,y,52,height).toNearestInt());
+            sliders[i]->getProperties().set("photoCapW",photoRect(0,0,39,1).getWidth());
+            sliders[i]->getProperties().set("photoCapH",photoRect(0,0,1,74).getHeight());
+            sliders[i]->resized();
         }
-
-        // OUT ladder starts on the GR meter's top edge and runs to the bottom of the fader bank,
-        // so both metering columns share one height (user directive 2026-11-06).
-        ladderB = { c.getRight() - 30, ladderA.getY(), 30, gridTop + gridH - 20 - ladderA.getY() };
-        enhanceLabel = { c.getX(), c.getBottom() - 20, c.getWidth(), 18 };
+        autoGainStatus=photoRect(1094,278,220,12).toNearestInt();
+        ladderA=photoRect(1094,221,223,57).toNearestInt();
+        ladderB=photoRect(1334,220,46,734).toNearestInt();
     }
 
     void paintFaceExtra (Graphics& g) override
@@ -2464,50 +2518,36 @@ protected:
 
     void paintMeter (Graphics& g) override
     {
-        const bool matching = proc.apvts.getRawParameterValue ("lim_auto_gain")->load() > 0.5f
-                           && proc.apvts.getRawParameterValue ("lim_bypass")->load() < 0.5f;
-        const bool limited = matching && proc.isAutoGainCeilingLimited();
-        g.setColour (limited ? Colour (0xffffc04a) : Colour (0xffb8c8d2));
-        g.setFont (fnt (7.5f, true));
-        g.drawText (matching ? (limited ? "CEILING  " : "MATCH  ")
-                              + String (proc.getAutoGainCompensation(), 1) + " dB" : "MATCH OFF",
-                    autoGainStatus, Justification::centredLeft, false);
-
-        const float outDb = outLevel > 1.e-5f ? Decibels::gainToDecibels(outLevel) : -100.f;
-        auto led = [&g](float x, float y, Colour colour, bool on, float size) {
-            Rectangle<float> r(x-size*.5f,y-size*.5f,size,size);
-            g.setColour(Colours::black); g.fillEllipse(r.expanded(1));
-            if(on){g.setColour(colour.withAlpha(.23f));g.fillEllipse(r.expanded(2));}
-            g.setGradientFill(ColourGradient(on?colour.brighter(.4f):colour.withMultipliedBrightness(.17f),x,y-size*.5f,
-                                            on?colour:Colours::black,x,y+size*.5f,false));
-            g.fillEllipse(r);g.setColour(Colours::white.withAlpha(on?.55f:.12f));g.fillEllipse(r.reduced(size*.3f).translated(-.5f,-.7f));
-        };
-        // GR: two rows x four steps, in the same horizontal span as the THRESHOLD / CEILING
-        // captions (see layoutContent). Level scale grows left-to-right, top row then bottom.
-        const auto bar=ladderA.toFloat();
-        g.setColour(Colour(0xff202a32));g.fillRoundedRectangle(bar,4);
-        g.setColour(Colour(0xffb6bdc3));g.drawRoundedRectangle(bar.reduced(.8f),4,1);
-        g.setFont(fnt(8));g.drawText("GR",bar.withHeight(12),Justification::centred);
+        const bool matching=proc.apvts.getRawParameterValue("lim_auto_gain")->load()>0.5f
+                            && proc.apvts.getRawParameterValue("lim_bypass")->load()<0.5f;
+        const bool limited=matching && proc.isAutoGainCeilingLimited();
+        g.setColour(Colour(0xff263342)); g.fillRect(autoGainStatus);
+        g.setFont(fnt(7.5f,true)); g.setColour(limited?Colour(0xffffc04a):Colour(0xffb8c8d2));
+        g.drawText(matching?(limited?"CEILING  ":"MATCH  ")+String(proc.getAutoGainCompensation(),1)+" dB":"MATCH OFF",autoGainStatus,Justification::centredLeft,false);
         const float levels[]{1,2,3,4,6,8,10,12,18,24};
-        for(int i=0;i<10;++i){
-            const float x=bar.getX()+12.0f+(float)i*(bar.getWidth()-24.0f)/9.0f;
-            const auto col=i<5?Colour(0xff34ef60):i<8?Colour(0xffffbc32):Colour(0xffff4235);
-            led(x,bar.getY()+16.0f,col,gr>=levels[i],4.8f);   // left channel
-            led(x,bar.getY()+28.0f,col,gr>=levels[i],4.8f);   // right channel
-            g.setColour(labelColour);g.setFont(fnt(7.0f,false));
-            g.drawText(String((int)levels[i]),Rectangle<float>(x-9.0f,bar.getY()+31.5f,18.0f,10.0f),Justification::centred);
+        const float radius=photoRect(0,0,3.3f,1).getWidth();
+        // Generated artwork is not a calibration source: print the actual DSP thresholds.
+        g.setColour(Colour(0xff24313c));g.fillRect(photoRect(1098,264,215,12));
+        for(int i=0;i<10;++i)
+        {
+            g.setColour(labelColour);g.setFont(fnt(6.8f));
+            g.drawText(String((int)levels[i]),photoRect(1096.0f+21.6f*(float)i,264,20,12),Justification::centred,false);
         }
-        // OUT: full-height column starting on the GR meter's top edge.
-        const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,0),3);
-        g.setColour(labelColour);g.setFont(fnt(9));g.drawText("OUT",out.withHeight(14),Justification::centred);
-        constexpr int outSteps=32;
-        for(int i=0;i<outSteps;++i){float db=-48.f+(float)i*(48.f/(float)(outSteps-1));
-            float y=out.getBottom()-6.0f-(float)i*(out.getHeight()-28.0f)/(float)(outSteps-1);
-            const auto col=i<outSteps-6?Colour(0xff35ed37):i<outSteps-2?Colour(0xffffb438):Colour(0xffff4030);
-            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,col,outDb>=db,5.2f);
-        }
-        g.setColour(labelColour);g.setFont(fnt(8,false));g.drawText(outDb<=-99?String("−∞ dB"):String(outDb,1)+" dB",out.withY(out.getBottom()+7).withHeight(12).expanded(8,0),Justification::centred);
-
+        for(int i=0;i<10;++i)
+            if(gr>=levels[i])
+                for(int channel=0;channel<2;++channel)
+                    photoLamp(g,photoPoint(1106.0f+21.6f*(float)i,241.0f+16.0f*(float)channel),radius,
+                              i<5?Colour(0xff34ef60):i<8?Colour(0xffffbc32):Colour(0xffff4235));
+        const float outDb=outLevel>1.e-5f?Decibels::gainToDecibels(outLevel):-100.0f;
+        for(int i=0;i<32;++i)
+            if(outDb>=-48.0f+(float)i*(48.0f/31.0f))
+                for(int channel=0;channel<2;++channel)
+                    photoLamp(g,photoPoint(1348.0f+19.0f*(float)channel,941.0f-(float)i*(691.0f/31.0f)),radius,
+                              i<26?Colour(0xff35ed37):i<30?Colour(0xffffb438):Colour(0xffff4030));
+        const auto readout=photoRect(1330,959,55,18);
+        g.setColour(Colour(0xff263342));g.fillRect(readout);
+        g.setColour(labelColour);g.setFont(fnt(8));
+        g.drawText(outDb<=-99?String("-inf dB"):String(outDb,1)+" dB",readout,Justification::centred,false);
     }
 
 private:
@@ -2710,11 +2750,12 @@ void ZychanStripEditor::resized()
     for (auto& panel : panels) panel->cancelDrag();
     layoutFor (previewOrder, -1, false);
     // Master + dry/wet share the header right side; mix sits below the master level.
-    masterFader.setBounds (kEditorW - kMargin - 160, 8, 148, 16);
-    mixFader.setBounds (kEditorW - kMargin - 160, 26, 148, 14);
+    pageToggle.setBounds(photoHeaderRect(335,75,108,39).toNearestInt());
+    masterFader.setBounds(photoHeaderRect(1204,74,184,21).toNearestInt());
+    mixFader.setBounds(photoHeaderRect(1204,95,184,21).toNearestInt());
     // Reset button sits on the header, left of the master fader.
-    resetButton.setBounds (kEditorW - kMargin - 160 - 150, 10, 84, 30);
-    unityButton->setBounds (kEditorW - kMargin - 160 - 58, 10, 58, 30);
+    resetButton.setBounds(photoHeaderRect(1003,75,109,40).toNearestInt());
+    unityButton->setBounds(photoHeaderRect(1123,75,76,40).toNearestInt());
     constexpr float framedWidth = (float) kEditorW + 2.0f * (float) kWoodSideRail;
     constexpr float framedHeight = (float) kEditorH + 2.0f * (float) kWoodTopBottomRail;
     const float scale = jmax (0.01f, jmin ((float) getWidth() / framedWidth,
@@ -2913,92 +2954,16 @@ void ZychanStripEditor::paint (Graphics& g)
     g.setGradientFill (ColourGradient (Colour (0xff121517), 0.0f, inner.getY(), Colour (0xff040506), 0.0f, inner.getBottom(), false));
     g.fillRoundedRectangle (inner, 6.0f);
 
-    // 3. Machined brushed aluminium header bar
-    const Rectangle<float> header (4.0f, 6.0f, full.getWidth() - 8.0f, (float) kHeaderH - 6.0f);
-    g.setGradientFill (ColourGradient (pal::headerBarTop, 0.0f, header.getY(),
-                                       pal::headerBarLow, 0.0f, header.getBottom(), false));
-    g.fillRoundedRectangle (header, 6.0f);
-
-    // Header brushed horizontal streaks
-    for (float y = header.getY() + 1.0f; y < header.getBottom(); y += 1.5f)
-    {
-        g.setColour (Colours::white.withAlpha (0.015f));
-        g.drawHorizontalLine ((int) y, header.getX() + 6.0f, header.getRight() - 6.0f);
-    }
-
-    // Header machined bevels
-    g.setColour (Colours::white.withAlpha (0.16f));
-    g.drawLine (header.getX() + 6.0f, header.getY() + 1.0f, header.getRight() - 6.0f, header.getY() + 1.0f, 1.0f);
-    g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawLine (header.getX() + 6.0f, header.getBottom(), header.getRight() - 6.0f, header.getBottom(), 1.2f);
-
-    // 4. Branding on Header: "zychanstrip" + zynamfx-style ZY monogram
-    const float logoX = header.getX() + 16.0f;
-    const float logoY = header.getY() + 7.0f;
-
-    // "zychanstrip" wordmark (matching zynamfx typographic style)
-    const Font wordmarkFont = fnt (18.0f, true);
-    g.setFont (wordmarkFont);
-    // Engraved drop shadow
-    g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY + 1.0f, 120.0f, 22.0f), Justification::centredLeft);
-    // Crisp white lettering
-    g.setColour (Colours::white);
-    g.drawText ("zychanstrip", Rectangle<float> (logoX, logoY, 120.0f, 22.0f), Justification::centredLeft);
-
-    // Version / channel label, immediately after the wordmark.
-    // Convention (CMakeLists ZYCHANSTRIP_BETA): stable = "v1.0.1", prerelease = "v1.0.2-beta.1".
-    // A prerelease renders amber so a beta build can never be mistaken for a release in a screenshot.
-    const String versionLabel { ZYCHANSTRIP_VERSION_LABEL };
-    const bool isBetaBuild = versionLabel.containsIgnoreCase ("beta");
-    const Font versionFont = fnt (9.5f, true);
-
-    GlyphArrangement wordmarkGa;
-    wordmarkGa.addLineOfText (wordmarkFont, "zychanstrip", 0.0f, 0.0f);
-    const float wordmarkW = wordmarkGa.getBoundingBox (0, -1, true).getRight();
-
-    GlyphArrangement versionGa;
-    versionGa.addLineOfText (versionFont, versionLabel, 0.0f, 0.0f);
-    const float versionW = versionGa.getBoundingBox (0, -1, true).getWidth();
-
-    const Rectangle<float> versionBox (logoX + wordmarkW + 7.0f, logoY + 6.5f, versionW + 11.0f, 14.0f);
-    g.setColour (Colours::black.withAlpha (0.45f));
-    g.fillRoundedRectangle (versionBox, 3.0f);
-    g.setColour ((isBetaBuild ? Colour (0xffe8a33d) : pal::engraveDim).withAlpha (0.55f));
-    g.drawRoundedRectangle (versionBox, 3.0f, 0.8f);
-    g.setFont (versionFont);
-    g.setColour (Colours::black.withAlpha (0.8f));
-    g.drawText (versionLabel, versionBox.translated (0.0f, 0.6f), Justification::centred, false);
-    g.setColour (isBetaBuild ? Colour (0xffffc45c) : Colour (0xffd8dde3));
-    g.drawText (versionLabel, versionBox, Justification::centred, false);
-
-    // Iconic ZY monogram logo (resembling the logo on zynamfx), placed clear of the version pill
-    const Rectangle<float> zyMarkBox (versionBox.getRight() + 9.0f, logoY + 1.0f, 44.0f, 20.0f);
-    drawZyLogo (g, zyMarkBox);
-
-    // Power jewel LED on header
-    const Point<float> pwrC (full.getWidth() * 0.58f, header.getCentreY());    g.setColour (Colour (0xff08090a));
-    g.fillEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC));
-    g.setColour (Colours::white.withAlpha (0.25f));
-    g.drawEllipse (Rectangle<float> (12.0f, 12.0f).withCentre (pwrC), 0.8f);
-    // Glowing cyan jewel
-    g.setGradientFill (ColourGradient (Colour (0x6057d4c2), pwrC.x, pwrC.y, Colour (0x0057d4c2), pwrC.x + 10.0f, pwrC.y + 10.0f, true));
-    g.fillEllipse (Rectangle<float> (18.0f, 18.0f).withCentre (pwrC));
-    g.setGradientFill (ColourGradient (Colour (0xffc4fff7), pwrC.x - 1.0f, pwrC.y - 1.0f, Colour (0xff28a896), pwrC.x + 2.0f, pwrC.y + 2.0f, false));
-    g.fillEllipse (Rectangle<float> (6.5f, 6.5f).withCentre (pwrC));
-
-    // Master level title + calibrated scale ticks
-    g.setFont (fnt (12.0f, true));
-    g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, 10.0f, 64.0f, 12.0f), Justification::centredRight);
-    g.setColour (Colour (0xffc8ccd0));
-    g.drawText ("MASTER", Rectangle<float> (full.getWidth() - 230.0f, 9.0f, 64.0f, 12.0f), Justification::centredRight);
-    // Dry/wet label beside the second bar
-    g.setFont (fnt (10.0f, true));
-    g.setColour (Colours::black.withAlpha (0.75f));
-    g.drawText ("DRY/WET", Rectangle<float> (full.getWidth() - 230.0f, 27.0f, 64.0f, 12.0f), Justification::centredRight);
-    g.setColour (Colour (0xff9fe8dd));
-    g.drawText ("DRY/WET", Rectangle<float> (full.getWidth() - 230.0f, 26.0f, 64.0f, 12.0f), Justification::centredRight);
+    // The same photographed chassis/header as the approved image. Dynamic regions below
+    // cover the reference's old version and master positions rather than baking UI state in.
+    drawPhotoRegion(g,{31,65,1375,59},{0,0,1080,44});
+    drawPhotoRegion(g,{846,75,145,40},photoHeaderRect(1203,75,189,40));
+    const auto versionBox=photoHeaderRect(181,85,84,23);
+    g.setColour(Colour(0xff0d1112));g.fillRoundedRectangle(versionBox,2);
+    g.setColour(Colour(0xffb78a3b));g.drawRoundedRectangle(versionBox,2,0.7f);
+    g.setFont(fnt(8.4f,true));g.setColour(Colour(0xffffcf64));
+    g.drawText(ZYCHANSTRIP_VERSION_LABEL,versionBox,Justification::centred,false);
+    photoLamp(g,photoHeaderRect(831,95,0,0).getPosition(),4.0f,Colour(0xff48f742));
 
     // 7. Plate shadows so the faceplates read as physically raised hardware
     for (int s = 0; s < 4; ++s)
@@ -3041,7 +3006,11 @@ void ZychanStripEditor::ColourSelector::paint(Graphics& g)
     const float w=r.getWidth()/3;
     for(int i=0;i<3;++i){
         auto cell=Rectangle<float>(r.getX()+i*w,r.getY()+2,w,r.getHeight()-4).reduced(1,0);
-        if(i==mode){g.setColour(Colour(0xff36b9a6));g.fillRoundedRectangle(cell,2);}
+        if(i==mode){
+            g.setGradientFill(ColourGradient(Colour(0xff65e0cd),cell.getX(),cell.getY(),Colour(0xff209b8c),cell.getX(),cell.getBottom(),false));
+            g.fillRoundedRectangle(cell.reduced(1),2);
+            g.setColour(Colour(0xff8de4d5));g.drawRoundedRectangle(cell,2,.8f);
+        }
         g.setColour(i==mode?Colour(0xff071c1a):Colour(0xffdce3e2));
         g.drawText(labels[i],cell,Justification::centred);
     }

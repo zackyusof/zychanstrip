@@ -653,6 +653,40 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
         peakKnob->setValue (peakOriginal, juce::dontSendNotification);
     }
 
+    // Host automation must change only the moving control layer, never the baked body,
+    // labels or neighbouring controls. This catches flattened/static screenshot skins.
+    struct PhotoControl { int module; const char* name; const char* parameter; };
+    const PhotoControl photoControls[] {
+        {2,"input","fet_input"}, {2,"output","fet_output"},
+        {2,"attack","fet_attack"}, {2,"release","fet_release"},
+        {1,"gain","opto_gain"}, {1,"peak","opto_peak"},
+        {3,"limiter gain","lim_gain"}, {3,"limiter ceiling","lim_ceiling"},
+        {3,"limiter release","lim_release"}, {3,"limiter enhance","lim_enhance"}
+    };
+    for (const auto& control : photoControls)
+    {
+        auto* panel=editor.getModulePanelForTest(control.module);
+        auto* slider=panel!=nullptr?dynamic_cast<juce::Slider*>(findNamed(*panel,control.name)):nullptr;
+        auto* parameter=proc.apvts.getParameter(control.parameter);
+        bool responsive=false;
+        if(slider!=nullptr && parameter!=nullptr)
+        {
+            const float original=parameter->getValue();
+            parameter->setValueNotifyingHost(0.0f);
+            const auto before=panel->createComponentSnapshot(panel->getLocalBounds());
+            parameter->setValueNotifyingHost(1.0f);
+            const auto after=panel->createComponentSnapshot(panel->getLocalBounds());
+            int inside=0,outside=0;
+            for(int y=0;y<before.getHeight();++y)
+                for(int x=0;x<before.getWidth();++x)
+                    if(before.getPixelAt(x,y)!=after.getPixelAt(x,y))
+                        (slider->getBounds().contains(x,y)?inside:outside)++;
+            responsive=inside>4 && outside==0;
+            parameter->setValueNotifyingHost(original);
+        }
+        check(responsive,juce::String("photographic control follows host automation without altering faceplate: ")+control.parameter);
+    }
+
     // RESET button: the header button must restore module defaults, not just the meters.
     auto* reset = findNamed (editor, "Reset");
     check (reset != nullptr, "reset button component exists");
@@ -776,16 +810,18 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
                         for (double value : { slider->getMinimum(), slider->getMaximum() })
                         {
                             const float pos = (float) slider->getPositionOfValue (value);
-                            const juce::Rectangle<float> cap (bounds.getCentreX() - 15.f, pos - 23.f, 30.f, 46.f);
-                            capContained &= bounds.contains (cap.expanded (1.5f));
-                            capContained &= bounds.contains (cap.translated (2.f, 3.5f));
+                            const float capW=(float)slider->getProperties()["photoCapW"];
+                            const float capH=(float)slider->getProperties()["photoCapH"];
+                            const auto cap=juce::Rectangle<float>(capW,capH).withCentre({bounds.getCentreX(),pos});
+                            capContained &= bounds.contains(cap);
+                            capContained &= bounds.contains(cap.reduced(2).translated(1,2));
                         }
                     }
                     check (capContained, "Enhance cap rim and shadow fit at both travel endpoints");
 
-                    // Both rows share one height, so the grid is visually balanced.
-                    check (std::abs (a.getHeight() - c2.getHeight()) <= 2,
-                           "limiter grid rows are equal height");
+                    // The approved artwork has longer upper tracks (300:269 hit areas).
+                    check (std::abs ((float)a.getHeight()/(float)c2.getHeight()-300.0f/269.0f)<0.02f,
+                           "limiter track lengths match approved photographic layout");
                 }
             }
             auto* panel = findNamed (*canvas, "Console");
@@ -847,6 +883,8 @@ public:
         const auto output = args.isEmpty() ? juce::File::getCurrentWorkingDirectory()
                                          : juce::File (args[0].unquoted());
         output.createDirectory();
+        if (! args.contains ("--gui-only"))
+        {
         operatingLevelTests();
         parallelMixTests();
         colourTests();
@@ -857,6 +895,7 @@ public:
         audioTests();
         autoGainOrderTests();
         resetTests();
+        }
         ZychanStripProcessor proc;
         auto editor = std::unique_ptr<ZychanStripEditor> (static_cast<ZychanStripEditor*> (proc.createEditor()));
         colourGuiTests (proc, *editor);

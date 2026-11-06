@@ -8,7 +8,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.8-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.9-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -25,7 +25,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.8 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.9 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -343,11 +343,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.1.1` | neutral grey |
-| prerelease | `v1.1.1-beta.8` | amber |
+| prerelease | `v1.1.1-beta.9` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8  # v1.1.1-beta.8
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8   # …-beta.8
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.9  # v1.1.1-beta.9
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.9   # …-beta.9
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -442,6 +442,11 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 ## Changelog
 
+### 2026-11-06 — 1.1.1-beta.9 zy branding and limiter meters
+
+- Faceplate branding is now the zy line: `zy-560`, `zy-76`, `zy-la` and `zy-limiter`.
+- Limiter GR reads as two rows of four LEDs across exactly the THRESHOLD / CEILING caption span; the OUT ladder starts level with the GR meter and carries 32 steps.
+
 ### 2026-11-06 — 1.1.1-beta.8 wooden GUI frame
 
 - Added the approved figured-wood frame around the live rack and meter pages, with side rails half as thick as the top and bottom rails.
@@ -466,8 +471,8 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current local beta: **1.1.1-beta.8**. No stable release is authorized; promotion remains the user's decision.
+Current local beta: **1.1.1-beta.9**. No stable release is authorized; promotion remains the user's decision.
 
-Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs with a dB readout.
+Enhance GUI refresh: two rows of GR LEDs beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 
-The Enhance OUT ladder now has 20 levels from −48 to 0 dBFS. The meter-page UPDATE knob sets the shared GUI refresh interval from 16–500 ms (default 33 ms); double-click restores 33 ms. This is an editor-only control and does not change audio processing.
+The Enhance OUT ladder now has 32 levels from −48 to 0 dBFS, sized to the full-height column. The meter-page UPDATE knob sets the shared GUI refresh interval from 16–500 ms (default 33 ms); double-click restores 33 ms. This is an editor-only control and does not change audio processing.

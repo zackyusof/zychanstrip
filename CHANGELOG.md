@@ -10,6 +10,13 @@ has been published.
 
 ## [Unreleased]
 
+### Added — 1.1.1-beta.9 zy module branding + two-row GR meter (2026-11-06)
+
+- Rename the faceplate branding to the zy product line: `zy-560` (graphic EQ, top right), `zy-76` (FET compressor wordmark and model badge), `zy-la` (opto wordmark, meter face and model badge) and `zy-limiter` (limiter header). Hardware references in the DSP documentation are unchanged.
+- Redraw the limiter GR meter as two rows of four LEDs (1, 2, 3, 6 / 9, 12, 18, 24 dB), with the housing edges set exactly to the THRESHOLD / CEILING caption span.
+- Extend the limiter OUT ladder upward so its top edge aligns with the GR meter's top edge, and raise the ladder to 32 steps from -48 dBFS to 0 dBFS so the taller column keeps its dot density.
+- No DSP, parameter, ordering, latency or state changes.
+
 ### Added — 1.1.1-beta.8 wooden GUI frame (2026-11-06)
 
 - Add the approved figured-wood frame around the live rack and meter pages, with side rails half as thick as the top and bottom rails.

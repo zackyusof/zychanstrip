@@ -517,7 +517,7 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     // Typography: spread from the top of the face down to the pivot
     g.setFont (fnt (9.5f, true));
     g.setColour (pal::needleInk.withAlpha (0.78f));
-    g.drawText ("TELETRONIX", Rectangle<float> (110.0f, 12.0f).withCentre ({ c.x, r.getY() + H * 0.13f }), Justification::centred, false);
+    g.drawText ("zy-la", Rectangle<float> (110.0f, 12.0f).withCentre ({ c.x, r.getY() + H * 0.13f }), Justification::centred, false);
 
     g.setFont (Font (FontOptions ("Georgia", 20.0f, Font::bold)));
     g.setColour (pal::needleInk.withAlpha (0.92f));
@@ -1774,10 +1774,11 @@ protected:
         // 2. API emblem in top left (light blue)
         paintApiLogo (g, Rectangle<float> ((float) content.getX() + 4.0f, (float) content.getY() - 4.0f, 32.0f, 24.0f), Colour (0xff8bb5eb));
 
-        // 3. "560" in top right (light blue)
-        g.setFont (fnt (26.0f, false));
+        // 3. Module wordmark in top right (light blue). Rebranded from the API "560" model
+        //    number to the zy-560 product name; the box grows so the longer name is not clipped.
+        g.setFont (fnt (21.0f, false));
         g.setColour (Colour (0xff8bb5eb));
-        g.drawText ("560", Rectangle<float> ((float) content.getRight() - 56.0f, (float) content.getY() - 6.0f, 52.0f, 26.0f), Justification::centredRight);
+        g.drawText ("zy-560", Rectangle<float> ((float) content.getRight() - 100.0f, (float) content.getY() - 4.0f, 96.0f, 26.0f), Justification::centredRight);
 
         // 4. Two black machine screws below top header
         const float topScrewY = (float) content.getY() + 26.0f;
@@ -1917,11 +1918,11 @@ protected:
         g.setColour (Colours::white.withAlpha (0.35f));
         g.drawRoundedRectangle (subPlate.translated (0.0f, 1.0f), 3.0f, 0.8f);
 
-        caption (g, "TELETRONIX", { (int) subPlate.getX(), (int) subPlate.getY() + 14, (int) subPlate.getWidth(), 18 }, 14.0f);
+        caption (g, "zy-la", { (int) subPlate.getX(), (int) subPlate.getY() + 14, (int) subPlate.getWidth(), 18 }, 14.0f);
         caption (g, "AUTOMATIC LEVELING AMPLIFIER", { (int) subPlate.getX(), (int) subPlate.getY() + 34, (int) subPlate.getWidth(), 14 }, 8.5f, Justification::centred, false);
         caption (g, "PATENT NO. 3,258,696", { (int) subPlate.getX(), (int) subPlate.getY() + 52, (int) subPlate.getWidth(), 14 }, 7.5f, Justification::centred, false);
 
-        paintBadge (g, Rectangle<float> ((float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f), "LA-2A");
+        paintBadge (g, Rectangle<float> ((float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f), "zy-la");
     }
 
     void paintMeter (Graphics& g) override
@@ -2021,7 +2022,7 @@ protected:
         caption (g, "RELEASE", { relCx - 40, relCy - 44, 80, 15 }, 10.4f);
 
         // Vintage UREI-style wordmark in the top centre
-        engraveText (g, "urei", { content.getX(), content.getY() - 6, content.getWidth(), 22 },
+        engraveText (g, "zy-76", { content.getX(), content.getY() - 6, content.getWidth(), 22 },
                      Justification::centred, 21.0f, Colour (0xffe8e8e8), false);
 
         // Lower vintage sub-plate filling empty negative space with authentic nomenclature
@@ -2038,7 +2039,7 @@ protected:
         engraveText (g, "SOLID STATE PEAK LIMITER", { (int) subPlate.getX(), (int) subPlate.getY() + 56, (int) subPlate.getWidth(), 14 },
                      Justification::centred, 8.5f, pal::engraveDim, false);
 
-        paintBadge (g, { (float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f }, "1176");
+        paintBadge (g, { (float) content.getCentreX() - 44.0f, (float) content.getBottom() - 34.0f, 88.0f, 28.0f }, "zy-76");
     }
 
     void paintMeter (Graphics& g) override
@@ -2139,8 +2140,7 @@ protected:
         autoGain.setBounds (c.getX() + 4, bypass.getY(), bypass.getWidth(), bypass.getHeight());
 
         // Control area below the AUTO GAIN switch, split into two equal rows.
-        const int gridTop = top + 80;
-        autoGainStatus = { c.getX() + 2, gridTop - 15, c.getWidth() - 4, 10 };
+        const int gridTop = top + 86;
         const int bottomReserve = 26;
         const int gridH = c.getBottom() - gridTop - bottomReserve;
         faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
@@ -2149,6 +2149,11 @@ protected:
         const int captionH = 16;
         const int rowH = gridH / 2;
         const int cellW = bankW / 2;
+
+        // GR meter: two rows of LEDs, sized so its left and right edges sit exactly on the
+        // THRESHOLD / CEILING caption block (two fader columns, edge to edge).
+        ladderA = { c.getX(), top + 2, cellW * 2, 64 };
+        autoGainStatus = { c.getX() + 5, top + 68, cellW * 2 - 10, 10 };
 
         Slider* all[4] { &gain, &ceiling, &release, &fader };
         for (int i = 0; i < 4; ++i)
@@ -2167,8 +2172,9 @@ protected:
             all[i]->setBounds (cellX + cellW / 2 - 20, cellY + captionH, 40, faderH);
         }
 
-        ladderA = { c.getCentreX() - 84, top + 13, 168, 38 };
-        ladderB = { c.getRight() - 30, gridTop + 22, 30, gridH - 42 };
+        // OUT ladder starts on the GR meter's top edge and runs to the bottom of the fader bank,
+        // so both metering columns share one height (user directive 2026-11-06).
+        ladderB = { c.getRight() - 30, ladderA.getY(), 30, gridTop + gridH - 20 - ladderA.getY() };
         enhanceLabel = { c.getX(), c.getBottom() - 20, c.getWidth(), 18 };
     }
 
@@ -2185,7 +2191,11 @@ protected:
             caption (g, names[i], Rectangle<int> (cell.getX(), b.getY() - 18, cell.getWidth(), 16), 8.5f);
         }
 
-
+        // Module wordmark, centred in the gap between the AUTO GAIN and BYPASS headers.
+        engraveText (g, "zy-limiter",
+                     { autoGain.getRight() + 2, bypass.getY() + 4,
+                       bypass.getX() - autoGain.getRight() - 4, 16 },
+                     Justification::centred, 8.6f, labelColour, true);
     }
 
     // The metre surround is painted into the face image so the ladders draw on top of it.
@@ -2248,19 +2258,29 @@ protected:
                                             on?colour:Colours::black,x,y+size*.5f,false));
             g.fillEllipse(r);g.setColour(Colours::white.withAlpha(on?.55f:.12f));g.fillEllipse(r.reduced(size*.3f).translated(-.5f,-.7f));
         };
+        // GR: two rows x four steps, in the same horizontal span as the THRESHOLD / CEILING
+        // captions (see layoutContent). Level scale grows left-to-right, top row then bottom.
         const auto bar=ladderA.toFloat();
         g.setColour(Colour(0xff202a32));g.fillRoundedRectangle(bar,4);
         g.setColour(Colour(0xffb6bdc3));g.drawRoundedRectangle(bar.reduced(.8f),4,1);
         g.setFont(fnt(8));g.drawText("GR",bar.withHeight(12),Justification::centred);
-        const float levels[]{1,3,6,9,12,18,24};
-        for(int i=0;i<7;++i){float x=bar.getX()+14+i*(bar.getWidth()-28)/6;
-            led(x,bar.getY()+20,i<4?Colour(0xff34ef60):i<6?Colour(0xffffbc32):Colour(0xffff4235),gr>=levels[i],6);
-            g.setColour(labelColour);g.setFont(fnt(6.5f,false));g.drawText(String((int)levels[i]),Rectangle<float>(x-8,bar.getBottom()-10,16,9),Justification::centred);
+        const float levels[]{1,2,3,6,9,12,18,24};
+        for(int i=0;i<8;++i){
+            const int row=i/4, col=i%4;
+            const float x=bar.getX()+14.0f+(float)col*(bar.getWidth()-28.0f)/3.0f;
+            const float y=bar.getY()+22.0f+(float)row*24.0f;
+            led(x,y,i<=3?Colour(0xff34ef60):i<=6?Colour(0xffffbc32):Colour(0xffff4235),gr>=levels[i],7);
+            g.setColour(labelColour);g.setFont(fnt(6.5f,false));
+            g.drawText(String((int)levels[i]),Rectangle<float>(x-10.0f,y+6.0f,20.0f,9.0f),Justification::centred);
         }
-        const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,20),3);
-        g.setColour(labelColour);g.setFont(fnt(9));g.drawText("OUT",out.withY(out.getY()-17).withHeight(12),Justification::centred);
-        for(int i=0;i<20;++i){float db=-48.f+i*(48.f/19.f);float y=out.getBottom()-i*(out.getHeight()-8)/19.f-4;
-            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,i<14?Colour(0xff35ed37):i<18?Colour(0xffffb438):Colour(0xffff4030),outDb>=db,5);
+        // OUT: full-height column starting on the GR meter's top edge.
+        const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,0),3);
+        g.setColour(labelColour);g.setFont(fnt(9));g.drawText("OUT",out.withHeight(14),Justification::centred);
+        constexpr int outSteps=32;
+        for(int i=0;i<outSteps;++i){float db=-48.f+(float)i*(48.f/(float)(outSteps-1));
+            float y=out.getBottom()-6.0f-(float)i*(out.getHeight()-28.0f)/(float)(outSteps-1);
+            const auto col=i<outSteps-6?Colour(0xff35ed37):i<outSteps-2?Colour(0xffffb438):Colour(0xffff4030);
+            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,col,outDb>=db,5.2f);
         }
         g.setColour(labelColour);g.setFont(fnt(8,false));g.drawText(outDb<=-99?String("−∞ dB"):String(outDb,1)+" dB",out.withY(out.getBottom()+7).withHeight(12).expanded(8,0),Justification::centred);
 

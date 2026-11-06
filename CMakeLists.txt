@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(zychanstrip VERSION 1.1.1)
+project(zychanstrip VERSION 1.1.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,11 +86,11 @@ target_compile_definitions(zychanstrip PUBLIC
     JUCE_VST3_CAN_REPLACE_VST2=0)
 
 # Version / channel label shown in the GUI header, immediately after the wordmark.
-# Convention:  stable  ->  "v<PROJECT_VERSION>"            e.g. v1.1.1
-#              beta    ->  "v<PROJECT_VERSION>-<BETA>"     e.g. v1.1.1-beta.1
+# Convention:  stable  ->  "v<PROJECT_VERSION>"            e.g. v1.1.2
+#              beta    ->  "v<PROJECT_VERSION>-<BETA>"     e.g. v1.1.2-beta.1
 # PROJECT_VERSION stays numeric (the bundle plist needs it); the prerelease suffix lives
 # only here, so the GUI can never disagree with the tag it was built from.
-set(ZYCHANSTRIP_BETA "beta.10" CACHE STRING
+set(ZYCHANSTRIP_BETA "" CACHE STRING
     "Prerelease suffix rendered in the GUI header (e.g. beta.1); empty = stable")
 if(ZYCHANSTRIP_BETA)
     set(ZYCHANSTRIP_GUI_VERSION "v${PROJECT_VERSION}-${ZYCHANSTRIP_BETA}")

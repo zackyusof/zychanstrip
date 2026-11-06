@@ -10,6 +10,18 @@ has been published.
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-11-06
+
+First stable release of the 1.1.2 line (promoted from `1.1.1-beta.10`). The audio engine, parameter
+set, rack ordering, latency and state format are unchanged from the last beta.
+
+### Changed — GUI opens at the minimum size
+
+- The editor now opens at the minimum size, **904 × 686**, instead of the previous 1128 × 856 default.
+  Resizing is unchanged: the window still drags up to 1.5× (1692 × 1284) with the framed aspect ratio
+  locked, and the layout scales from the same logical canvas at every size.
+- Screenshots and snapshot coverage at 1128 × 856 are unaffected (the harness sets sizes explicitly).
+
 ### Fixed — 1.1.1-beta.10 colour-engine CPU (2026-11-06)
 
 - Stop processing the neural Colour Engine when it cannot reach the output. `ColourEngine::frame` mixes the WaveNet branch with `weights[1]`, which is exactly zero in ALGO and CLEAN, so every sample was computed and then discarded; `render()` now skips the models unless that weight is non-zero, or a fade into NAM is in progress. The models keep their state — `nam::DSP::Reset()` may allocate and must not run on the audio thread.

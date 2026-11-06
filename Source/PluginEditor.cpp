@@ -2401,9 +2401,13 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     setResizable (true, true);
     constexpr int framedW = kEditorW + 2 * kWoodSideRail;
     constexpr int framedH = kEditorH + 2 * kWoodTopBottomRail;
-    setResizeLimits (904, 686, framedW * 3 / 2, framedH * 3 / 2);
+    // The window opens at the minimum size (user directive 2026-11-06); resizing is still
+    // allowed up to 1.5x with the framed aspect ratio locked.
+    constexpr int defaultW = 904;
+    constexpr int defaultH = 686;
+    setResizeLimits (defaultW, defaultH, framedW * 3 / 2, framedH * 3 / 2);
     getConstrainer()->setFixedAspectRatio ((double) framedW / framedH);
-    setSize (framedW, framedH);
+    setSize (defaultW, defaultH);
     meterPanel->onUpdateIntervalChanged = [this](int ms) { startTimer(ms); };
     startTimer (33);
 }

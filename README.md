@@ -461,3 +461,5 @@ and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), fol
 Current local beta: **1.1.1-beta.7**. No stable release is authorized; promotion remains the user's decision.
 
 Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs with a dB readout.
+
+The Enhance OUT ladder now has 20 levels from −48 to 0 dBFS. The meter-page UPDATE knob sets the shared GUI refresh interval from 16–500 ms (default 33 ms); double-click restores 33 ms. This is an editor-only control and does not change audio processing.

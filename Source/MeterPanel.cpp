@@ -52,6 +52,24 @@ void digital (Graphics& g, Rectangle<int> r, const String& value, Colour ink, fl
 MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
 {
     setOpaque (true);
+    updateInterval.setName("Meter update interval");
+    updateInterval.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    updateInterval.setRange(16, 500, 1);
+    updateInterval.setSkewFactorFromMidPoint(100);
+    updateInterval.setValue(33, dontSendNotification);
+    updateInterval.setTextBoxStyle(Slider::TextBoxRight, false, 54, 18);
+    updateInterval.setTextValueSuffix(" ms");
+    updateInterval.setDoubleClickReturnValue(true, 33);
+    updateInterval.setTooltip("GUI meter refresh interval. Lower values refresh faster; audio processing is unaffected. Double-click restores 33 ms.");
+    updateInterval.onValueChange = [this] {
+        if (onUpdateIntervalChanged) onUpdateIntervalChanged((int)updateInterval.getValue());
+    };
+    addAndMakeVisible(updateInterval);
+    updateLabel.setText("UPDATE", dontSendNotification);
+    updateLabel.setFont(sslSans(9, true));
+    updateLabel.setColour(Label::textColourId, bronze);
+    updateLabel.setJustificationType(Justification::centredRight);
+    addAndMakeVisible(updateLabel);
 }
 
 const char* MeterPanel::scaleName (int index)
@@ -109,7 +127,7 @@ void MeterPanel::tick()
     // here, on the GUI thread, at the panel's own tick rate — the DSP metering tap stays
     // untouched and read-only.
     static constexpr float avgCoef[] { 1.00f, 0.55f, 0.25f, 0.10f };   // SETTLE, FAST, MED, AVG
-    const float a = avgCoef[(size_t) jlimit (0, 3, rtaAverage)];
+    const float a = 1.f - std::pow(1.f - avgCoef[(size_t) jlimit (0, 3, rtaAverage)], (float)updateInterval.getValue()/33.f);
     for (int i = 0; i < RackMeters::kBands && i < (int) bd.size(); ++i)
     {
         const float target = bd[(size_t) i];
@@ -117,7 +135,7 @@ void MeterPanel::tick()
         bandHoldDb[(size_t) i] = (i < (int) bh.size()) ? bh[(size_t) i] : -100.0f;
     }
     const float c = m.correlation();
-    corrSmoothed += (c - corrSmoothed) * 0.4f;
+    corrSmoothed += (c - corrSmoothed) * (1.f-std::pow(.6f,(float)updateInterval.getValue()/33.f));
 
     // Never repaint while the editor is being torn down. A Timer firing during app quit used to
     // post a message after the editor's handles were gone (crash in MessageQueue::post on a null
@@ -147,6 +165,8 @@ void MeterPanel::resized()
     backBtn  = { hb.getX(), hb.getCentreY() - 11, 68, 22 };
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
     scaleBtn = { hb.getRight() - 104, hb.getCentreY() - 11, 104, 22 };
+    updateInterval.setBounds(scaleBtn.getX()-112, hb.getY(), 104, 34);
+    updateLabel.setBounds(scaleBtn.getX()-166, hb.getY(), 52, 34);
 }
 
 void MeterPanel::mouseDown (const MouseEvent& e)

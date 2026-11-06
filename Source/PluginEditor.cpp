@@ -2197,8 +2197,8 @@ protected:
         }
         const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,20),3);
         g.setColour(labelColour);g.setFont(fnt(9));g.drawText("OUT",out.withY(out.getY()-17).withHeight(12),Justification::centred);
-        for(int i=0;i<10;++i){float db=-48+i*5.3f;float y=out.getBottom()-i*(out.getHeight()-8)/9-4;
-            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,i<7?Colour(0xff35ed37):i<9?Colour(0xffffb438):Colour(0xffff4030),outDb>=db,5);
+        for(int i=0;i<20;++i){float db=-48.f+i*(48.f/19.f);float y=out.getBottom()-i*(out.getHeight()-8)/19.f-4;
+            for(int ch=0;ch<2;++ch)led(out.getX()+8+ch*13,y,i<14?Colour(0xff35ed37):i<18?Colour(0xffffb438):Colour(0xffff4030),outDb>=db,5);
         }
         g.setColour(labelColour);g.setFont(fnt(8,false));g.drawText(outDb<=-99?String("−∞ dB"):String(outDb,1)+" dB",out.withY(out.getBottom()+7).withHeight(12).expanded(8,0),Justification::centred);
 
@@ -2319,7 +2319,8 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     setResizeLimits (864, 608, 1620, 1140);
     getConstrainer()->setFixedAspectRatio ((double) kEditorW / kEditorH);
     setSize (864, 608);
-    startTimerHz (30);
+    meterPanel->onUpdateIntervalChanged = [this](int ms) { startTimer(ms); };
+    startTimer (33);
 }
 
 juce::Component* ZychanStripEditor::getModulePanelForTest (int id)

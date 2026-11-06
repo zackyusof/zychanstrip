@@ -16,11 +16,12 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
-    /** Called from the editor's 30 Hz timer. */
+    /** Called at the selected GUI refresh interval. */
     void tick();
 
     /** Invoked when the operator asks to return to the processor (rack) page. */
     std::function<void()> onBack;
+    std::function<void(int)> onUpdateIntervalChanged;
 
     /** Invoked by the header RESET button. The editor points this at its full reset action. */
     std::function<void()> onReset;
@@ -46,6 +47,8 @@ private:
     enum class Pressed { None, Back, Reset };
     Pressed pressed = Pressed::None;
 
+    juce::Slider updateInterval;
+    juce::Label updateLabel;
     int scale = 0;
     juce::Rectangle<int> resetBtn, scaleBtn, backBtn, headerBar, meterArea, footerArea, scopeArea, corrArea, rtaArea;
     std::array<float, RackMeters::kBands> bandDb {};

@@ -33,13 +33,14 @@ host input buffer
    │
    └─► slot 0 → slot 1 → slot 2 → slot 3
                                       │
-                                      ├─ master gain (smoothed)
-                                      ├─ dry/wet blend
-                                       ├─ optional UNITY matcher (stereo-linked)
-                                       └─ metering tap (read-only)
-                                              │
-                                              ▼
-                                        host output
+                                       ├─ master gain (smoothed)
+                                       ├─ dry/wet blend
+                                        ├─ optional UNITY matcher (stereo-linked)
+                                        ├─ optional Final 2x Oversampling antialiasing (after the mix)
+                                        └─ metering tap (read-only)
+                                               │
+                                               ▼
+                                         host output
 ```
 
 ### Why one buffer and not four
@@ -261,3 +262,27 @@ returns untouched input at the fixed reported latency; RESET clears both wet/dry
 Mix targets ramp 20 ms, and Auto Gain/UNITY compare aligned input time intervals. Phase from
 intentional EQ bands/captured analog response remains; this is not arbitrary phase removal.
 See [parallel mix repair](../specs/parallel-mix-phase-repair.md) for causes, tradeoffs and tests.
+
+---
+
+## Beta.7 final-stage 2x oversampling — current behavior
+
+A host-automatable **Final 2x Oversampling** switch (`final_oversampling`, appended last in
+`createLayout()`) wraps the completed post-master/post-mix/post-UNITY output in a
+`juce::dsp::Oversampling<float>` (2×, FIR equiripple, maximum quality, integer latency) before
+the read-only meter tap (`Source/PluginProcessor.cpp:278-287`).
+
+It upsamples the final mixed signal to 2× the host rate, then downsample-filters it back,
+removing content above the original Nyquist produced by ALGO saturation, the NAM nonlinear
+residual and the limiter's drive/saturation. Because it sits *after* the dry/wet mix, both
+dry and wet components receive the same oversampling delay — no dry/wet misalignment.
+
+The oversampler's latency is folded into the single `prepareToPlay()` latency report
+(`Source/PluginProcessor.cpp:115-128`), so host PDC stays constant whether the switch is on
+or off. The dry-path delay matches module latency only (not oversampling), so when disabled
+the output is early by the oversampling latency relative to host PDC; internal dry/wet
+alignment is unaffected.
+
+Default off: ALGO/CLEAN remain at the beta.10 ~0.7% of a core. Enabling roughly doubles
+final-stage CPU cost. It is not applied to the NAM branch itself (already 48 kHz + sinc SRC)
+or to EQ560 bands (already 2× SVF + linear-phase FIR).

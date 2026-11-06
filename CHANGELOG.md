@@ -10,6 +10,14 @@ has been published.
 
 ## [Unreleased]
 
+### Added — 1.2.0-beta.7 final-stage 2x oversampling antialiasing
+
+- New host-automatable **Final 2x Oversampling** switch appended at the end of the parameter layout (existing host indices unchanged).
+- Wraps the completed post-master/post-mix/post-UNITY output in a `juce::dsp::Oversampling` (2×, FIR equiripple, maximum quality, integer latency) before the read-only meter tap. Upsamples, then downsample-filters to remove content above Nyquist produced by ALGO saturation, NAM nonlinear residual and limiter drive.
+- Oversampling latency is folded into the single `prepareToPlay()` latency report, so host PDC stays constant whether the switch is on or off. The dry-path delay matches module latency only; since the oversampler is after the dry/wet mix, both components receive the same delay when enabled.
+- Default off: ALGO/CLEAN remain at the beta.10 ~0.7% of a core. Enabling roughly doubles final-stage CPU cost.
+- Not applied to the NAM branch itself (already 48 kHz + sinc SRC); not applied to EQ560 bands (already 2× SVF + linear-phase FIR).
+
 ## [1.2.0-beta.4] — 2026-11-06
 
 ### Changed — 1176 knobs back to the 1.1.2 rendering

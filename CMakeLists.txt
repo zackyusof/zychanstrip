@@ -105,7 +105,7 @@ target_compile_definitions(zychanstrip PUBLIC
 #              beta    ->  "v<PROJECT_VERSION>-<BETA>"     e.g. v1.1.2-beta.1
 # PROJECT_VERSION stays numeric (the bundle plist needs it); the prerelease suffix lives
 # only here, so the GUI can never disagree with the tag it was built from.
-set(ZYCHANSTRIP_BETA "beta.6" CACHE STRING
+set(ZYCHANSTRIP_BETA "beta.7" CACHE STRING
     "Prerelease suffix rendered in the GUI header (e.g. beta.1); empty = stable")
 if(ZYCHANSTRIP_BETA)
     set(ZYCHANSTRIP_GUI_VERSION "v${PROJECT_VERSION}-${ZYCHANSTRIP_BETA}")

@@ -82,6 +82,11 @@ private:
     std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
     std::atomic<float>* unityEnabled = nullptr;
+    std::atomic<float>* finalOversampling = nullptr;
+    juce::dsp::Oversampling<float> finalOversampler { 2, 1,
+        juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+        true, true };
+    int finalOversamplingLatency = 0;
     juce::SmoothedValue<float> masterGain { 1.0f };
     juce::SmoothedValue<float> mixGain { 1.0f };
     juce::SmoothedValue<float> unityGain { 1.0f };

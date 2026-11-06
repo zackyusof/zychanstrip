@@ -79,6 +79,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout ZychanStripProcessor::create
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { "colour_mode", 1 }, "Colour Engine",
         juce::StringArray { "ALGO", "NAM", "CLEAN" }, 0));
+    // Final-stage 2x oversampling antialiasing filter. Appended last so existing host
+    // parameter indices stay stable. Default off to preserve the cheap ALGO/CLEAN path.
+    // Runs after master/mix/UNITY, so it antialiases the completed output without
+    // disturbing the dry/wet blend. Latency is included in the reported plugin latency.
+    addB ("final_oversampling", "Final 2x Oversampling", false);
     return layout;
 }
 
@@ -97,6 +102,7 @@ ZychanStripProcessor::ZychanStripProcessor()
     masterLevel = apvts.getRawParameterValue ("master_level");
     mixAmount   = apvts.getRawParameterValue ("master_mix");
     unityEnabled = apvts.getRawParameterValue ("unity");
+    finalOversampling = apvts.getRawParameterValue ("final_oversampling");
 }
 
 bool ZychanStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -108,18 +114,21 @@ bool ZychanStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 
 void ZychanStripProcessor::prepareToPlay (double sr, int block)
 {
-    int latency = 0;
+    int moduleLatency = 0;
     for (auto& m : modules)
     {
         m->prepare (sr, block);
-        latency += m->getLatencySamples();
+        moduleLatency += m->getLatencySamples();
     }
-    setLatencySamples (latency);   // constant regardless of order or bypass
+    // Final-stage oversampling adds fixed latency; include it in the reported plugin
+    // latency so host PDC stays constant whether the oversampler is on or off.
+    finalOversampler.initProcessing (block);
+    finalOversamplingLatency = (int) finalOversampler.getLatencyInSamples();
+    setLatencySamples (moduleLatency + finalOversamplingLatency);
     dryBuffer.setSize (2, juce::jmax (1, block), false, false, true);
-    // Dry-path delay, sized once for the reported latency. `rd = wp + 1` already supplies one
-    // sample of delay, so the ring needs `latency + 1` slots to shift the dry path by exactly the
-    // reported latency. A zero-latency rack keeps len 0 and the blend falls back to the plain copy.
-    dryDelayLen = latency > 0 ? (int) latency + 1 : 0;
+    // Dry-path delay matches module latency only; oversampling sits after the mix so
+    // it applies equally to the summed wet+dry output (no dry/wet misalignment).
+    dryDelayLen = moduleLatency > 0 ? (int) moduleLatency + 1 : 0;
     for (auto& d : dryDelay) d.assign ((size_t) juce::jmax (1, dryDelayLen), 0.0f);
     dryWp = 0;
     chainInputRef.assign ((size_t) juce::jmax (1, block), 0.0f);
@@ -145,6 +154,7 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     if (resetRequested.exchange (false))
     {
         for (auto& m : modules) m->reset();
+        finalOversampler.reset();
         for (auto& delay : dryDelay) std::fill (delay.begin(), delay.end(), 0.f);
         dryWp = 0;
         mixGain.setCurrentAndTargetValue (mixAmount->load() * 0.01f);
@@ -267,6 +277,17 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         unityGainDb.store (gainReadout, std::memory_order_relaxed);
     else if (matchUnity)
         unityGainDb.store (0.0f, std::memory_order_relaxed);
+
+    // Final-stage 2x oversampling antialiasing filter. Runs on the completed post-mix
+    // output so it antialiases the summed signal without disturbing the dry/wet blend.
+    // When off, output is early by finalOversamplingLatency relative to reported PDC;
+    // internal dry/wet alignment is unaffected because the oversampler is after the mix.
+    if (finalOversampling != nullptr && finalOversampling->load (std::memory_order_relaxed) > 0.5f)
+    {
+        juce::dsp::AudioBlock<float> block (buffer);
+        finalOversampler.processSamplesUp (block);
+        finalOversampler.processSamplesDown (block);
+    }
 
     // Metering tap sits after UNITY as well, so the meters show what actually leaves.
     meters.process (buffer);
@@ -415,6 +436,7 @@ void ZychanStripProcessor::setStateInformation (const void* data, int size)
             addMissingParameter ("lim_auto_gain", 0.0f);
             addMissingParameter ("unity", 0.0f);
             addMissingParameter ("colour_mode", 0.0f);
+            addMissingParameter ("final_oversampling", 0.0f);
             apvts.replaceState (state);
 
             auto tokens = juce::StringArray::fromTokens (state.getProperty ("order", "0,1,2,3").toString(), ",", "");

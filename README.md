@@ -8,7 +8,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.2.0--beta.6-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.2.0--beta.7-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -417,6 +417,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 | `zychanstrip-mix-phase` | **Reopened by listening; repaired in beta.6** | The earlier bypass-only test missed flat EQ's near-180° oversampling phase at 16 kHz, causing -29.6 dB cancellation at 50%. NAM capture transport/API inversion and a dry ring frozen at endpoints added errors. Beta.6 uses linear-phase EQ oversampling, calibrated capture alignment, continuously running dry delay and fixed 0% timing. Active-rack/mode/endpoint regressions replace the insufficient bypass-only evidence. Remaining analog/EQ phase is intentional; listening sign-off is pending. |
 | `zychanstrip-autogain-order` | **Fixed in beta.5 — full-rack matching** | Matching now measures uncorrected output after all four modules and applies correction before master/mix. All 24 active NAM orders must match input RMS when headroom permits. Earlier low-spread permutation tests bypassed the other modules and did not detect the processor's half-correction error; they were insufficient evidence of correct absolute matching. |
 | `zychanstrip-dupe-au` | ~~Duplicate AU install~~ **CLOSED 2026-11-01, re-closed 2026-11-03** | Policy is one copy, **global only** (`/Library/Audio/Plug-Ins/Components`). The user copy reappeared because a spec's deploy step copied there; builds no longer install anywhere (`COPY_PLUGIN_AFTER_BUILD FALSE`) and `tools/install_global.sh` removes any user-space copy and fails if two copies exist. |
+| `zychanstrip-final-oversampling` | **PDC offset when disabled** | Final 2x oversampling adds fixed latency included in the reported plugin latency. When disabled, output is early by that latency relative to host PDC; internal dry/wet alignment is unaffected because the oversampler sits after the mix. Enable for antialiasing at the cost of ~2× the final-stage CPU. |
 
 Closed work is recorded with evidence; anything unverified stays open deliberately.
 

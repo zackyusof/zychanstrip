@@ -10,6 +10,15 @@ has been published.
 
 ## [Unreleased]
 
+## [1.2.0-beta.4] — 2026-11-06
+
+### Changed — 1176 knobs back to the 1.1.2 rendering
+
+- The FET module's knobs return to the released 1.1.2 chrome rendering (user directive). The
+  knurled-aluminium-on-clear-skirt variant is withdrawn and its sprite removed from the asset set.
+- API 560 cream/red slider caps and the silver Enhance faders stay as corrected in beta.3.
+- GUI only: no DSP, parameter, ordering, latency or state change.
+
 ## [1.2.0-beta.3] — 2026-11-06
 
 ### Fixed — hardware-accurate colours, checked against reference photographs

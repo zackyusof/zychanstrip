@@ -110,7 +110,7 @@ MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
         if (onUpdateIntervalChanged) onUpdateIntervalChanged((int)updateInterval.getValue());
     };
     addAndMakeVisible(updateInterval);
-    updateLabel.setText("UPDATE · ms", dontSendNotification);
+    updateLabel.setText("UPDATE (ms)", dontSendNotification);
     updateLabel.setFont(sslSans(9, true));
     updateLabel.setColour(Label::textColourId, bronze);
     updateLabel.setJustificationType(Justification::centred);

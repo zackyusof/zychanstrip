@@ -39,6 +39,14 @@ EQ core in `Source/Eq560.h`); there is no other audio path.
    Keep the harness green before pushing; record what you could not verify.
 9. **Beta builds are never labeled stable.** Keep the numeric project/AU version at the user-authorized
    line and use `ZYCHANSTRIP_BETA` for the prerelease label. The user decides stable promotion/tag/release.
+   **The GUI label comes from `ZYCHANSTRIP_BETA`, which is a CMake cache variable.** Once `build/CMakeCache.txt`
+   stores a value, re-running cmake keeps it — changing the CMakeLists.txt default does NOT update an existing
+   build directory. Whenever the beta changes: (a) update the `ZYCHANSTRIP_BETA` default in CMakeLists.txt,
+   (b) reconfigure with `-DZYCHANSTRIP_BETA=beta.N` (or delete `build/CMakeCache.txt`), (c) verify the configure
+   output prints `zychanstrip GUI version label: vX.Y.Z-beta.N`, then (d) build + install. The GUI label must
+   match the git tag before any push or install.
+10. **Never trust a silent build.** After `ninja -C build`, always confirm the artefact's version label matches
+    the tag before `tools/install_global.sh`. The installer now refuses a label/tag mismatch.
 
 ## Documentation duties
 

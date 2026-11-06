@@ -46,6 +46,22 @@ case "$SRC" in
     "$USER_DIR"/*) die "refusing to install FROM user space ($SRC). Build produces the artefact under build/." ;;
 esac
 
+# ---- GUI version-label guard (2026-11-07, user directive) ----------------------------
+# ZYCHANSTRIP_BETA is a CMake cache variable; an old build/CMakeCache.txt can leave the
+# GUI labeled beta.N-1 even after CMakeLists.txt and the tag say beta.N. The installer
+# now refuses a label/tag mismatch so a mislabeled AU can never be installed.
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 && [ -f "$REPO/build/CMakeCache.txt" ]; then
+    CACHE_BETA="$(grep -E '^ZYCHANSTRIP_BETA:' "$REPO/build/CMakeCache.txt" | head -1 | sed 's/^[^=]*=//' | tr -d '[:space:]')"
+    LATEST_TAG="$(git -C "$REPO" describe --tags --abbrev=0 --match '*beta*' 2>/dev/null || true)"
+    if [ -n "$CACHE_BETA" ] && [ -n "$LATEST_TAG" ]; then
+        TAG_BETA="${LATEST_TAG##*-beta.}"
+        if [ "$CACHE_BETA" != "beta.$TAG_BETA" ]; then
+            die "GUI version label mismatch: build cache ZYCHANSTRIP_BETA=$CACHE_BETA but latest tag is $LATEST_TAG (beta.$TAG_BETA). Reconfigure with -DZYCHANSTRIP_BETA=beta.$TAG_BETA (or delete build/CMakeCache.txt), rebuild, then install." 1
+        fi
+        printf 'version : GUI label matches tag %s (ZYCHANSTRIP_BETA=%s)\n' "$LATEST_TAG" "$CACHE_BETA" >&2
+    fi
+fi
+
 # ---- "Latest always" guard (2026-11-03, user directive) -------------------------------
 # An installed AU must be reproducible from a commit: build the newest code, not whatever
 # happened to be in the tree when someone last ran ninja. Measured failure this prevents:

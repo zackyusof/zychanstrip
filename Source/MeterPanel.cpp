@@ -49,9 +49,54 @@ void digital (Graphics& g, Rectangle<int> r, const String& value, Colour ink, fl
 }
 } // namespace
 
+void MeterPanel::UpdateKnobLook::drawRotarySlider(Graphics& g, int x, int y, int w, int h,
+                                                float position, float start, float end, Slider& slider)
+{
+    const Point<float> c((float)x+w*.5f, (float)y+h*.5f);
+    const float r=jmin((float)w,(float)h)*.285f;
+    const auto circle=Rectangle<float>(r*2,r*2).withCentre(c);
+    for(int i=0;i<=20;++i) {
+        const float a=start+(end-start)*i/20.f;
+        Point<float> d(std::sin(a),-std::cos(a));
+        g.setColour(Colour(0xff85877e));
+        g.drawLine(Line<float>(c+d*(r+6),c+d*(r+9)),.7f);
+    }
+    for(int value : {16,33,50,100,200,500}) {
+        const float a=start+(end-start)*(float)slider.valueToProportionOfLength(value);
+        Point<float> d(std::sin(a),-std::cos(a));
+        g.setColour(Colour(0xffe2e3d8));
+        g.drawLine(Line<float>(c+d*(r+5),c+d*(r+10)),1.f);
+        const auto p=c+d*(r+18);
+        g.setFont(sslSans(8));
+        g.drawText(String(value),Rectangle<float>(p.x-12,p.y-5,24,10),Justification::centred);
+    }
+    g.setColour(Colours::black.withAlpha(.75f));g.fillEllipse(circle.expanded(4).translated(1,3));
+    g.setGradientFill(ColourGradient(Colour(0xff68615a),c.x-r,c.y-r,Colour(0xff151718),c.x+r,c.y+r,false));
+    g.fillEllipse(circle.expanded(3));
+    for(int i=0;i<48;++i) {
+        const float a=MathConstants<float>::twoPi*i/48;
+        Point<float> d(std::sin(a),-std::cos(a));
+        g.setColour(Colours::black.withAlpha(.6f));g.drawLine(Line<float>(c+d*(r-1),c+d*(r+3)),.7f);
+    }
+    g.setGradientFill(ColourGradient(Colour(0xfff74924),c.x-r*.3f,c.y-r,Colour(0xffa91006),c.x+r*.4f,c.y+r,false));
+    g.fillEllipse(circle);
+    g.setColour(Colour(0xff5b130a));g.drawEllipse(circle,.8f);
+    g.saveState();Path clip;clip.addEllipse(circle.reduced(1));g.reduceClipRegion(clip);
+    g.setGradientFill(ColourGradient(Colours::white.withAlpha(.55f),c.x-r*.35f,c.y-r*.65f,
+                                    Colours::transparentWhite,c.x+r*.4f,c.y+r*.25f,true));
+    g.fillEllipse(circle);
+    g.restoreState();
+    const float angle=start+position*(end-start);
+    const Point<float> d(std::sin(angle),-std::cos(angle));
+    g.setColour(Colour(0xffffecd2));
+    g.drawLine(Line<float>(c-d*r*.15f,c+d*r*.87f),3.f);
+}
+
 MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
 {
     setOpaque (true);
+    updateInterval.setLookAndFeel(&updateKnobLook);
+    updateInterval.setRotaryParameters(MathConstants<float>::pi*1.25f, MathConstants<float>::pi*2.75f, true);
     updateInterval.setName("Meter update interval");
     updateInterval.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     updateInterval.setRange(16, 500, 1);
@@ -65,7 +110,7 @@ MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
         if (onUpdateIntervalChanged) onUpdateIntervalChanged((int)updateInterval.getValue());
     };
     addAndMakeVisible(updateInterval);
-    updateLabel.setText("UPDATE", dontSendNotification);
+    updateLabel.setText("UPDATE · ms", dontSendNotification);
     updateLabel.setFont(sslSans(9, true));
     updateLabel.setColour(Label::textColourId, bronze);
     updateLabel.setJustificationType(Justification::centred);
@@ -165,9 +210,14 @@ void MeterPanel::resized()
     backBtn  = { hb.getX(), hb.getCentreY() - 11, 68, 22 };
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
     scaleBtn = { hb.getRight() - 104, hb.getCentreY() - 11, 104, 22 };
-    const int updateX = meterArea.getX() + 3 * (meterArea.getWidth()/2) / 4;
-    updateInterval.setBounds(updateX-40, meterArea.getY()+92, 80, 88);
-    updateLabel.setBounds(updateX-40, meterArea.getY()+72, 80, 18);
+    // The right bar occupies the left half of its channel column. Centre the
+    // update control in the remaining half, immediately before the phase scope.
+    const int columnWidth=meterArea.getWidth()/2;
+    const int updateX=meterArea.getX()+7*columnWidth/4;
+    const int knobWidth=jmin(122,columnWidth/2-10);
+    const int knobY=scopeArea.getCentreY()-60;
+    updateInterval.setBounds(updateX-knobWidth/2,knobY,knobWidth,126);
+    updateLabel.setBounds(updateX-knobWidth/2,knobY-22,knobWidth,18);
 }
 
 void MeterPanel::mouseDown (const MouseEvent& e)

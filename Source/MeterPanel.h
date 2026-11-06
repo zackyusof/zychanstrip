@@ -47,6 +47,12 @@ private:
     enum class Pressed { None, Back, Reset };
     Pressed pressed = Pressed::None;
 
+    class UpdateKnobLook : public juce::LookAndFeel_V4
+    {
+    public:
+        void drawRotarySlider(juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
+    };
+    UpdateKnobLook updateKnobLook; // outlives the slider that references it
     juce::Slider updateInterval;
     juce::Label updateLabel;
     int scale = 0;

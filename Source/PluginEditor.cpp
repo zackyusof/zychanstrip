@@ -53,7 +53,7 @@ const Image& woodRightTexture()
 }
 
 // ---- Photographic GUI materials -------------------------------------------------------
-// Rendered once offline from a single upper-left key light and packed through BinaryData.
+// Surface swatches extracted from the approved beta.5 studio render; packed through BinaryData.
 // The light is baked into the pixels, so every control reflects the same source without
 // per-control shading code.
 const Image& guiMaterial (int index)
@@ -249,8 +249,8 @@ void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom
         if (texture.isValid())
         {
             g.drawImage (texture, r, RectanglePlacement::stretchToFit, false);
-            g.setGradientFill (ColourGradient (top.withAlpha (0.58f), 0.0f, r.getY(),
-                                               bottom.withAlpha (0.58f), 0.0f, r.getBottom(), false));
+            g.setGradientFill (ColourGradient (top.withAlpha (0.16f), 0.0f, r.getY(),
+                                               bottom.withAlpha (0.16f), 0.0f, r.getBottom(), false));
             g.fillRect (r);
         }
     }
@@ -648,6 +648,18 @@ void paintOptoVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.setColour (Colours::white.withAlpha (0.50f));
     g.drawEllipse (Rectangle<float> (11.0f, 11.0f).withCentre (pivot), 0.8f);
 
+    // Reflected studio softbox: fixed in glass space while the needle moves below it.
+    g.setColour (Colours::white.withAlpha (0.20f));
+    Path softbox;
+    softbox.addRoundedRectangle (r.getX() + r.getWidth() * 0.16f,
+                                r.getY() + r.getHeight() * 0.13f,
+                                r.getWidth() * 0.14f, r.getHeight() * 0.07f, 2.0f);
+    g.fillPath (softbox, AffineTransform::rotation (-0.55f, c.x, c.y));
+    g.setColour (Colours::white.withAlpha (0.12f));
+    g.fillRoundedRectangle (r.getX() + r.getWidth() * 0.67f,
+                            r.getY() + r.getHeight() * 0.76f,
+                            r.getWidth() * 0.12f, r.getHeight() * 0.055f, 2.0f);
+
     // 5. Curved glass dome reflection
     Path glare;
     glare.addCentredArc (c.x, c.y, R_meter * 0.90f, R_meter * 0.90f, 0.0f, -2.1f, -0.4f, false);
@@ -828,6 +840,17 @@ void paintFetVuMeter (Graphics& g, Rectangle<float> r, float deflection)
     g.setFont (fnt (6.5f, true));
     g.setColour (Colour (0xff888e94));
     g.drawText ("ZERO ADJ", Rectangle<float> (46.0f, 8.0f).withCentre ({ c.x, inner.getBottom() - 6.0f }), Justification::centred, false);
+
+    // Two softbox panes reflected in the upper-left corner of the meter glass.
+    g.setColour (Colours::white.withAlpha (0.22f));
+    for (int pane = 0; pane < 2; ++pane)
+    {
+        Path reflection;
+        reflection.addRoundedRectangle (inner.getX() + inner.getWidth() * (0.07f + 0.065f * pane),
+                                        inner.getY() + inner.getHeight() * 0.08f,
+                                        inner.getWidth() * 0.055f, inner.getHeight() * 0.09f, 1.0f);
+        g.fillPath (reflection, AffineTransform::rotation (0.40f, inner.getX(), inner.getY()));
+    }
 
     // 6. Flat polished glass reflection, top-down key light
     Path glare;

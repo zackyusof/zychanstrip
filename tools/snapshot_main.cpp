@@ -498,7 +498,7 @@ void resetTests()
 // meters, scope and correlation show genuine measurements rather than resting values.
 void meterPageTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const juce::File& output)
 {
-    const juce::Point<int> sizes[] { { 1080, 760 }, { 864, 608 } };
+    const juce::Point<int> sizes[] { { 904, 686 }, { 1128, 856 }, { 1692, 1284 } };
     int pass = 0;
     for (const auto size : sizes)
     {
@@ -548,6 +548,13 @@ void meterPageTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, cons
         // (hidden components are not enumerated by getChildren()).
         if (auto* meter = editor.isMeterPageVisible() ? findNamed (editor, "Meter page") : nullptr)
         {
+            const auto meterMapped = editor.getLocalArea (meter, meter->getLocalBounds());
+            auto* canvas = findNamed (editor, "Rack canvas");
+            const auto canvasMapped = canvas != nullptr
+                ? editor.getLocalArea (canvas, canvas->getLocalBounds()) : juce::Rectangle<int>();
+            check (canvas != nullptr && meterMapped == canvasMapped,
+                   "meter page and rack canvas share the same framed resize mapping");
+
             const auto hb = meter->getLocalBounds().reduced (14, 12).removeFromTop (34);
             const juce::Rectangle<int> backSample (hb.getX() + 4, hb.getCentreY() - 8, 10, 16);
             const juce::Rectangle<int> resetSample (hb.getCentreX() - 40, hb.getCentreY() - 8, 10, 16);
@@ -607,7 +614,7 @@ void meterPageTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, cons
     }
     // Return to the rack so the following editorTests() render the rack page.
     editor.setMeterPageVisible (false);
-    editor.setSize (1080, 760);
+    editor.setSize (1128, 856);
 }
 
 void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const juce::File& output)
@@ -698,9 +705,10 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
     auto* constrainer = editor.getConstrainer();
     check (editor.isResizable() && constrainer != nullptr, "editor supports constrained resizing");
     if (constrainer == nullptr) return;
-    const double ratio = 1080.0 / 760.0;
-    check (std::abs (constrainer->getFixedAspectRatio() - ratio) < 1.0e-6, "27:19 aspect ratio locked");
-    for (const auto size : { juce::Point<int> (864, 608), { 1080, 760 }, { 1620, 1140 } })
+    constexpr double ratio = (1080.0 + 48.0) / (760.0 + 96.0);
+    check (std::abs (constrainer->getFixedAspectRatio() - ratio) < 1.0e-6,
+           "wood-framed aspect ratio locked");
+    for (const auto size : { juce::Point<int> (904, 686), { 1128, 856 }, { 1692, 1284 } })
     {
         constrainer->setBoundsForComponent (&editor, { 0, 0, size.x, size.y }, false, false, true, true);
         check (editor.getWidth() == size.x && editor.getHeight() == size.y,
@@ -710,9 +718,19 @@ void editorTests (ZychanStripProcessor& proc, ZychanStripEditor& editor, const j
         if (canvas != nullptr)
         {
             auto mapped = editor.getLocalArea (canvas, canvas->getLocalBounds());
-            check (std::abs (mapped.getWidth() - editor.getWidth()) <= 1
-                   && std::abs (mapped.getHeight() - editor.getHeight()) <= 1,
-                   "canvas fills editor proportionally");
+            const float canvasScale = (float) mapped.getHeight() / 760.0f;
+            const int sideRail = juce::roundToInt (24.0f * canvasScale);
+            const int horizontalRail = juce::roundToInt (48.0f * canvasScale);
+            const int leftRail = mapped.getX();
+            const int topRail = mapped.getY();
+            const int rightRail = editor.getWidth() - mapped.getRight();
+            const int bottomRail = editor.getHeight() - mapped.getBottom();
+            check (std::abs (leftRail - sideRail) <= 1 && std::abs (rightRail - sideRail) <= 1
+                   && std::abs (topRail - horizontalRail) <= 1 && std::abs (bottomRail - horizontalRail) <= 1,
+                   "wood frame keeps half-width side rails at resize size");
+            check (std::abs (mapped.getWidth() - juce::roundToInt (1080.0f * canvasScale)) <= 1
+                   && std::abs (mapped.getHeight() - juce::roundToInt (760.0f * canvasScale)) <= 1,
+                   "live GUI scales proportionally inside wood frame");
             for (auto name : { "Console", "Opto", "FET", "Limiter" })
             {
                 auto* panel = findNamed (*canvas, name);

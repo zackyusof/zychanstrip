@@ -10,6 +10,11 @@ class MeterPanel;
 class ZychanStripEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
+    static constexpr int kCanvasWidth = 1080;
+    static constexpr int kCanvasHeight = 760;
+    static constexpr int kWoodSideRail = 24;
+    static constexpr int kWoodTopBottomRail = 48;
+
     explicit ZychanStripEditor (ZychanStripProcessor&);
     ~ZychanStripEditor() override;
 

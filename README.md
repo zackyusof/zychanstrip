@@ -8,11 +8,11 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.7-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.8-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
-[![Zero Bitmaps](https://img.shields.io/badge/GUI-100%25%20Procedural%20Vector-purple.svg)](#architecture)
+[![GUI](https://img.shields.io/badge/GUI-Procedural%20%2B%20Wood%20Texture-purple.svg)](#architecture)
 
 **zychanstrip** is four classic outboard processors in one rack plus a Studio-Grade metering page, delivered as a high-performance **Audio Unit (AU)** effect.
 
@@ -25,7 +25,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.7 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.8 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -45,7 +45,9 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
   Hardware Neutral Starting Profile. Individual module bypass and persistent rack order.
 - Meter page with true-peak/RMS, loudness, stereo phase/Lissajous scope, correlation and
   31-band spectrum with RTA averaging; rack VU/GR and Enhance GR/output LED meters.
-- Resizable 864×608 to 1620×1140 interface, metal faceplates, drag handles, horizontal
+- Resizable live interface inside a figured-wood frame on both pages; top and bottom rails are
+  twice the side-rail thickness. The four wood strips are cropped from the approved frame reference;
+  the live GUI remains vector drawn and interactive. Metal faceplates, drag handles, horizontal
   Enhance fader index stripes, softened LA-2A contact/cast shadows and fixed lighting.
   Beta.3 adds smoothed Enhance slider transitions and complete fader cap/shadow bounds.
   Mouse wheel, Shift fine adjustment and double-click parameter defaults.
@@ -86,7 +88,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -341,11 +343,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.1.1` | neutral grey |
-| prerelease | `v1.1.1-beta.7` | amber |
+| prerelease | `v1.1.1-beta.8` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7  # v1.1.1-beta.7
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7   # …-beta.7
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8  # v1.1.1-beta.8
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8   # …-beta.8
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -366,10 +368,10 @@ python3 tools/build_snapshot.py
 ./build/snapshot/snapshot <output-dir>
 ```
 
-It runs **589 checks** and writes PNGs to `<output-dir>`:
+It runs **593 checks** and writes PNGs to `<output-dir>`:
 
 - **DSP** (`tools/dsp_checks.h`): EQ band response, limiter behaviour, auto-gain, channel handling, master gain ramp, state roundtrip, legacy-session migration, dry/wet mix law.
-- **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment inside every panel at 864×608 / 1080×760 / 1620×1140, reorder by grip drag, aspect-ratio lock.
+- **GUI**: page toggle clicks (real `mouseDown`, not a test seam), BACK from the meter page, control containment, reorder by grip drag, and matching wood-frame geometry at 904×686 / 1128×856 / 1692×1284 on both pages.
 - **Snapshots**: `rack-*.png` and `meter-*.png`; the meter ones are rendered with real audio pushed through the chain so the meters, scope and analyser show genuine values.
 
 **When you add a feature, add a check.** A test that only asserts "it did something" is how real bugs ship: the dry/wet phase inversion and the auto-gain order dependence both passed the suite as originally written.
@@ -385,8 +387,8 @@ The Enhance/Limiter panel (slot 3) splits its content into a **control area** (l
 | **bottom row** | RELEASE (`lim_release`) | ENHANCE (`lim_enhance`) |
 
 The two vertical LED ladders (GR, OUT) keep the full panel height beside the grid, never inside it.
-Captions span the whole grid cell, so long names are not clipped. The harness asserts the grid geometry at
-864×608, 1080×760 and 1620×1140.
+Captions span the whole grid cell, so long names are not clipped. The harness asserts the grid geometry
+at minimum, default and maximum framed window sizes.
 
 ### Teardown check (important)
 
@@ -429,7 +431,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 5. **Click handling.** The rack `canvas` covers the whole editor and consumes clicks; editor-level `mouseDown` will not fire for anything drawn into the canvas. Add a child component instead (as the page toggle does).
 6. **Draw order.** `ModulePanel::paint` draws the face image, then `paintMeter`, then composites the caption layer on top. Anything that must sit *behind* a live meter belongs in the face image (`paintFaceBase`), not the caption layer.
 7. **Repaint hygiene.** Meter ticks run at 30 Hz; only repaint while `isShowing()`. A timer firing during teardown can post into a dying message queue.
-8. **Bitmaps are banned.** All graphics are procedural `juce::Graphics` calls so the UI stays sharp at any scale (864×608 → 1620×1140, 27:19 locked).
+8. Graphics are procedural `juce::Graphics` calls except for the four approved wood frame texture strips. The live interface stays vector drawn and scales inside the frame (904×686 → 1692×1284, framed aspect ratio locked).
 
 ### Repo conventions
 - Remote: `https://git.zyusof.net/zack/zychanstrip` (Gitea). `main` is the trunk.
@@ -439,6 +441,12 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 ---
 
 ## Changelog
+
+### 2026-11-06 — 1.1.1-beta.8 wooden GUI frame
+
+- Added the approved figured-wood frame around the live rack and meter pages, with side rails half as thick as the top and bottom rails.
+- Embedded four wood-only crops from the approved mockup; no mockup GUI content is used. Rack, meter controls and interactions remain live and scale together at every supported size.
+- Added resize and snapshot coverage for frame proportions and matching rack/meter content bounds at minimum, default and maximum sizes.
 
 ### 2026-11-04 — 1.1.1-beta.2 local NAM evaluation
 
@@ -458,7 +466,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current local beta: **1.1.1-beta.7**. No stable release is authorized; promotion remains the user's decision.
+Current local beta: **1.1.1-beta.8**. No stable release is authorized; promotion remains the user's decision.
 
 Enhance GUI refresh: horizontal GR LEDs beneath the top switches, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs with a dB readout.
 

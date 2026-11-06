@@ -10,6 +10,12 @@ has been published.
 
 ## [Unreleased]
 
+### Added — 1.1.1-beta.8 wooden GUI frame (2026-11-06)
+
+- Add the approved figured-wood frame around the live rack and meter pages, with side rails half as thick as the top and bottom rails.
+- Embed four wood-only crops from the approved mockup; do not use its older GUI. Existing live controls, layout, DSP, and interactions remain active and scale together.
+- Verify minimum, default, and maximum rack and meter snapshots, matching page bounds, packaged AU metadata/factory/rendering, and global install.
+
 ### Fixed — 1.1.1-beta.6 parallel mix phase repair (2026-11-05)
 
 - Replace EQ oversampling's flat-setting phase rotation with a 63-tap linear-phase halfband pair, retaining the 2x SVF EQ law and matching 31-sample Console bypass delay.

@@ -53,6 +53,14 @@ juce_add_plugin(zychanstrip
     AU_MAIN_TYPE kAudioUnitType_Effect
     VST3_CATEGORIES Fx Dynamics EQ)
 
+juce_add_binary_data(zychanstrip_wood_frame
+    NAMESPACE ZychanStripWoodFrameData
+    SOURCES
+        Assets/wood_top.png
+        Assets/wood_bottom.png
+        Assets/wood_left.png
+        Assets/wood_right.png)
+
 target_sources(zychanstrip PRIVATE
     Source/ColourEngine.cpp
     Source/Modules.h
@@ -82,7 +90,7 @@ target_compile_definitions(zychanstrip PUBLIC
 #              beta    ->  "v<PROJECT_VERSION>-<BETA>"     e.g. v1.1.1-beta.1
 # PROJECT_VERSION stays numeric (the bundle plist needs it); the prerelease suffix lives
 # only here, so the GUI can never disagree with the tag it was built from.
-set(ZYCHANSTRIP_BETA "beta.7" CACHE STRING
+set(ZYCHANSTRIP_BETA "beta.8" CACHE STRING
     "Prerelease suffix rendered in the GUI header (e.g. beta.1); empty = stable")
 if(ZYCHANSTRIP_BETA)
     set(ZYCHANSTRIP_GUI_VERSION "v${PROJECT_VERSION}-${ZYCHANSTRIP_BETA}")
@@ -96,6 +104,7 @@ target_compile_definitions(zychanstrip PUBLIC
 
 target_link_libraries(zychanstrip
     PRIVATE
+        zychanstrip_wood_frame
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC

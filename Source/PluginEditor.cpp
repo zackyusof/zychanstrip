@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "MeterPanel.h"
 #include "UiStyle.h"
+#include "BinaryData.h"
 
 
 using namespace juce;
@@ -20,8 +21,69 @@ constexpr int kMargin = 8;      // window chrome margin
 constexpr int kHeaderH = 44;     // header bar height
 constexpr int kGripH = 24;       // space above each plate for the drag grip
 constexpr int kGap = 10;         // gap between plates
-constexpr int kEditorW = 1080;
-constexpr int kEditorH = 760;
+constexpr int kEditorW = ZychanStripEditor::kCanvasWidth;
+constexpr int kEditorH = ZychanStripEditor::kCanvasHeight;
+
+const Image& woodTopTexture()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_top_png,
+                                                           ZychanStripWoodFrameData::wood_top_pngSize);
+    return image;
+}
+
+const Image& woodBottomTexture()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_bottom_png,
+                                                           ZychanStripWoodFrameData::wood_bottom_pngSize);
+    return image;
+}
+
+const Image& woodLeftTexture()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_left_png,
+                                                           ZychanStripWoodFrameData::wood_left_pngSize);
+    return image;
+}
+
+const Image& woodRightTexture()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_right_png,
+                                                           ZychanStripWoodFrameData::wood_right_pngSize);
+    return image;
+}
+
+void drawWoodFrame (Graphics& g, Rectangle<float> bounds)
+{
+    constexpr float logicalWidth = (float) ZychanStripEditor::kCanvasWidth;
+    constexpr float logicalHeight = (float) ZychanStripEditor::kCanvasHeight;
+    constexpr float frameWidth = logicalWidth + 2.0f * (float) ZychanStripEditor::kWoodSideRail;
+    constexpr float frameHeight = logicalHeight + 2.0f * (float) ZychanStripEditor::kWoodTopBottomRail;
+    const float scale = jmax (0.01f, jmin (bounds.getWidth() / frameWidth, bounds.getHeight() / frameHeight));
+    const float side = (bounds.getWidth() - logicalWidth * scale) * 0.5f;
+    const float horizontal = (bounds.getHeight() - logicalHeight * scale) * 0.5f;
+    const float innerHeight = logicalHeight * scale;
+
+    g.setImageResamplingQuality (Graphics::highResamplingQuality);
+    g.drawImage (woodTopTexture(), Rectangle<float> (bounds.getX(), bounds.getY(), bounds.getWidth(), horizontal),
+                 RectanglePlacement::stretchToFit);
+    g.drawImage (woodBottomTexture(), Rectangle<float> (bounds.getX(), bounds.getBottom() - horizontal,
+                                                         bounds.getWidth(), horizontal),
+                 RectanglePlacement::stretchToFit);
+    g.drawImage (woodLeftTexture(), Rectangle<float> (bounds.getX(), bounds.getY() + horizontal,
+                                                       side, innerHeight),
+                 RectanglePlacement::stretchToFit);
+    g.drawImage (woodRightTexture(), Rectangle<float> (bounds.getRight() - side, bounds.getY() + horizontal,
+                                                        side, innerHeight),
+                 RectanglePlacement::stretchToFit);
+
+    // A fine dark inner reveal joins the live canvas to the wood without covering controls.
+    g.setColour (Colours::black.withAlpha (0.72f));
+    g.drawRect (Rectangle<float> (side, horizontal, logicalWidth * scale, logicalHeight * scale),
+                jmax (1.0f, 2.0f * scale));
+    g.setColour (Colours::white.withAlpha (0.16f));
+    g.drawLine (side + 2.0f * scale, horizontal + scale,
+                side + (logicalWidth - 2.0f) * scale, horizontal + scale, jmax (0.6f, scale));
+}
 
 // Authentic zynamfx ZY monogram SVG (exact brand mark from zynamfx Brand.cpp)
 constexpr const char* kZyMarkSvg =
@@ -2316,9 +2378,11 @@ ZychanStripEditor::ZychanStripEditor (ZychanStripProcessor& p)
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "master_mix", mixFader);
 
     setResizable (true, true);
-    setResizeLimits (864, 608, 1620, 1140);
-    getConstrainer()->setFixedAspectRatio ((double) kEditorW / kEditorH);
-    setSize (864, 608);
+    constexpr int framedW = kEditorW + 2 * kWoodSideRail;
+    constexpr int framedH = kEditorH + 2 * kWoodTopBottomRail;
+    setResizeLimits (904, 686, framedW * 3 / 2, framedH * 3 / 2);
+    getConstrainer()->setFixedAspectRatio ((double) framedW / framedH);
+    setSize (framedW, framedH);
     meterPanel->onUpdateIntervalChanged = [this](int ms) { startTimer(ms); };
     startTimer (33);
 }
@@ -2403,16 +2467,22 @@ void ZychanStripEditor::resized()
     // Reset button sits on the header, left of the master fader.
     resetButton.setBounds (kEditorW - kMargin - 160 - 150, 10, 84, 30);
     unityButton->setBounds (kEditorW - kMargin - 160 - 58, 10, 58, 30);
-    if (meterPanel != nullptr && metersShown)
-        meterPanel->setBounds (getLocalBounds());
-
-    const float scale = jmax (0.01f, jmin ((float) getWidth() / kEditorW, (float) getHeight() / kEditorH));
-    canvasTransform = AffineTransform::scale (scale).translated (
-        ((float) getWidth() - kEditorW * scale) * 0.5f,
-        ((float) getHeight() - kEditorH * scale) * 0.5f);
+    constexpr float framedWidth = (float) kEditorW + 2.0f * (float) kWoodSideRail;
+    constexpr float framedHeight = (float) kEditorH + 2.0f * (float) kWoodTopBottomRail;
+    const float scale = jmax (0.01f, jmin ((float) getWidth() / framedWidth,
+                                           (float) getHeight() / framedHeight));
+    const float offsetX = ((float) getWidth() - kEditorW * scale) * 0.5f;
+    const float offsetY = ((float) getHeight() - kEditorH * scale) * 0.5f;
+    canvasTransform = AffineTransform::scale (scale).translated (offsetX, offsetY);
     canvas.setTransform (canvasTransform);
+    if (meterPanel != nullptr)
+    {
+        meterPanel->setBounds (0, 0, kEditorW, kEditorH);
+        meterPanel->setTransform (canvasTransform);
+    }
     if(metersShown)
-        colourSelector.setBounds(roundToInt(getWidth()*0.59f),16,roundToInt(getWidth()*0.23f),26);
+        colourSelector.setBounds (Rectangle<float> (kEditorW * 0.59f, 16.0f, kEditorW * 0.23f, 26.0f)
+                                      .transformedBy (canvasTransform).toNearestInt());
     else
         colourSelector.setBounds(Rectangle<float>(330,8,230,32).transformedBy(canvasTransform).toNearestInt());
     colourSelector.toFront(false);
@@ -2573,6 +2643,7 @@ void ZychanStripEditor::UnityButton::mouseUp (const MouseEvent& e)
 void ZychanStripEditor::paint (Graphics& g)
 {
     g.fillAll (Colour (0xff060708));
+    drawWoodFrame (g, getLocalBounds().toFloat());
     g.saveState();
     g.addTransform (canvasTransform);
     const Rectangle<float> full (0.0f, 0.0f, (float) kEditorW, (float) kEditorH);

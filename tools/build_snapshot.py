@@ -42,15 +42,15 @@ cmd = [cxx] + flags + defines + includes + ["-isysroot", sdk, "-c", src, "-o", o
 print("compile:", " ".join(cmd[:6]), "...")
 subprocess.check_call(cmd)
 
-target_name = "zychanstrip"
 objs = []
-for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")):
-    for f in files:
-        if not f.endswith(".o"):
-            continue
-        if "juce_audio_plugin_client" in root or f.startswith("juce_audio_plugin_client"):
-            continue
-        objs.append(os.path.join(root, f))
+for target_name in ("zychanstrip", "zychanstrip_wood_frame"):
+    for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")):
+        for f in files:
+            if not f.endswith(".o"):
+                continue
+            if "juce_audio_plugin_client" in root or f.startswith("juce_audio_plugin_client"):
+                continue
+            objs.append(os.path.join(root, f))
 
 
 fw = ["Cocoa", "CoreAudio", "CoreAudioKit", "CoreMIDI", "AudioToolbox", "CoreFoundation", "IOKit", "Foundation",

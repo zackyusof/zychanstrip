@@ -57,7 +57,7 @@ MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
     updateInterval.setRange(16, 500, 1);
     updateInterval.setSkewFactorFromMidPoint(100);
     updateInterval.setValue(33, dontSendNotification);
-    updateInterval.setTextBoxStyle(Slider::TextBoxRight, false, 54, 18);
+    updateInterval.setTextBoxStyle(Slider::TextBoxBelow, false, 72, 18);
     updateInterval.setTextValueSuffix(" ms");
     updateInterval.setDoubleClickReturnValue(true, 33);
     updateInterval.setTooltip("GUI meter refresh interval. Lower values refresh faster; audio processing is unaffected. Double-click restores 33 ms.");
@@ -68,7 +68,7 @@ MeterPanel::MeterPanel (ZychanStripProcessor& p) : proc (p)
     updateLabel.setText("UPDATE", dontSendNotification);
     updateLabel.setFont(sslSans(9, true));
     updateLabel.setColour(Label::textColourId, bronze);
-    updateLabel.setJustificationType(Justification::centredRight);
+    updateLabel.setJustificationType(Justification::centred);
     addAndMakeVisible(updateLabel);
 }
 
@@ -165,8 +165,9 @@ void MeterPanel::resized()
     backBtn  = { hb.getX(), hb.getCentreY() - 11, 68, 22 };
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
     scaleBtn = { hb.getRight() - 104, hb.getCentreY() - 11, 104, 22 };
-    updateInterval.setBounds(scaleBtn.getX()-112, hb.getY(), 104, 34);
-    updateLabel.setBounds(scaleBtn.getX()-166, hb.getY(), 52, 34);
+    const int updateX = meterArea.getX() + 3 * (meterArea.getWidth()/2) / 4;
+    updateInterval.setBounds(updateX-40, meterArea.getY()+92, 80, 88);
+    updateLabel.setBounds(updateX-40, meterArea.getY()+72, 80, 18);
 }
 
 void MeterPanel::mouseDown (const MouseEvent& e)

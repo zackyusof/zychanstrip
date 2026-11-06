@@ -210,11 +210,12 @@ void MeterPanel::resized()
     backBtn  = { hb.getX(), hb.getCentreY() - 11, 68, 22 };
     resetBtn = { hb.getCentreX() - 42, hb.getCentreY() - 11, 84, 22 };
     scaleBtn = { hb.getRight() - 104, hb.getCentreY() - 11, 104, 22 };
-    // The right bar occupies the left half of its channel column. Centre the
-    // update control in the remaining half, immediately before the phase scope.
-    const int columnWidth=meterArea.getWidth()/2;
-    const int updateX=meterArea.getX()+7*columnWidth/4;
-    const int knobWidth=jmin(122,columnWidth/2-10);
+    // Keep the stereo bars together and centre UPDATE in the remaining space
+    // between their right edge and the phase-scope column.
+    const int barWidth=jmax(48,meterArea.getWidth()/4-16);
+    const int pairRight=meterArea.getX()+14+2*barWidth+8;
+    const int updateX=(pairRight+scopeArea.getX())/2;
+    const int knobWidth=jmin(122,scopeArea.getX()-pairRight-20);
     const int knobY=scopeArea.getCentreY()-60;
     updateInterval.setBounds(updateX-knobWidth/2,knobY,knobWidth,126);
     updateLabel.setBounds(updateX-knobWidth/2,knobY-22,knobWidth,18);
@@ -385,14 +386,15 @@ void MeterPanel::paintMeters (Graphics& g)
     auto area = meterArea;
     sectionRule (g, area.removeFromTop (16), "TRUE PEAK / RMS");
 
-    const int chW = area.getWidth() / 2;
+    const int chW = jmax(48, area.getWidth()/4-16);
+    constexpr int stereoGap = 8;
     for (int c = 0; c < 2; ++c)
     {
-        auto col = area.withX (area.getX() + c * chW).withWidth (chW).reduced (8, 0);
+        auto col = area.withX (area.getX()+14+c*(chW+stereoGap)).withWidth(chW);
 
-        // Readouts directly above the bar (bar occupies the left half of this column)
+        // Readouts and channel labels follow each closely paired bar.
         auto ro = col.removeFromTop (20);
-        auto barRo = ro.removeFromLeft (col.getWidth() / 2 - 6);
+        auto barRo = ro;
         digital (g, barRo.removeFromRight (barRo.getWidth() / 2).reduced (1, 0),
                  String (displayHoldDb[(size_t) c], 1), meterGreen, 9.5f);
         digital (g, barRo.reduced (1, 0), String (displayPeakDb[(size_t) c], 1), inkWhite, 9.5f);
@@ -406,7 +408,7 @@ void MeterPanel::paintMeters (Graphics& g)
         col.removeFromTop (4);
 
         // Bar
-        const auto bar = col.withTrimmedRight (col.getWidth() / 2).reduced (6, 0).toFloat();
+        const auto bar = col.toFloat();
         g.setColour (bgInset);
         g.fillRect (bar);
         g.setColour (Colours::black.withAlpha (0.9f));

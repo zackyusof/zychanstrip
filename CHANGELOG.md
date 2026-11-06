@@ -12,8 +12,9 @@ has been published.
 
 ### Added — 1.1.1-beta.9 zy module branding + two-row GR meter (2026-11-06)
 
-- Rename the faceplate branding to the zy product line: `zy-560` (graphic EQ, top right), `zy-76` (FET compressor wordmark and model badge), `zy-la` (opto wordmark, meter face and model badge) and `zy-limiter` (limiter header). Hardware references in the DSP documentation are unchanged.
-- Redraw the limiter GR meter as two rows of four LEDs (1, 2, 3, 6 / 9, 12, 18, 24 dB), with the housing edges set exactly to the THRESHOLD / CEILING caption span.
+- Rename the faceplate branding to the zy product line: `zy-560` (graphic EQ, top right), `zy-76` (FET wordmark, `MODEL zy-76` sub-plate line and model badge), `zy-la` (opto wordmark, meter face and model badge) and `zy-limiter` (limiter header). Hardware references in the DSP documentation are unchanged.
+- Redraw the limiter GR meter as a thin stereo indicator: two rows of ten LEDs (top row left channel, bottom row right channel) on a 1, 2, 3, 4, 6, 8, 10, 12, 18, 24 dB scale, with the numbers printed once under the bottom row and the housing edges set exactly to the THRESHOLD / CEILING caption span.
+- Raise the limiter's 2x2 fader bank to use the space the thinner GR meter frees, so the four faders are taller.
 - Extend the limiter OUT ladder upward so its top edge aligns with the GR meter's top edge, and raise the ladder to 32 steps from -48 dBFS to 0 dBFS so the taller column keeps its dot density.
 - No DSP, parameter, ordering, latency or state changes.
 

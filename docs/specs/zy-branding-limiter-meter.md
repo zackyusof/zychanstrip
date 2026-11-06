@@ -26,8 +26,9 @@
 
 1. Keep the approved rack layout of the mock: same four faceplates, header, wood frame.
 2. Branding becomes the zy product line: `zy-560`, `zy-76`, `zy-la`, `zy-limiter`.
-3. Limiter (“enhancer”) GR meter: **two rows**, with the housing exactly covering the
-   THRESHOLD / CEILING caption span.
+3. Limiter (“enhancer”) GR meter: **two rows of ten**, a stereo left/right indicator, with the
+   dB numbering printed only once under the bottom row, thinner housing, and the housing
+   exactly covering the THRESHOLD / CEILING caption span.
 4. Limiter OUT meter: extended **upward** so its top edge aligns with the GR meter height.
 5. Build and install a new beta (same numeric line, next prerelease).
 
@@ -39,10 +40,10 @@ defaults, rack ordering, latency or state migration changes.
 | ID | Decision |
 | --- | --- |
 | DES-1 | Console wordmark `560` → `zy-560` (light blue, top right; box widened to 96 px at 21 pt so it does not clip). |
-| DES-2 | FET wordmark `urei` → `zy-76`; model badge `1176` → `zy-76`. |
+| DES-2 | FET wordmark `urei` → `zy-76`; sub-plate `MODEL 1176 LN` → `MODEL zy-76`; model badge `1176` → `zy-76`. |
 | DES-3 | Opto wordmark `TELETRONIX` → `zy-la` in the sub-plate, on the round meter face and in the model badge. |
 | DES-4 | Limiter gains a `zy-limiter` wordmark centred between the AUTO GAIN and BYPASS headers. |
-| DES-5 | GR housing `{c.x, top+2, 2·cellW, 58}` — exactly the two caption cell widths. Eight LEDs in two rows of four (1, 2, 3, 6 / 9, 12, 18, 24 dB), numbers under each LED. OUT ladder `{right-30, GR.y, 30, bankBottom-GR.y}` with 32 steps from −48 dBFS to 0 dBFS. |
+| DES-5 | GR housing `{c.x, top+2, 2·cellW, 42}` — exactly the two caption cell widths, thin. Two rows of ten LEDs (top = left channel, bottom = right channel) on a 1, 2, 3, 4, 6, 8, 10, 12, 18, 24 dB scale; numbers once under the bottom row. OUT ladder `{right-30, GR.y, 30, bankBottom-GR.y}`, 32 steps −48…0 dBFS. gridTop raised to `top+62` so the 2x2 fader bank grows into the freed space. |
 
 ## 3. Build
 

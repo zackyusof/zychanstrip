@@ -444,8 +444,8 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 ### 2026-11-06 — 1.1.1-beta.9 zy branding and limiter meters
 
-- Faceplate branding is now the zy line: `zy-560`, `zy-76`, `zy-la` and `zy-limiter`.
-- Limiter GR reads as two rows of four LEDs across exactly the THRESHOLD / CEILING caption span; the OUT ladder starts level with the GR meter and carries 32 steps.
+- Faceplate branding is now the zy line: `zy-560`, `zy-76` (including the `MODEL zy-76` sub-plate line), `zy-la` and `zy-limiter`.
+- Limiter GR is a thin stereo indicator: two rows of ten LEDs (left/right) with the dB scale printed once at the bottom, across exactly the THRESHOLD / CEILING caption span. The thinner meter lets the four faders sit higher and run longer, and the OUT ladder starts level with the GR meter with 32 steps.
 
 ### 2026-11-06 — 1.1.1-beta.8 wooden GUI frame
 
@@ -473,6 +473,6 @@ Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI 
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
 Current local beta: **1.1.1-beta.9**. No stable release is authorized; promotion remains the user's decision.
 
-Enhance GUI refresh: two rows of GR LEDs beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
+Enhance GUI refresh: a thin stereo GR indicator (two rows of ten LEDs, one scale row) beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 
 The Enhance OUT ladder now has 32 levels from −48 to 0 dBFS, sized to the full-height column. The meter-page UPDATE knob sets the shared GUI refresh interval from 16–500 ms (default 33 ms); double-click restores 33 ms. This is an editor-only control and does not change audio processing.

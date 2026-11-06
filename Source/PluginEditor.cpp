@@ -2034,7 +2034,7 @@ protected:
 
         engraveText (g, "LIMITING AMPLIFIER", { (int) subPlate.getX(), (int) subPlate.getY() + 14, (int) subPlate.getWidth(), 16 },
                      Justification::centred, 11.5f, pal::engrave, true);
-        engraveText (g, "MODEL 1176 LN", { (int) subPlate.getX(), (int) subPlate.getY() + 34, (int) subPlate.getWidth(), 18 },
+        engraveText (g, "MODEL zy-76", { (int) subPlate.getX(), (int) subPlate.getY() + 34, (int) subPlate.getWidth(), 18 },
                      Justification::centred, 13.5f, Colour (0xffe6c878), true);
         engraveText (g, "SOLID STATE PEAK LIMITER", { (int) subPlate.getX(), (int) subPlate.getY() + 56, (int) subPlate.getWidth(), 14 },
                      Justification::centred, 8.5f, pal::engraveDim, false);
@@ -2140,7 +2140,7 @@ protected:
         autoGain.setBounds (c.getX() + 4, bypass.getY(), bypass.getWidth(), bypass.getHeight());
 
         // Control area below the AUTO GAIN switch, split into two equal rows.
-        const int gridTop = top + 86;
+        const int gridTop = top + 62;
         const int bottomReserve = 26;
         const int gridH = c.getBottom() - gridTop - bottomReserve;
         faderBank = { c.getX() + 3, gridTop - 2, bankW - 10, gridH + 2 };
@@ -2150,10 +2150,11 @@ protected:
         const int rowH = gridH / 2;
         const int cellW = bankW / 2;
 
-        // GR meter: two rows of LEDs, sized so its left and right edges sit exactly on the
-        // THRESHOLD / CEILING caption block (two fader columns, edge to edge).
-        ladderA = { c.getX(), top + 2, cellW * 2, 64 };
-        autoGainStatus = { c.getX() + 5, top + 68, cellW * 2 - 10, 10 };
+        // GR meter: thin stereo indicator, two rows of ten LEDs (L on top, R beneath), with the
+        // dB scale printed once under the bottom row. Its left and right edges sit exactly on
+        // the THRESHOLD / CEILING caption block (two fader columns, edge to edge).
+        ladderA = { c.getX(), top + 2, cellW * 2, 42 };
+        autoGainStatus = { c.getX() + 5, top + 46, cellW * 2 - 10, 10 };
 
         Slider* all[4] { &gain, &ceiling, &release, &fader };
         for (int i = 0; i < 4; ++i)
@@ -2264,14 +2265,14 @@ protected:
         g.setColour(Colour(0xff202a32));g.fillRoundedRectangle(bar,4);
         g.setColour(Colour(0xffb6bdc3));g.drawRoundedRectangle(bar.reduced(.8f),4,1);
         g.setFont(fnt(8));g.drawText("GR",bar.withHeight(12),Justification::centred);
-        const float levels[]{1,2,3,6,9,12,18,24};
-        for(int i=0;i<8;++i){
-            const int row=i/4, col=i%4;
-            const float x=bar.getX()+14.0f+(float)col*(bar.getWidth()-28.0f)/3.0f;
-            const float y=bar.getY()+22.0f+(float)row*24.0f;
-            led(x,y,i<=3?Colour(0xff34ef60):i<=6?Colour(0xffffbc32):Colour(0xffff4235),gr>=levels[i],7);
-            g.setColour(labelColour);g.setFont(fnt(6.5f,false));
-            g.drawText(String((int)levels[i]),Rectangle<float>(x-10.0f,y+6.0f,20.0f,9.0f),Justification::centred);
+        const float levels[]{1,2,3,4,6,8,10,12,18,24};
+        for(int i=0;i<10;++i){
+            const float x=bar.getX()+12.0f+(float)i*(bar.getWidth()-24.0f)/9.0f;
+            const auto col=i<5?Colour(0xff34ef60):i<8?Colour(0xffffbc32):Colour(0xffff4235);
+            led(x,bar.getY()+16.0f,col,gr>=levels[i],4.8f);   // left channel
+            led(x,bar.getY()+28.0f,col,gr>=levels[i],4.8f);   // right channel
+            g.setColour(labelColour);g.setFont(fnt(7.0f,false));
+            g.drawText(String((int)levels[i]),Rectangle<float>(x-9.0f,bar.getY()+31.5f,18.0f,10.0f),Justification::centred);
         }
         // OUT: full-height column starting on the GR meter's top edge.
         const auto out=ladderB.toFloat();g.setColour(Colour(0xff141719));g.fillRoundedRectangle(out.expanded(5,0),3);

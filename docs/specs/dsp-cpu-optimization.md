@@ -146,6 +146,10 @@ because the embedded model is a `SlimmableContainer` member and the fast path is
 ./build/bench                    # CPU table
 ./build/bench --null out.f32     # deterministic output capture
 
+# colour-engine cost per colour mode (links the plugin's own release objects)
+python3 tools/research/build_colour_bench.py
+./build/colour_bench             # ALGO / NAM / CLEAN ns per host sample
+
 # the real AU (macOS arm64)
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.10
 ninja -C build

@@ -47,7 +47,7 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
   31-band spectrum with RTA averaging; rack VU/GR and Enhance GR/output LED meters.
 - Resizable live interface inside a figured-wood frame on both pages; top and bottom rails are
   twice the side-rail thickness. The four wood strips are cropped from the approved frame reference;
-  the live GUI remains vector drawn and interactive. Metal faceplates, drag handles, horizontal
+  the approved photographic faceplates carry live controls and meters. Metal faceplates, drag handles, horizontal
   Enhance fader index stripes, softened LA-2A contact/cast shadows and fixed lighting.
   Beta.3 adds smoothed Enhance slider transitions and complete fader cap/shadow bounds.
   Mouse wheel, Shift fine adjustment and double-click parameter defaults.
@@ -431,7 +431,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 5. **Click handling.** The rack `canvas` covers the whole editor and consumes clicks; editor-level `mouseDown` will not fire for anything drawn into the canvas. Add a child component instead (as the page toggle does).
 6. **Draw order.** `ModulePanel::paint` draws the face image, then `paintMeter`, then composites the caption layer on top. Anything that must sit *behind* a live meter belongs in the face image (`paintFaceBase`), not the caption layer.
 7. **Repaint hygiene.** Meter ticks run at 30 Hz; only repaint while `isShowing()`. A timer firing during teardown can post into a dying message queue.
-8. Graphics combine live `juce::Graphics` controls/meters with embedded photographic surface and cap assets. The live interface stays vector drawn and scales inside the frame (904×686 → 1692×1284, framed aspect ratio locked) and opens at the 904×686 minimum.
+8. Graphics combine live `juce::Graphics` controls/meters with embedded photographic surface and cap assets. The live interface scales inside the frame (904×686 → 1692×1284, framed aspect ratio locked) and opens at the 904×686 minimum.
 
 ### Repo conventions
 - Remote: `https://git.zyusof.net/zack/zychanstrip` (Gitea). `main` is the trunk.

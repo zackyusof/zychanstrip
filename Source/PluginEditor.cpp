@@ -46,6 +46,7 @@ Rectangle<float> photoHeaderRect (float x,float y,float w,float h)
 void drawPhotoRegion (Graphics& g, Rectangle<int> source, Rectangle<float> dest)
 {
     g.setImageResamplingQuality (Graphics::highResamplingQuality);
+    g.setOpacity (1.0f);
     g.drawImage (photoRackImage().getClippedImage (source), dest, RectanglePlacement::stretchToFit);
 }
 void photoLamp (Graphics& g, Point<float> centre, float radius, Colour colour)
@@ -1437,6 +1438,7 @@ public:
                 (s.findColour(Slider::thumbColourId).getRed()>190 && s.findColour(Slider::thumbColourId).getGreen()<90 ? eqCapRedImage() : eqCapCreamImage());
             auto rect=Rectangle<float>(cw,ch).withCentre(centre);
             DropShadow (Colours::black.withAlpha(0.55f),3,{1,2}).drawForRectangle(g,rect.reduced(2).toNearestInt());
+            g.setOpacity(1.0f);
             g.drawImage(image,rect,RectanglePlacement::stretchToFit);
             return;
         }
@@ -1606,45 +1608,12 @@ public:
 
     static void drawMasterBar (Graphics& g, int x, int y, int w, int h, float pos, Slider&)
     {
-        const Rectangle<float> track ((float) x, (float) y + (float) h * 0.5f - 4.0f, (float) w, 8.0f);
-        g.setColour (Colour (0xff080a0b));
-        g.fillRoundedRectangle (track, 3.0f);
-        g.setColour (Colours::white.withAlpha (0.15f));
-        g.drawRoundedRectangle (track, 3.0f, 1.0f);
-
-        // Illuminated trim position track
-        g.setGradientFill (ColourGradient (Colour (0xff3ba4c7), track.getX(), track.getY(),
-                                           Colour (0xff65d2f0), pos, track.getY(), false));
-        g.fillRoundedRectangle (track.withRight (jlimit (track.getX(), track.getRight(), pos)), 3.0f);
-
-        // Machined metal master knob
-        const Rectangle<float> thumb (pos - 9.0f, track.getCentreY() - 11.0f, 18.0f, 22.0f);
-        g.setColour (Colours::black.withAlpha (0.6f));
-        g.fillRoundedRectangle (thumb.translated (1.0f, 2.0f), 3.0f);
-
-        const auto& masterSprite = masterCapImage();
-        if (masterSprite.isValid())
-        {
-            const Rectangle<float> dst (thumb.getX() - 2.0f, thumb.getY() - 3.0f,
-                                        thumb.getWidth() + 4.0f, thumb.getHeight() + 6.0f);
-            g.drawImage (masterSprite, dst, RectanglePlacement::stretchToFit, false);
-        }
-        else
-        {
-            g.setGradientFill (ColourGradient (Colour (0xfff6feff), thumb.getX(), thumb.getY(),
-                                                Colour (0xff7e96a4), thumb.getRight(), thumb.getY(), false));
-            g.fillRoundedRectangle (thumb, 3.0f);
-            g.setColour (Colours::white.withAlpha (0.90f));
-            g.drawRoundedRectangle (thumb, 3.0f, 1.0f);
-            paintCapKeyLight (g, thumb, 0.75f, false);
-            paintRimKeyLight (g, thumb, 0.9f, false);
-
-            // Center line
-            g.setColour (Colours::black.withAlpha (0.45f));
-            g.drawLine (thumb.getCentreX(), thumb.getY() + 3.0f, thumb.getCentreX(), thumb.getBottom() - 3.0f, 1.5f);
-            g.setColour (Colours::white);
-            g.drawLine (thumb.getCentreX(), thumb.getY() + 4.0f, thumb.getCentreX(), thumb.getBottom() - 4.0f, 1.0f);
-        }
+        const Rectangle<float> track((float)x,(float)y+(float)h*0.5f-3.0f,(float)w,6.0f);
+        g.setColour(Colour(0xff06090b));g.fillRoundedRectangle(track.expanded(1.0f),3.0f);
+        g.setGradientFill(ColourGradient(Colour(0xffb4f3ff),track.getX(),track.getY(),
+                                        Colour(0xff23badb),track.getX(),track.getBottom(),false));
+        g.fillRoundedRectangle(track.withRight(jlimit(track.getX(),track.getRight(),pos)),2.0f);
+        drawPhotoRegion(g,{1350,77,26,16},Rectangle<float>(20.0f,12.0f).withCentre({pos,track.getCentreY()}));
     }
 
     //-------------------------------------------------------------------- toggles / jewel lamps
@@ -1955,9 +1924,9 @@ protected:
     {
         const auto pivot = round ? photoPoint (890,400) : photoPoint (548,618);
         const float t = vuDeflectionForDb (-jlimit (0.0f,20.0f,gr));
-        const float angle = round ? jmap (t, -0.86f, 0.86f) : jmap (t, -0.64f, 0.64f);
+        const float angle = round ? jmap (t, -0.93f, 0.89f) : jmap (t, -0.77f, 0.72f);
         const Point<float> direction (std::sin (angle), -std::cos (angle));
-        const float length = photoRect (0,0,round ? 133.0f : 146.0f,1).getWidth();
+        const float length = photoRect (0,0,round ? 127.0f : 142.0f,1).getWidth();
         const auto start = pivot + direction * (round ? photoRect(0,0,10,1).getWidth() : 0.0f);
         const auto end = pivot + direction * length;
         g.saveState();
@@ -2958,6 +2927,7 @@ void ZychanStripEditor::paint (Graphics& g)
     // cover the reference's old version and master positions rather than baking UI state in.
     drawPhotoRegion(g,{31,65,1375,59},{0,0,1080,44});
     drawPhotoRegion(g,{846,75,145,40},photoHeaderRect(1203,75,189,40));
+    drawPhotoRegion(g,{846,75,145,40},photoHeaderRect(449,75,295,40));
     const auto versionBox=photoHeaderRect(181,85,84,23);
     g.setColour(Colour(0xff0d1112));g.fillRoundedRectangle(versionBox,2);
     g.setColour(Colour(0xffb78a3b));g.drawRoundedRectangle(versionBox,2,0.7f);

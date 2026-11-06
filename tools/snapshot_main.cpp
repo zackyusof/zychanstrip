@@ -885,16 +885,16 @@ public:
         output.createDirectory();
         if (! args.contains ("--gui-only"))
         {
-        operatingLevelTests();
-        parallelMixTests();
-        colourTests();
-        namEnhanceTests();
-        enhanceContractTests();
-        eqTests();
-        limiterTests();
-        audioTests();
-        autoGainOrderTests();
-        resetTests();
+            operatingLevelTests();
+            parallelMixTests();
+            colourTests();
+            namEnhanceTests();
+            enhanceContractTests();
+            eqTests();
+            limiterTests();
+            audioTests();
+            autoGainOrderTests();
+            resetTests();
         }
         ZychanStripProcessor proc;
         auto editor = std::unique_ptr<ZychanStripEditor> (static_cast<ZychanStripEditor*> (proc.createEditor()));

@@ -10,6 +10,22 @@ has been published.
 
 ## [Unreleased]
 
+## [1.2.0-beta.1] — 2026-11-06
+
+### Changed — one key light across the whole faceplate (photo-real pass)
+
+- Every knob, every vertical fader cap, the graphic-EQ sliders and the master thumb now take their
+  specular highlight from a single shared model: `RackLookAndFeel::paintCapKeyLight` and
+  `paintRimKeyLight` place the key light at the upper left (about 35° off vertical) and the
+  occlusion falloff at the lower right. Previously each control family carried its own ad-hoc
+  highlight, so reflections disagreed about where the light was.
+- The highlight is a soft radial specular plus a tight rim hot spot, not a linear sweep, so it
+  falls away smoothly instead of leaving a hard diagonal stripe across the cap.
+- The upper-left rim is drawn bright and the lower-right rim dark on every cap and knob, which is
+  what makes a machined metal surface read as a solid object.
+- GUI only: no DSP, parameter, ordering, latency or state change. The LA-2A bakelite knob keeps its
+  existing fixed upper-left lighting and is unchanged.
+
 ## [1.1.2] — 2026-11-06
 
 First stable release of the 1.1.2 line (promoted from `1.1.1-beta.10`). The audio engine, parameter

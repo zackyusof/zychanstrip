@@ -1018,6 +1018,77 @@ public:
         }
     }
 
+    //-------------------------------------------------------------------- shared key light
+    // One key light for the whole faceplate: upper-left, about 35 degrees off vertical.
+    // Every knob, fader cap and thumb calls these two helpers, so every specular highlight
+    // and every shadow agrees about where the light is — the "one light source" look of a
+    // photographed hardware unit rather than a set of independently shaded controls.
+    static void paintCapKeyLight (Graphics& g, Rectangle<float> area, float strength, bool round)
+    {
+        g.saveState();
+        Path clip;
+        if (round) clip.addEllipse (area);
+        else       clip.addRoundedRectangle (area, 3.0f);
+        g.reduceClipRegion (clip);
+
+        // Soft radial specular centred on the upper-left, so the falloff is smooth in every
+        // direction (a linear sweep leaves a hard diagonal that reads as a painted stripe).
+        const Point<float> hot (area.getX() + area.getWidth() * 0.30f,
+                                area.getY() + area.getHeight() * 0.22f);
+        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.42f * strength), hot.x, hot.y,
+                                           Colours::transparentWhite,
+                                           hot.x + area.getWidth() * 0.62f,
+                                           hot.y + area.getHeight() * 0.62f, true));
+        g.fillRect (area);
+
+        // Tight hot spot where the key light actually strikes the rim.
+        g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.45f * strength), hot.x, hot.y,
+                                           Colours::transparentWhite,
+                                           hot.x + area.getWidth() * 0.26f,
+                                           hot.y + area.getHeight() * 0.26f, true));
+        g.fillEllipse (Rectangle<float> (area.getWidth() * 0.50f, area.getHeight() * 0.40f).withCentre (hot));
+
+        // Falloff into the lower-right, where the light is occluded.
+        const Point<float> shade (area.getX() + area.getWidth() * 0.74f,
+                                  area.getY() + area.getHeight() * 0.80f);
+        g.setGradientFill (ColourGradient (Colours::black.withAlpha (0.26f * strength), shade.x, shade.y,
+                                           Colours::transparentBlack,
+                                           shade.x - area.getWidth() * 0.55f,
+                                           shade.y - area.getHeight() * 0.55f, true));
+        g.fillRect (area);
+        g.restoreState();
+    }
+
+    static void paintRimKeyLight (Graphics& g, Rectangle<float> area, float strength, bool round)
+    {
+        // Bright upper-left rim, dark lower-right rim: the two edges that tell the eye which
+        // way a machined metal surface is facing.
+        if (round)
+        {
+            Path arc;
+            arc.addCentredArc (area.getCentreX(), area.getCentreY(),
+                               area.getWidth() * 0.5f, area.getHeight() * 0.5f,
+                               0.0f, -2.45f, -0.65f, true);
+            g.setColour (Colours::white.withAlpha (0.55f * strength));
+            g.strokePath (arc, PathStrokeType (1.2f));
+            Path dark;
+            dark.addCentredArc (area.getCentreX(), area.getCentreY(),
+                                area.getWidth() * 0.5f, area.getHeight() * 0.5f,
+                                0.0f, 0.85f, 2.35f, true);
+            g.setColour (Colours::black.withAlpha (0.40f * strength));
+            g.strokePath (dark, PathStrokeType (1.2f));
+        }
+        else
+        {
+            g.setColour (Colours::white.withAlpha (0.55f * strength));
+            g.drawLine (area.getX() + 1.0f, area.getY() + 1.0f, area.getRight() - 2.0f, area.getY() + 1.0f, 1.0f);
+            g.drawLine (area.getX() + 1.0f, area.getY() + 1.0f, area.getX() + 1.0f, area.getBottom() - 2.0f, 1.0f);
+            g.setColour (Colours::black.withAlpha (0.40f * strength));
+            g.drawLine (area.getX() + 2.0f, area.getBottom() - 1.0f, area.getRight() - 1.0f, area.getBottom() - 1.0f, 1.0f);
+            g.drawLine (area.getRight() - 1.0f, area.getY() + 2.0f, area.getRight() - 1.0f, area.getBottom() - 1.0f, 1.0f);
+        }
+    }
+
     void drawRotarySlider (Graphics& g, int x, int y, int w, int h,
                            float /*pos*/, float a0, float a1, Slider& s) override
     {
@@ -1134,6 +1205,9 @@ public:
             g.fillEllipse (Rectangle<float> (capBody.getWidth() * 0.75f, capBody.getHeight() * 0.75f).withCentre (hi));
         }
 
+        // Shared key light: every knob on the faceplate reflects the same source.
+        paintCapKeyLight (g, capBody, isSilver ? 0.62f : 0.34f, true);
+
         // Bottom bounce light
         g.setGradientFill (ColourGradient (Colours::transparentWhite, capBody.getCentreX(), capBody.getBottom() - capBody.getHeight() * 0.34f,
                                            Colours::white.withAlpha (0.18f), capBody.getCentreX(), capBody.getBottom(), false));
@@ -1153,6 +1227,7 @@ public:
         g.drawEllipse (capBody, 1.0f);
         g.setColour (Colours::white.withAlpha (0.30f));
         g.drawEllipse (capBody.reduced (0.9f), 0.8f);
+        paintRimKeyLight (g, capBody.reduced (0.6f), 0.55f, true);
 
         // ---- Enamel-inlaid pointer line
         const float indLen = capBody.getHeight() * 0.36f;
@@ -1224,6 +1299,9 @@ public:
         g.drawHorizontalLine ((int) (thumb.getY() + 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
         g.drawHorizontalLine ((int) (thumb.getBottom() - 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
 
+        // Shared key light (same source as every knob on the faceplate).
+        paintCapKeyLight (g, thumb, 0.75f, false);
+
         // Center white index stripe
         g.setColour (Colours::white.withAlpha (0.95f));
         g.fillRect (thumb.getCentreX() - 1.0f, thumb.getY() + 1.0f, 2.0f, thumb.getHeight() - 2.0f);
@@ -1231,6 +1309,7 @@ public:
         // Bevel highlight
         g.setColour (Colours::white.withAlpha (0.50f));
         g.drawRoundedRectangle (thumb.reduced (0.5f), 2.5f, 0.8f);
+        paintRimKeyLight (g, thumb, 0.9f, false);
     }
 
     static void drawChromeFader (Graphics& g, int x, int y, int w, int h,
@@ -1299,6 +1378,9 @@ public:
                                             Colour (0xff6a7480), well.getX(), well.getBottom(), false));
         g.fillRoundedRectangle (well, 3.0f);
 
+        // Shared key light: identical source and reflection direction to the knobs.
+        paintCapKeyLight (g, cap, 0.80f, false);
+
         // Bright white horizontal index line through the cap centre
         g.setColour (Colours::white);
         g.fillRect (Rectangle<float> (cap.getX() + 2.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 4.0f, 2.0f));
@@ -1313,6 +1395,7 @@ public:
         g.drawRoundedRectangle (cap, 4.0f, 1.0f);
         g.setColour (Colours::black.withAlpha (0.85f));
         g.drawRoundedRectangle (cap.expanded (0.8f), 5.0f, 1.2f);
+        paintRimKeyLight (g, cap, 1.0f, false);
         (void) s; (void) minPos; (void) maxPos;
     }
 
@@ -1339,6 +1422,8 @@ public:
         g.fillRoundedRectangle (thumb, 3.0f);
         g.setColour (Colours::white.withAlpha (0.90f));
         g.drawRoundedRectangle (thumb, 3.0f, 1.0f);
+        paintCapKeyLight (g, thumb, 0.75f, false);
+        paintRimKeyLight (g, thumb, 0.9f, false);
 
         // Center line
         g.setColour (Colours::black.withAlpha (0.45f));

@@ -43,8 +43,11 @@ print("compile:", " ".join(cmd[:6]), "...")
 subprocess.check_call(cmd)
 
 objs = []
-for target_name in ("zychanstrip", "zychanstrip_wood_frame"):
-    for root, _dirs, files in os.walk(os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")):
+for target_name in ("zychanstrip", "zychanstrip_assets"):
+    target_dir = os.path.join(BUILD, "CMakeFiles", f"{target_name}.dir")
+    if not os.path.isdir(target_dir):
+        continue
+    for root, _dirs, files in os.walk(target_dir):
         for f in files:
             if not f.endswith(".o"):
                 continue

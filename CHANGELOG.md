@@ -10,6 +10,20 @@ has been published.
 
 ## [Unreleased]
 
+## [1.2.0-beta.2] — 2026-11-06
+
+### Changed — photographic bitmap materials
+
+- The faceplates are now drawn from rendered brushed-metal and ivory bitmap tiles (one key light,
+  upper left) instead of per-frame gradient stacks. Tiled through `BinaryData`, so nothing is read
+  from disk at runtime.
+- Knobs, vertical fader caps, graphic-EQ sliders and the master thumb draw photographic sprites
+  with the highlight baked into the pixels; all of them come from the same light rig, so every
+  reflection on the faceplate agrees.
+- Scale engravings stay live vector text on top of the sprite, so legibility is unchanged.
+- Procedural drawing remains as the fallback if an asset fails to load.
+- GUI only: no DSP, parameter, ordering, latency or state change.
+
 ## [1.2.0-beta.1] — 2026-11-06
 
 ### Changed — one key light across the whole faceplate (photo-real pass)

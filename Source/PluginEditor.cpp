@@ -26,29 +26,79 @@ constexpr int kEditorH = ZychanStripEditor::kCanvasHeight;
 
 const Image& woodTopTexture()
 {
-    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_top_png,
-                                                           ZychanStripWoodFrameData::wood_top_pngSize);
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::wood_top_png,
+                                                           ZychanStripAssets::wood_top_pngSize);
     return image;
 }
 
 const Image& woodBottomTexture()
 {
-    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_bottom_png,
-                                                           ZychanStripWoodFrameData::wood_bottom_pngSize);
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::wood_bottom_png,
+                                                           ZychanStripAssets::wood_bottom_pngSize);
     return image;
 }
 
 const Image& woodLeftTexture()
 {
-    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_left_png,
-                                                           ZychanStripWoodFrameData::wood_left_pngSize);
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::wood_left_png,
+                                                           ZychanStripAssets::wood_left_pngSize);
     return image;
 }
 
 const Image& woodRightTexture()
 {
-    static const Image image = ImageCache::getFromMemory (ZychanStripWoodFrameData::wood_right_png,
-                                                           ZychanStripWoodFrameData::wood_right_pngSize);
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::wood_right_png,
+                                                           ZychanStripAssets::wood_right_pngSize);
+    return image;
+}
+
+// ---- Photographic GUI materials -------------------------------------------------------
+// Rendered once offline from a single upper-left key light and packed through BinaryData.
+// The light is baked into the pixels, so every control reflects the same source without
+// per-control shading code.
+const Image& guiMaterial (int index)
+{
+    static const Image images[4] {
+        ImageCache::getFromMemory (ZychanStripAssets::metal_dark_png,   ZychanStripAssets::metal_dark_pngSize),
+        ImageCache::getFromMemory (ZychanStripAssets::ivory_png,        ZychanStripAssets::ivory_pngSize),
+        ImageCache::getFromMemory (ZychanStripAssets::metal_black_png,  ZychanStripAssets::metal_black_pngSize),
+        ImageCache::getFromMemory (ZychanStripAssets::metal_blue_png,   ZychanStripAssets::metal_blue_pngSize)
+    };
+    return images[(size_t) jlimit (0, 3, index)];
+}
+
+const Image& chromeKnobImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::knob_chrome_png,
+                                                           ZychanStripAssets::knob_chrome_pngSize);
+    return image;
+}
+
+const Image& blackKnobImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::knob_black_png,
+                                                           ZychanStripAssets::knob_black_pngSize);
+    return image;
+}
+
+const Image& faderCapImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::fader_cap_png,
+                                                           ZychanStripAssets::fader_cap_pngSize);
+    return image;
+}
+
+const Image& eqCapImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::eq_cap_png,
+                                                           ZychanStripAssets::eq_cap_pngSize);
+    return image;
+}
+
+const Image& masterCapImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::master_cap_png,
+                                                           ZychanStripAssets::master_cap_pngSize);
     return image;
 }
 
@@ -159,7 +209,8 @@ void paintApiLogo (Graphics& g, Rectangle<float> area, Colour col)
 }
 
 /** Realistic brushed metal faceplate with anisotropic lighting and chamfered bevels. */
-void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom, float corner, int seed)
+void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom, float corner, int seed,
+                       int textureIndex = -1)
 {
     Path shape;
     shape.addRoundedRectangle (r, corner);
@@ -176,6 +227,19 @@ void paintMetalPlate (Graphics& g, Rectangle<float> r, Colour top, Colour bottom
     // Primary anodized metal gradient
     g.setGradientFill (ColourGradient (top, 0.0f, r.getY(), bottom, 0.0f, r.getBottom(), false));
     g.fillRect (r);
+
+    // Photographic brushed material, tinted to the module's colour family.
+    if (textureIndex >= 0)
+    {
+        const auto& texture = guiMaterial (textureIndex);
+        if (texture.isValid())
+        {
+            g.drawImage (texture, r, RectanglePlacement::stretchToFit, false);
+            g.setGradientFill (ColourGradient (top.withAlpha (0.58f), 0.0f, r.getY(),
+                                               bottom.withAlpha (0.58f), 0.0f, r.getBottom(), false));
+            g.fillRect (r);
+        }
+    }
 
     // Dense fine brushed metal grain
     Random rnd (seed);
@@ -1119,16 +1183,28 @@ public:
         const bool fetOutputScale = s.getProperties().contains ("fetOutputScale");
         const bool fetNumberScale = s.getProperties().contains ("fetNumberScale");
 
-        // ---- Skirt: heavy machined ring with scale marks
+        // ---- Skirt / photographic knob body
         const float skirtR = d * knobScale * 0.50f;
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c).translated (0.0f, 2.0f));
+        const bool isSilver = (cap == pal::silverCap);
+        const Image& knobSprite = isSilver ? chromeKnobImage() : blackKnobImage();
 
-        g.setGradientFill (ColourGradient (Colour (0xff383d42), c.x, c.y - skirtR,
-                                           Colour (0xff0a0c0e), c.x, c.y + skirtR, false));
-        g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c));
-        g.setColour (Colours::white.withAlpha (0.15f));
-        g.drawEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c), 0.8f);
+        if (knobSprite.isValid())
+        {
+            // Photographic material sprite: skirt, knurling and cap with the key light baked
+            // in. Drawn before the scale so the engraved numbers stay legible on the ring.
+            g.drawImage (knobSprite, b, RectanglePlacement::stretchToFit, false);
+        }
+        else
+        {
+            g.setColour (Colours::black.withAlpha (0.55f));
+            g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c).translated (0.0f, 2.0f));
+
+            g.setGradientFill (ColourGradient (Colour (0xff383d42), c.x, c.y - skirtR,
+                                               Colour (0xff0a0c0e), c.x, c.y + skirtR, false));
+            g.fillEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c));
+            g.setColour (Colours::white.withAlpha (0.15f));
+            g.drawEllipse (Rectangle<float> (skirtR * 2.0f, skirtR * 2.0f).withCentre (c), 0.8f);
+        }
 
         KnobScale sc; sc.a0 = a0; sc.a1 = a1;
         paintScale (g, c, skirtR * 0.78f, sc, Colours::white.withAlpha (0.85f), knobScale);
@@ -1153,81 +1229,76 @@ public:
             }
         }
 
-        // ---- Knob Body
+        // ---- Knob Body (procedural fallback only; the sprite already carries it)
         const float bodyR = d * knobScale * 0.355f;
         auto body = Rectangle<float> (bodyR * 2.0f, bodyR * 2.0f).withCentre (c);
-
-        g.setColour (Colours::black.withAlpha (0.65f));
-        g.fillEllipse (body.expanded (3.0f).translated (0.0f, 3.0f));
-
-        // Machined chrome collar catching top-left key light
-        g.setGradientFill (ColourGradient (Colour (0xff82878d), body.getX(), body.getY(),
-                                           Colour (0xff0e1012), body.getRight(), body.getBottom(), false));
-        g.fillEllipse (body.expanded (2.6f));
-
-        // Knob Face Cap
         auto capBody = body.reduced (bodyR * 0.05f);
-        g.setGradientFill (ColourGradient (cap.brighter (0.45f), capBody.getX() + capBody.getWidth() * 0.30f,
-                                           capBody.getY() + capBody.getHeight() * 0.10f,
-                                           cap.darker (0.75f), capBody.getRight(), capBody.getBottom(), true));
-        g.fillEllipse (capBody);
 
-        g.saveState();
-        Path clip; clip.addEllipse (capBody); g.reduceClipRegion (clip);
-
-        const bool isSilver = (cap == pal::silverCap);
-        if (isSilver)
+        if (! knobSprite.isValid())
         {
-            // 1176 style concentric turned aluminum disc
-            g.setColour (Colours::black.withAlpha (0.12f));
-            for (float rad = capBody.getWidth() * 0.12f; rad < capBody.getWidth() * 0.48f; rad += 2.2f)
-                g.drawEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c), 0.7f);
+            g.setColour (Colours::black.withAlpha (0.65f));
+            g.fillEllipse (body.expanded (3.0f).translated (0.0f, 3.0f));
 
-            // Anisotropic cross reflections for spun metal
-            Path fan;
-            fan.addPieSegment (capBody, -0.6f, 0.6f, 0.0f);
-            fan.addPieSegment (capBody, MathConstants<float>::pi - 0.6f, MathConstants<float>::pi + 0.6f, 0.0f);
-            g.setColour (Colours::white.withAlpha (0.35f));
-            g.fillPath (fan);
+            // Machined chrome collar catching top-left key light
+            g.setGradientFill (ColourGradient (Colour (0xff82878d), body.getX(), body.getY(),
+                                               Colour (0xff0e1012), body.getRight(), body.getBottom(), false));
+            g.fillEllipse (body.expanded (2.6f));
+
+            // Knob Face Cap
+            g.setGradientFill (ColourGradient (cap.brighter (0.45f), capBody.getX() + capBody.getWidth() * 0.30f,
+                                               capBody.getY() + capBody.getHeight() * 0.10f,
+                                               cap.darker (0.75f), capBody.getRight(), capBody.getBottom(), true));
+            g.fillEllipse (capBody);
+
+            g.saveState();
+            Path clip; clip.addEllipse (capBody); g.reduceClipRegion (clip);
+
+            if (isSilver)
+            {
+                g.setColour (Colours::black.withAlpha (0.12f));
+                for (float rad = capBody.getWidth() * 0.12f; rad < capBody.getWidth() * 0.48f; rad += 2.2f)
+                    g.drawEllipse (Rectangle<float> (rad * 2.0f, rad * 2.0f).withCentre (c), 0.7f);
+
+                Path fan;
+                fan.addPieSegment (capBody, -0.6f, 0.6f, 0.0f);
+                fan.addPieSegment (capBody, MathConstants<float>::pi - 0.6f, MathConstants<float>::pi + 0.6f, 0.0f);
+                g.setColour (Colours::white.withAlpha (0.35f));
+                g.fillPath (fan);
+            }
+            else
+            {
+                g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.48f), capBody.getX(), capBody.getY(),
+                                                   Colours::transparentWhite, capBody.getX(), capBody.getY() + capBody.getHeight() * 0.65f, false));
+                g.fillRect (capBody.withHeight (capBody.getHeight() * 0.65f));
+
+                const Point<float> hi (capBody.getX() + capBody.getWidth() * 0.34f, capBody.getY() + capBody.getHeight() * 0.26f);
+                g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.60f), hi.x, hi.y,
+                                                   Colours::transparentWhite, hi.x + capBody.getWidth() * 0.35f,
+                                                   hi.y + capBody.getHeight() * 0.35f, true));
+                g.fillEllipse (Rectangle<float> (capBody.getWidth() * 0.75f, capBody.getHeight() * 0.75f).withCentre (hi));
+            }
+
+            paintCapKeyLight (g, capBody, isSilver ? 0.62f : 0.34f, true);
+
+            g.setGradientFill (ColourGradient (Colours::transparentWhite, capBody.getCentreX(), capBody.getBottom() - capBody.getHeight() * 0.34f,
+                                               Colours::white.withAlpha (0.18f), capBody.getCentreX(), capBody.getBottom(), false));
+            g.fillRect (capBody.withTop (capBody.getBottom() - capBody.getHeight() * 0.34f));
+
+            g.setColour (Colours::black.withAlpha (0.18f));
+            for (int i = 0; i < 56; ++i)
+            {
+                const float a = MathConstants<float>::twoPi * (float) i / 56.0f;
+                const Point<float> dir (std::sin (a), -std::cos (a));
+                g.drawLine (Line<float> (c + dir * (capBody.getWidth() * 0.455f), c + dir * (capBody.getWidth() * 0.50f)), 0.65f);
+            }
+            g.restoreState();
+
+            g.setColour (Colours::black.withAlpha (0.75f));
+            g.drawEllipse (capBody, 1.0f);
+            g.setColour (Colours::white.withAlpha (0.30f));
+            g.drawEllipse (capBody.reduced (0.9f), 0.8f);
+            paintRimKeyLight (g, capBody.reduced (0.6f), 0.55f, true);
         }
-        else
-        {
-            // Bakelite / collet cap specular sheen
-            g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.48f), capBody.getX(), capBody.getY(),
-                                               Colours::transparentWhite, capBody.getX(), capBody.getY() + capBody.getHeight() * 0.65f, false));
-            g.fillRect (capBody.withHeight (capBody.getHeight() * 0.65f));
-
-            // Hotspot reflection
-            const Point<float> hi (capBody.getX() + capBody.getWidth() * 0.34f, capBody.getY() + capBody.getHeight() * 0.26f);
-            g.setGradientFill (ColourGradient (Colours::white.withAlpha (0.60f), hi.x, hi.y,
-                                               Colours::transparentWhite, hi.x + capBody.getWidth() * 0.35f,
-                                               hi.y + capBody.getHeight() * 0.35f, true));
-            g.fillEllipse (Rectangle<float> (capBody.getWidth() * 0.75f, capBody.getHeight() * 0.75f).withCentre (hi));
-        }
-
-        // Shared key light: every knob on the faceplate reflects the same source.
-        paintCapKeyLight (g, capBody, isSilver ? 0.62f : 0.34f, true);
-
-        // Bottom bounce light
-        g.setGradientFill (ColourGradient (Colours::transparentWhite, capBody.getCentreX(), capBody.getBottom() - capBody.getHeight() * 0.34f,
-                                           Colours::white.withAlpha (0.18f), capBody.getCentreX(), capBody.getBottom(), false));
-        g.fillRect (capBody.withTop (capBody.getBottom() - capBody.getHeight() * 0.34f));
-
-        // Realistic knurling grooves around the skirt
-        g.setColour (Colours::black.withAlpha (0.18f));
-        for (int i = 0; i < 56; ++i)
-        {
-            const float a = MathConstants<float>::twoPi * (float) i / 56.0f;
-            const Point<float> dir (std::sin (a), -std::cos (a));
-            g.drawLine (Line<float> (c + dir * (capBody.getWidth() * 0.455f), c + dir * (capBody.getWidth() * 0.50f)), 0.65f);
-        }
-        g.restoreState();
-
-        g.setColour (Colours::black.withAlpha (0.75f));
-        g.drawEllipse (capBody, 1.0f);
-        g.setColour (Colours::white.withAlpha (0.30f));
-        g.drawEllipse (capBody.reduced (0.9f), 0.8f);
-        paintRimKeyLight (g, capBody.reduced (0.6f), 0.55f, true);
 
         // ---- Enamel-inlaid pointer line
         const float indLen = capBody.getHeight() * 0.36f;
@@ -1289,27 +1360,36 @@ public:
         g.setColour (Colours::black.withAlpha (0.75f));
         g.fillRoundedRectangle (thumb.translated (0.0f, 1.8f), 3.0f);
 
-        // Main ribbed slider cap body
-        g.setGradientFill (ColourGradient (cap.brighter (0.35f), thumb.getX(), thumb.getY(),
-                                           cap.darker (0.45f), thumb.getX(), thumb.getBottom(), false));
-        g.fillRoundedRectangle (thumb, 2.5f);
+        const auto& eqSprite = eqCapImage();
+        if (eqSprite.isValid())
+        {
+            const Rectangle<float> dst (thumb.getX() - 3.0f, thumb.getY() - 3.0f,
+                                        thumb.getWidth() + 6.0f, thumb.getHeight() + 6.0f);
+            g.drawImage (eqSprite, dst, RectanglePlacement::stretchToFit, false);
+        }
+        else
+        {
+            // Main ribbed slider cap body
+            g.setGradientFill (ColourGradient (cap.brighter (0.35f), thumb.getX(), thumb.getY(),
+                                                cap.darker (0.45f), thumb.getX(), thumb.getBottom(), false));
+            g.fillRoundedRectangle (thumb, 2.5f);
 
-        // Grip ribs across cap
-        g.setColour (Colours::black.withAlpha (0.25f));
-        g.drawHorizontalLine ((int) (thumb.getY() + 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
-        g.drawHorizontalLine ((int) (thumb.getBottom() - 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
+            // Grip ribs across cap
+            g.setColour (Colours::black.withAlpha (0.25f));
+            g.drawHorizontalLine ((int) (thumb.getY() + 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
+            g.drawHorizontalLine ((int) (thumb.getBottom() - 3.0f), thumb.getX() + 2.0f, thumb.getRight() - 2.0f);
 
-        // Shared key light (same source as every knob on the faceplate).
-        paintCapKeyLight (g, thumb, 0.75f, false);
+            paintCapKeyLight (g, thumb, 0.75f, false);
 
-        // Center white index stripe
-        g.setColour (Colours::white.withAlpha (0.95f));
-        g.fillRect (thumb.getCentreX() - 1.0f, thumb.getY() + 1.0f, 2.0f, thumb.getHeight() - 2.0f);
+            // Center white index stripe
+            g.setColour (Colours::white.withAlpha (0.95f));
+            g.fillRect (thumb.getCentreX() - 1.0f, thumb.getY() + 1.0f, 2.0f, thumb.getHeight() - 2.0f);
 
-        // Bevel highlight
-        g.setColour (Colours::white.withAlpha (0.50f));
-        g.drawRoundedRectangle (thumb.reduced (0.5f), 2.5f, 0.8f);
-        paintRimKeyLight (g, thumb, 0.9f, false);
+            // Bevel highlight
+            g.setColour (Colours::white.withAlpha (0.50f));
+            g.drawRoundedRectangle (thumb.reduced (0.5f), 2.5f, 0.8f);
+            paintRimKeyLight (g, thumb, 0.9f, false);
+        }
     }
 
     static void drawChromeFader (Graphics& g, int x, int y, int w, int h,
@@ -1362,40 +1442,50 @@ public:
         g.setColour (Colours::black.withAlpha (0.65f));
         g.fillRoundedRectangle (cap.translated (2.0f, 3.5f), 4.0f);
 
-// Machined brushed-silver fader cap (SSL/P&G style)
-        g.setGradientFill (ColourGradient (Colour (0xffe8edf2), cap.getX() + 2.0f, cap.getY(),
-                                            Colour (0xff8a96a3), cap.getRight() - 2.0f, cap.getY(), false));
-        g.fillRoundedRectangle (cap, 4.0f);
+        const auto& capSprite = faderCapImage();
+        if (capSprite.isValid())
+        {
+            // Photographic P&G-style cap; light baked from the same upper-left rig as the knobs.
+            const Rectangle<float> dst (cap.getX() - 3.0f, cap.getY() - 4.0f,
+                                        cap.getWidth() + 6.0f, cap.getHeight() + 8.0f);
+            g.drawImage (capSprite, dst, RectanglePlacement::stretchToFit, false);
+        }
+        else
+        {
+            // Machined brushed-silver fader cap (SSL/P&G style)
+            g.setGradientFill (ColourGradient (Colour (0xffe8edf2), cap.getX() + 2.0f, cap.getY(),
+                                                Colour (0xff8a96a3), cap.getRight() - 2.0f, cap.getY(), false));
+            g.fillRoundedRectangle (cap, 4.0f);
 
-        // Ribbed grip ridges
-        g.setColour (Colour (0xff5a6470).withAlpha (0.6f));
-        for (float ry = cap.getY() + 6.0f; ry < cap.getBottom() - 6.0f; ry += 3.0f)
-            g.fillRect (Rectangle<float> (cap.getX() + 3.0f, ry, cap.getWidth() - 6.0f, 1.0f));
+            // Ribbed grip ridges
+            g.setColour (Colour (0xff5a6470).withAlpha (0.6f));
+            for (float ry = cap.getY() + 6.0f; ry < cap.getBottom() - 6.0f; ry += 3.0f)
+                g.fillRect (Rectangle<float> (cap.getX() + 3.0f, ry, cap.getWidth() - 6.0f, 1.0f));
 
-        // Ergonomic center finger concave well
-        const Rectangle<float> well (cap.getX() + 4.0f, cap.getY() + 6.0f, cap.getWidth() - 8.0f, cap.getHeight() - 12.0f);
-        g.setGradientFill (ColourGradient (Colour (0xffb0bac6), well.getX(), well.getY(),
-                                            Colour (0xff6a7480), well.getX(), well.getBottom(), false));
-        g.fillRoundedRectangle (well, 3.0f);
+            // Ergonomic center finger concave well
+            const Rectangle<float> well (cap.getX() + 4.0f, cap.getY() + 6.0f, cap.getWidth() - 8.0f, cap.getHeight() - 12.0f);
+            g.setGradientFill (ColourGradient (Colour (0xffb0bac6), well.getX(), well.getY(),
+                                                Colour (0xff6a7480), well.getX(), well.getBottom(), false));
+            g.fillRoundedRectangle (well, 3.0f);
 
-        // Shared key light: identical source and reflection direction to the knobs.
-        paintCapKeyLight (g, cap, 0.80f, false);
+            paintCapKeyLight (g, cap, 0.80f, false);
 
-        // Bright white horizontal index line through the cap centre
-        g.setColour (Colours::white);
-        g.fillRect (Rectangle<float> (cap.getX() + 2.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 4.0f, 2.0f));
+            // Bright white horizontal index line through the cap centre
+            g.setColour (Colours::white);
+            g.fillRect (Rectangle<float> (cap.getX() + 2.0f, cap.getCentreY() - 1.0f, cap.getWidth() - 4.0f, 2.0f));
 
-        // Knurl grooves on sides
-        g.setColour (Colour (0xff20303a).withAlpha (0.50f));
-        for (float gy = cap.getY() + 5.0f; gy < cap.getBottom() - 4.0f; gy += 4.0f)
-            g.fillRect (Rectangle<float> (cap.getX() + 2.0f, gy, 2.0f, 1.0f));
+            // Knurl grooves on sides
+            g.setColour (Colour (0xff20303a).withAlpha (0.50f));
+            for (float gy = cap.getY() + 5.0f; gy < cap.getBottom() - 4.0f; gy += 4.0f)
+                g.fillRect (Rectangle<float> (cap.getX() + 2.0f, gy, 2.0f, 1.0f));
 
-        // Outer specular rim
-        g.setColour (Colours::white.withAlpha (0.95f));
-        g.drawRoundedRectangle (cap, 4.0f, 1.0f);
-        g.setColour (Colours::black.withAlpha (0.85f));
-        g.drawRoundedRectangle (cap.expanded (0.8f), 5.0f, 1.2f);
-        paintRimKeyLight (g, cap, 1.0f, false);
+            // Outer specular rim
+            g.setColour (Colours::white.withAlpha (0.95f));
+            g.drawRoundedRectangle (cap, 4.0f, 1.0f);
+            g.setColour (Colours::black.withAlpha (0.85f));
+            g.drawRoundedRectangle (cap.expanded (0.8f), 5.0f, 1.2f);
+            paintRimKeyLight (g, cap, 1.0f, false);
+        }
         (void) s; (void) minPos; (void) maxPos;
     }
 
@@ -1417,19 +1507,29 @@ public:
         g.setColour (Colours::black.withAlpha (0.6f));
         g.fillRoundedRectangle (thumb.translated (1.0f, 2.0f), 3.0f);
 
-        g.setGradientFill (ColourGradient (Colour (0xfff6feff), thumb.getX(), thumb.getY(),
-                                           Colour (0xff7e96a4), thumb.getRight(), thumb.getY(), false));
-        g.fillRoundedRectangle (thumb, 3.0f);
-        g.setColour (Colours::white.withAlpha (0.90f));
-        g.drawRoundedRectangle (thumb, 3.0f, 1.0f);
-        paintCapKeyLight (g, thumb, 0.75f, false);
-        paintRimKeyLight (g, thumb, 0.9f, false);
+        const auto& masterSprite = masterCapImage();
+        if (masterSprite.isValid())
+        {
+            const Rectangle<float> dst (thumb.getX() - 2.0f, thumb.getY() - 3.0f,
+                                        thumb.getWidth() + 4.0f, thumb.getHeight() + 6.0f);
+            g.drawImage (masterSprite, dst, RectanglePlacement::stretchToFit, false);
+        }
+        else
+        {
+            g.setGradientFill (ColourGradient (Colour (0xfff6feff), thumb.getX(), thumb.getY(),
+                                                Colour (0xff7e96a4), thumb.getRight(), thumb.getY(), false));
+            g.fillRoundedRectangle (thumb, 3.0f);
+            g.setColour (Colours::white.withAlpha (0.90f));
+            g.drawRoundedRectangle (thumb, 3.0f, 1.0f);
+            paintCapKeyLight (g, thumb, 0.75f, false);
+            paintRimKeyLight (g, thumb, 0.9f, false);
 
-        // Center line
-        g.setColour (Colours::black.withAlpha (0.45f));
-        g.drawLine (thumb.getCentreX(), thumb.getY() + 3.0f, thumb.getCentreX(), thumb.getBottom() - 3.0f, 1.5f);
-        g.setColour (Colours::white);
-        g.drawLine (thumb.getCentreX(), thumb.getY() + 4.0f, thumb.getCentreX(), thumb.getBottom() - 4.0f, 1.0f);
+            // Center line
+            g.setColour (Colours::black.withAlpha (0.45f));
+            g.drawLine (thumb.getCentreX(), thumb.getY() + 3.0f, thumb.getCentreX(), thumb.getBottom() - 3.0f, 1.5f);
+            g.setColour (Colours::white);
+            g.drawLine (thumb.getCentreX(), thumb.getY() + 4.0f, thumb.getCentreX(), thumb.getBottom() - 4.0f, 1.0f);
+        }
     }
 
     //-------------------------------------------------------------------- toggles / jewel lamps
@@ -1619,7 +1719,7 @@ public:
     {
         paintChassisGrip (g);
         const auto plate = plateBounds().toFloat();
-        paintMetalPlate (g, plate, plateTop, plateLow, 5.0f, 101 + moduleId);
+        paintMetalPlate (g, plate, plateTop, plateLow, 5.0f, 101 + moduleId, moduleId);
         paintScrewsAndBadge (g, plate);
         if (faceImage.isValid()) g.drawImageAt (faceImage, 0, 0);
         paintMeter (g);

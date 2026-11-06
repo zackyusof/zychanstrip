@@ -8,7 +8,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.2.0--beta.1-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.2.0--beta.2-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -56,7 +56,7 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
 
 For routing, actual latency/CPU measurements and validation limits see
 [NAM colour DSP](docs/dsp/nam-colour.md) and [implementation specification](docs/specs/embedded-nam-colour.md).
-Version 1.2.0-beta.1 is a local beta of the photo-real GUI update.
+Version 1.2.0-beta.2 is a local beta of the photo-real bitmap GUI.
 
 Beta.7 applies [UA operating references](docs/specs/ua-operating-reference.md) while preserving the extended rack controls. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values.
 
@@ -343,11 +343,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.2.0` | neutral grey |
-| prerelease | `v1.2.0-beta.1` | amber |
+| prerelease | `v1.2.0-beta.2` | amber |
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release                     # v1.2.0 (stable)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1  # v1.2.0-beta.1
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1  # v1.2.0-beta.2
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -477,7 +477,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current build: **1.2.0-beta.1** (local beta, 2026-11-06) — photo-real lighting pass over the GUI.
+Current build: **1.2.0-beta.2** (local beta, 2026-11-06) — photographic bitmap materials and hardware sprites.
 
 Enhance GUI refresh: a thin stereo GR indicator (two rows of ten LEDs, one scale row) beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 

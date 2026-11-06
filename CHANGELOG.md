@@ -10,6 +10,13 @@ has been published.
 
 ## [Unreleased]
 
+### Fixed — 1.1.1-beta.10 colour-engine CPU (2026-11-06)
+
+- Stop processing the neural Colour Engine when it cannot reach the output. `ColourEngine::frame` mixes the WaveNet branch with `weights[1]`, which is exactly zero in ALGO and CLEAN, so every sample was computed and then discarded; `render()` now skips the models unless that weight is non-zero, or a fade into NAM is in progress. The models keep their state — `nam::DSP::Reset()` may allocate and must not run on the audio thread.
+- Measured (four engines, one per module, stereo, 48 kHz, 256-sample blocks, best of 3 x 2000 blocks): ALGO 6338 -> 150 ns per host sample, CLEAN 6268 -> 148 ns, i.e. 30.4 % -> 0.7 % of one core at 1x. NAM unchanged at 6282 ns (30.2 %).
+- Output is bit-identical: at zero weight the summed sample does not depend on the neural branch. No parameter, ordering, latency, layout or state change.
+- Rejected, with numbers: a specialised A2-Fast kernel (`NAM_ENABLE_A2_FAST`) measured 6215 ns vs 6282 (~1 %) because the embedded profile is a `SlimmableContainer`; multi-threading was rejected because the four modules are strictly serial and the only parallel work is the two channel models, which would cost four worker threads per instance to halve a branch that is now idle in the default mode.
+
 ### Added — 1.1.1-beta.9 zy module branding + two-row GR meter (2026-11-06)
 
 - Rename the faceplate branding to the zy product line: `zy-560` (graphic EQ, top right), `zy-76` (FET wordmark, `MODEL zy-76` sub-plate line and model badge), `zy-la` (opto wordmark, meter face and model badge) and `zy-limiter` (limiter header). Hardware references in the DSP documentation are unchanged.

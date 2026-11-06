@@ -49,7 +49,7 @@ defaults, rack ordering, latency or state migration changes.
 
 ```
 python3 tools/nam/prepare_profiles.py build/nam-assets
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.9
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.10
 ninja -C build
 python3 tools/build_snapshot.py
 ```

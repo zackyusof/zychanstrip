@@ -8,7 +8,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.1.1--beta.9-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.1.1--beta.10-orange.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -25,7 +25,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ## Current beta: colour engines and complete feature overview
 
-**1.1.1-beta.9 is a local evaluation beta.** The embedded API/IGS captures require creator
+**1.1.1-beta.10 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
 weights are downloaded into ignored build storage. See [profile attribution](THIRD_PARTY_NOTICES.md).
 
@@ -343,11 +343,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.1.1` | neutral grey |
-| prerelease | `v1.1.1-beta.9` | amber |
+| prerelease | `v1.1.1-beta.10` | amber |
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.9  # v1.1.1-beta.9
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.9   # …-beta.9
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.10  # v1.1.1-beta.10
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.10   # …-beta.10
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -442,6 +442,12 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 ## Changelog
 
+### 2026-11-06 — 1.1.1-beta.10 colour-engine CPU fix
+
+- Stop running the neural Colour Engine when its branch is not audible. In ALGO and CLEAN the WaveNet output was multiplied by zero after being computed; it is now skipped, and still runs across the full 20 ms crossfade into NAM.
+- Measured with four engines (one per module), stereo, 48 kHz, 256-sample blocks: ALGO and CLEAN drop from 6338 / 6268 to 150 / 148 ns per host sample — 30 % of one core down to 0.7 %. NAM is unchanged (6282 ns, 30.2 %).
+- No parameter, ordering, latency, state or audible-output change: with the branch weight at zero the summed sample is bit-identical, and the models' state is retained rather than reset on the audio thread.
+
 ### 2026-11-06 — 1.1.1-beta.9 zy branding and limiter meters
 
 - Faceplate branding is now the zy line: `zy-560`, `zy-76` (including the `MODEL zy-76` sub-plate line), `zy-la` and `zy-limiter`.
@@ -471,7 +477,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current local beta: **1.1.1-beta.9**. No stable release is authorized; promotion remains the user's decision.
+Current local beta: **1.1.1-beta.10**. No stable release is authorized; promotion remains the user's decision.
 
 Enhance GUI refresh: a thin stereo GR indicator (two rows of ten LEDs, one scale row) beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 

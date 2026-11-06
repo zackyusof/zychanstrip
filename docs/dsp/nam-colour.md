@@ -107,8 +107,27 @@ Approximate one-core utilization is runtime milliseconds per audio second divide
 | 192000 | 1919 | 9.995 | 599.6 |
 
 At 192 kHz, mirrored rings and Accelerate SIMD dot products reduced the earlier scalar result
-from 756.4 to approximately 599.6 ms per audio second. This remains CPU-heavy at high rates;
-ALGO/CLEAN keep NAM warm and therefore do not provide a CPU-saving mode in beta.2.
+from 756.4 to approximately 599.6 ms per audio second. Newer engines reduce the size of the
+mirrored rings while keeping its processing order; this remains the highest-cost rate.
+
+**Correction (1.1.1-beta.10, 2026-11-06).** In beta.2 and earlier ALGO and CLEAN did *not* save
+CPU: `render()` ran both channel WaveNets unconditionally, then `frame()` multiplied their output
+by a weight that is exactly zero in those modes. The models are now skipped while the neural
+branch cannot reach the output, so ALGO/CLEAN are genuinely cheap and NAM keeps its previous cost.
+Measured with four engines (one per module), stereo, 48 kHz, 256-sample blocks, best of 3 runs of
+2000 blocks, linked from the release objects with the same per-sample call shape as
+`Module::colourFrame`:
+
+| Colour mode | Before (ns / host sample) | After | Share of one core @ 1x |
+| --- | ---: | ---: | --- |
+| ALGO (default) | 6338 | **150** | 30.4 % → **0.7 %** |
+| CLEAN | 6268 | **148** | 30.1 % → **0.7 %** |
+| NAM | 6270 | 6282 | 30.1 % → 30.2 % (unchanged) |
+
+The gate also runs across the whole 20 ms crossfade into NAM, and the models keep their internal
+state instead of being reset (`nam::DSP::Reset()` may allocate and is not audio-thread safe).
+A specialised A2-Fast kernel (`NAM_ENABLE_A2_FAST`) was measured at 6215 ns and rejected (~1 %),
+because the embedded profile is a `SlimmableContainer`.
 
 Herdr FreeLLMAPI review was attempted in an OpenCode sibling pane. It returned "Invalid API key";
 local provisioning confirmed missing unified key and missing DB bootstrap credential. No model

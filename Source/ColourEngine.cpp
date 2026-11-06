@@ -109,10 +109,17 @@ struct ColourEngine::Impl {
             for(int c=0;c<2;++c) modelInput[c][count]=converted?toModel.read(input[c],nextModel*ratio):input[c][(size_t)nextModel%capacity];
             ++nextModel;++count;
         }
+        // ALGO (0) and CLEAN (2) never mix the neural branch into the output: frame() scales
+        // it by weights[1], which is exactly zero there, so running the WaveNet is pure waste -
+        // it was ~98 % of the DSP cost of the whole rack (6.3 us -> 0.15 us per host sample).
+        // Run the models only while the branch contributes, including across a 20 ms fade into
+        // NAM (steps[1] > 0, weight still near zero, so the entry is masked). Model state is
+        // retained, not reset: Reset() may allocate and must not run on the audio thread.
+        const bool needNeural = weights[1] > 1.0e-5f || (fadeRemaining > 0 && steps[1] > 0.0f);
         for(int c=0;c<2;++c) {
             double* in=modelInput[c].data(); double* out=modelOutput[c].data();
-            if(count) models[c]->process(&in,&out,count);
-            if(nonlinearOnly && count) {
+            if(needNeural && count) models[c]->process(&in,&out,count);
+            if(needNeural && nonlinearOnly && count) {
                 for(int i=0;i<count;++i) referenceInput[c][i]=in[i]*referenceScale;
                 double* refIn=referenceInput[c].data();double* refOut=referenceOutput[c].data();
                 referenceModels[c]->process(&refIn,&refOut,count);

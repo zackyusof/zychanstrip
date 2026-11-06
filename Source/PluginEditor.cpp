@@ -95,6 +95,27 @@ const Image& eqCapImage()
     return image;
 }
 
+const Image& knob1176Image()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::knob_1176_png,
+                                                           ZychanStripAssets::knob_1176_pngSize);
+    return image;
+}
+
+const Image& eqCapCreamImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::eq_cap_cream_png,
+                                                           ZychanStripAssets::eq_cap_cream_pngSize);
+    return image;
+}
+
+const Image& eqCapRedImage()
+{
+    static const Image image = ImageCache::getFromMemory (ZychanStripAssets::eq_cap_red_png,
+                                                           ZychanStripAssets::eq_cap_red_pngSize);
+    return image;
+}
+
 const Image& masterCapImage()
 {
     static const Image image = ImageCache::getFromMemory (ZychanStripAssets::master_cap_png,
@@ -1186,7 +1207,9 @@ public:
         // ---- Skirt / photographic knob body
         const float skirtR = d * knobScale * 0.50f;
         const bool isSilver = (cap == pal::silverCap);
-        const Image& knobSprite = isSilver ? chromeKnobImage() : blackKnobImage();
+        const bool is1176 = s.getProperties()["knobStyle"].toString() == "u76";
+        const Image& knobSprite = is1176 ? knob1176Image()
+                                         : (isSilver ? chromeKnobImage() : blackKnobImage());
 
         if (knobSprite.isValid())
         {
@@ -1300,7 +1323,19 @@ public:
             paintRimKeyLight (g, capBody.reduced (0.6f), 0.55f, true);
         }
 
-        // ---- Enamel-inlaid pointer line
+        // ---- Pointer: the 1176 uses a white line on its clear skirt; other knobs an
+        // enamel line inlaid across the cap.
+        if (is1176)
+        {
+            Path ind;
+            ind.addRoundedRectangle (-1.5f, -skirtR * 0.93f, 3.0f, skirtR * 0.46f, 1.5f);
+            g.setColour (Colours::black.withAlpha (0.45f));
+            g.fillPath (ind, AffineTransform::rotation (angle).translated (c.x, c.y + 1.0f));
+            g.setColour (Colours::white.withAlpha (0.96f));
+            g.fillPath (ind, AffineTransform::rotation (angle).translated (c.x, c.y));
+            return;
+        }
+
         const float indLen = capBody.getHeight() * 0.36f;
         Path ind;
         ind.addRoundedRectangle (-1.5f, -capBody.getHeight() * 0.44f, 3.0f, indLen, 1.5f);
@@ -1344,9 +1379,9 @@ public:
         g.setColour (Colours::black.withAlpha (0.85f));
         g.drawRoundedRectangle (slot, 5.0f, 1.0f);
 
-        // Center felt dust strip
-        g.setColour (Colour (0xff000000));
-        g.drawLine (slot.getX() + 6.0f, cy, slot.getRight() - 6.0f, cy, 1.5f);
+        // API 560: the travel indicator is a light-blue line through the black slot.
+        g.setColour (Colour (0xff4aa3d8).withAlpha (0.85f));
+        g.drawLine (slot.getX() + 6.0f, cy, slot.getRight() - 6.0f, cy, 1.4f);
 
         // Metallic bottom lip reflection
         g.setColour (Colour (0xff70847e).withAlpha (0.40f));
@@ -1360,7 +1395,8 @@ public:
         g.setColour (Colours::black.withAlpha (0.75f));
         g.fillRoundedRectangle (thumb.translated (0.0f, 1.8f), 3.0f);
 
-        const auto& eqSprite = eqCapImage();
+        const bool redCap = cap.getRed() > 190 && cap.getGreen() < 90;
+        const auto& eqSprite = redCap ? eqCapRedImage() : eqCapCreamImage();
         if (eqSprite.isValid())
         {
             const Rectangle<float> dst (thumb.getX() - 3.0f, thumb.getY() - 3.0f,
@@ -2145,6 +2181,10 @@ public:
         // centre axis) stay exactly where they were, only the drawn hardware shrinks.
         setupKnob (atk,    "attack", pal::silverCap, Colour (0xff202020), 0.8f);
         setupKnob (rel,    "release",pal::silverCap, Colour (0xff202020), 0.8f);
+        // Hardware reference: the 1176 uses knurled aluminium knobs on clear plastic skirts
+        // with a white index line, not the chrome/cream knobs of the other modules.
+        for (auto* knob : { &input, &output, &atk, &rel })
+            knob->slider.getProperties().set ("knobStyle", "u76");
         input.slider.getProperties().set ("fetInputScale", true);
         output.slider.getProperties().set ("fetOutputScale", true);
         atk.slider.getProperties().set ("fetNumberScale", true);

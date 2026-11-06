@@ -10,6 +10,17 @@ has been published.
 
 ## [Unreleased]
 
+## [1.2.0-beta.3] — 2026-11-06
+
+### Fixed — hardware-accurate colours, checked against reference photographs
+
+- **API 560 (Console):** slider caps are now cream/ivory with the 1 kHz band red, matching the
+  hardware; the travel indicator is the light-blue line through the black slot instead of a chrome cap.
+- **UREI 1176 (FET):** knobs are knurled aluminium on clear plastic skirts with a white index line,
+  replacing the chrome/cream knob that did not match the hardware.
+- **Enhance / limiter:** faders are silver (brighter cap sprite) as specified.
+- GUI only: no DSP, parameter, ordering, latency or state change.
+
 ## [1.2.0-beta.2] — 2026-11-06
 
 ### Changed — photographic bitmap materials

@@ -8,7 +8,7 @@
 
 ### The Ultimate Analog Mastering & Tracking Rack for macOS
 
-[![Version](https://img.shields.io/badge/Version-1.2.0--beta.7-orange.svg)](#build-and-install)
+[![Version](https://img.shields.io/badge/Version-1.2.0-green.svg)](#build-and-install)
 [![Audio Unit](https://img.shields.io/badge/Format-AUv2%20(Audio%20Unit)-blue.svg)](#build-and-install)
 [![Architecture](https://img.shields.io/badge/Architecture-Apple%20Silicon%20(arm64)-orange.svg)](#build-and-install)
 [![Framework](https://img.shields.io/badge/Built%20with-JUCE%209-green.svg)](#architecture)
@@ -23,7 +23,7 @@ Two pages live side by side, switched by the **RACK / METER** toggle in the head
 
 ---
 
-## Current beta: colour engines and complete feature overview
+## Current release: colour engines and complete feature overview
 
 **1.1.1-beta.10 is a local evaluation beta.** The embedded API/IGS captures require creator
 permission before distributing the binary. Source and documentation can be shared; model
@@ -56,9 +56,9 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
 
 For routing, actual latency/CPU measurements and validation limits see
 [NAM colour DSP](docs/dsp/nam-colour.md) and [implementation specification](docs/specs/embedded-nam-colour.md).
-Version 1.2.0-beta.7 is a local beta of the photo-real bitmap GUI with final-stage 2x oversampling.
+Version 1.2.0 is the stable release of the photo-real bitmap GUI with final-stage 2x oversampling.
 
-Beta.7 applies [UA operating references](docs/specs/ua-operating-reference.md) while preserving the extended rack controls. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values.
+1.2.0 applies [UA operating references](docs/specs/ua-operating-reference.md) while preserving the extended rack controls. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values.
 
 ## Contents
 
@@ -88,7 +88,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -242,7 +242,7 @@ Host output
 
 **Latency (beta.2).** Each colour stage reports its fixed neural/SRC delay in every mode,
 including CLEAN and bypass. The rack adds those four delays to the limiter's `ceil(0.0015·sr)-1`
-look-ahead. In beta.7 the total is **247 samples / 5.15 ms** at 48 kHz. Other rates use longer FIR
+look-ahead. In 1.2.0 the total is **247 samples / 5.15 ms** at 48 kHz. Other rates use longer FIR
 conversions; see the measured table in [NAM colour DSP](docs/dsp/nam-colour.md). This supersedes
 the earlier prototype latency estimates. The host is notified once during preparation.
 
@@ -406,7 +406,7 @@ delete ed;                    // any slider/attachment ordering bug fires here
 
 | ID | Issue | Detail |
 | --- | --- | --- |
-| `zychanstrip-operating-level-calibration` | **UA convention applied in beta.7; physical capture calibration open** | Per-module −18/−12 dBFS references, fixed nominal gain calibration and explicit unity RESET gains replace arbitrary trims and the +15 dB Opto RESET. Capture converter/flux calibration is absent, so exact hardware transfer accuracy remains unverified. See [specification](docs/specs/ua-operating-reference.md). |
+| `zychanstrip-operating-level-calibration` | **UA convention applied in 1.2.0; physical capture calibration open** | Per-module −18/−12 dBFS references, fixed nominal gain calibration and explicit unity RESET gains replace arbitrary trims and the +15 dB Opto RESET. Capture converter/flux calibration is absent, so exact hardware transfer accuracy remains unverified. See [specification](docs/specs/ua-operating-reference.md). |
 | `zychanstrip-autogain-feedback` | **Fixed in beta.5 — uncorrected rack measurement** | Full-processor Auto Gain left +3/+6/+9 dB from +6/+12/+18 dB input drive: its energy reference included its own correction. Matching now occurs after the complete rack, before master/mix, using uncorrected output. The Threshold fader direction/readout is corrected while host `lim_gain` semantics remain unchanged. MATCH reports actual applied correction; CEILING indicates unavailable headroom. See the Enhance core repair spec. |
 | `zychanstrip-nam-enhance-curve` | **Beta.4 mitigated; beta.5 removes full tape blend** | Human feedback found beta.3 NAM Enhance uneven/unnatural. A production tape-engine sweep confirmed dips/rebounds from varying both +12 dB drive and a full dry/NAM blend; at 0.1-peak input, 16 kHz fell to -9.89 dB at 75% then rose to -5.71 dB at 100%. Beta.4 limited that blend but still muffled the signal. Beta.5 adds a bounded nonlinear residual from matched captures at x and 0.5x to aligned dry, cancelling their common linear EQ/phase response while retaining actual drive interaction. ALGO/CLEAN retain their prior laws. Frequency/level sweeps and active-rack automation regressions cover the change; human audition of beta.5 is pending. |
 | `zychanstrip-enhance-slider-steps` | **Fixed in beta.3 — slider ramps** | Beta.2 reads gain, Enhance and ceiling once per block without a parameter ramp. A temporary production-DSP probe at 48 kHz / 128 frames, Auto Gain off, constant 0.2 input measured a 0.199052 single-sample jump for gain 0→6 dB and Enhance 0→50% jumps of 0.193975 (ALGO) / 0.108966 (NAM). Beta.3 adds 20 ms sample ramps for all four sliders (final ceiling safety remains immediate) and delays the ungained Auto Gain reference directly. New regression checks exercise forward/reverse jumps at 44.1/48/96 kHz in all modes with 32/512-frame blocks. Human listening remains to be confirmed. |
@@ -442,6 +442,12 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 ---
 
 ## Changelog
+
+### 2026-11-07 — 1.2.0 stable release
+
+- Promoted `1.2.0-beta.7` to stable; audio engine, parameters, ordering, latency and state format are unchanged.
+- Package: arm64 Audio Unit, ad-hoc signed, global install only.
+- Version and channel label: GUI header reads `v1.2.0` (neutral grey).
 
 ### 2026-11-07 — 1.2.0-beta.7 final-stage 2x oversampling
 
@@ -497,7 +503,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current build: **1.2.0-beta.7** (local beta, 2026-11-07) — final-stage 2x oversampling, UA operating references, API 560 caps corrected, 1176 knobs kept at the 1.1.2 look, silver limiter faders.
+Current build: **1.2.0** (stable, 2026-11-07) — final-stage 2x oversampling, UA operating references, API 560 caps corrected, 1176 knobs kept at the 1.1.2 look, silver limiter faders.
 
 Enhance GUI refresh: a thin stereo GR indicator (two rows of ten LEDs, one scale row) beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 

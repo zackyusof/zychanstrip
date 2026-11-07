@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Version numbers, tags and releases are the maintainer's decision; this file records what changed, not what
 has been published.
 
+## [1.2.0] — 2026-11-07
+
+First stable release of the 1.2.0 line, promoted from `1.2.0-beta.7`. The audio engine, parameter
+set, rack ordering, latency and state format are unchanged from that beta.
+
+### Highlights
+
+- Final-stage 2x oversampling antialiasing, host-automatable and off by default.
+- Faithful photographic rack: approved module artwork with live controls, meters and drag reordering.
+- UA operating references (Console/FET −18 dBFS, Opto/tape −12 dBFS, unity RESET gains).
+- Hardware-accurate API 560 cream/red caps, 1176 knobs kept at the released 1.1.2 look, silver limiter faders.
+- GUI version-label guard in `tools/install_global.sh`.
+
 ## [1.2.0-beta.7] — 2026-11-07
 
 ### Added — final-stage 2x oversampling antialiasing

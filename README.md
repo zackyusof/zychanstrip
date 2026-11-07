@@ -56,7 +56,7 @@ weights are downloaded into ignored build storage. See [profile attribution](THI
 
 For routing, actual latency/CPU measurements and validation limits see
 [NAM colour DSP](docs/dsp/nam-colour.md) and [implementation specification](docs/specs/embedded-nam-colour.md).
-Version 1.2.0-beta.6 is a local beta of the photo-real bitmap GUI.
+Version 1.2.0-beta.7 is a local beta of the photo-real bitmap GUI with final-stage 2x oversampling.
 
 Beta.7 applies [UA operating references](docs/specs/ua-operating-reference.md) while preserving the extended rack controls. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values.
 
@@ -88,7 +88,7 @@ cd zychanstrip
 export PATH="$HOME/Library/Python/3.13/bin:$PATH"
 
 python3 tools/nam/prepare_profiles.py
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.8
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7
 ninja -C build                       # builds only; install globally with tools/install_global.sh
 ```
 
@@ -343,11 +343,11 @@ version display, taken from CMake so it cannot drift from the artefact:
 | Build | Label | Treatment |
 | --- | --- | --- |
 | stable | `v1.2.0` | neutral grey |
-| prerelease | `v1.2.0-beta.6` | amber |
+| prerelease | `v1.2.0-beta.7` | amber |
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release                     # v1.2.0 (stable)
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.1  # v1.2.0-beta.6
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZYCHANSTRIP_BETA=beta.7  # v1.2.0-beta.7
 ```
 
 `PROJECT_VERSION` in `CMakeLists.txt` stays numeric (the bundle plist needs it); the prerelease
@@ -443,6 +443,13 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 ## Changelog
 
+### 2026-11-07 — 1.2.0-beta.7 final-stage 2x oversampling
+
+- New host-automatable **Final 2x Oversampling** switch appended at the end of the parameter layout (existing host indices unchanged). Wraps the post-master/post-mix/post-UNITY output in `juce::dsp::Oversampling` (2×, FIR equiripple, max quality, integer latency) before the read-only meter tap, removing Nyquist-excess content from ALGO saturation, NAM nonlinear residual and limiter drive.
+- Oversampling latency is folded into the single `prepareToPlay()` latency report, so host PDC stays constant whether the switch is on or off. Default off; enabling roughly doubles final-stage CPU cost. Not applied to the NAM branch (already 48 kHz + sinc SRC) or the EQ560 bands (already 2× SVF + linear-phase FIR).
+- UA operating references applied: Console/FET nominal reference −18 dBFS, Opto/tape −12 dBFS, shared software colour coordinate −18 dBFS with opto/tape −6 dB input scaling. RESET now uses 0 dB manual gain for Opto/FET; existing sessions retain their values. See [specification](docs/specs/ua-operating-reference.md).
+- GUI version-label guard added to `tools/install_global.sh`: the installer refuses to install when the cached `ZYCHANSTRIP_BETA` does not match the latest git tag.
+
 ### 2026-11-06 — 1.2.0-beta.6 faithful photographic rack
 
 - Replaced the texture-only approximation with complete approved module artwork, including the slim machined 1176 knobs, black opto knobs, amber meter glass, gold bezel, switches, labels and fixed studio reflections.
@@ -490,7 +497,7 @@ Closed work is recorded with evidence; anything unverified stays open deliberate
 
 Every notable change since the `v1.0` tag — framework upgrades, DSP fixes, UI changes, harness growth
 and the reasons behind them — is recorded in [CHANGELOG.md](CHANGELOG.md), following Keep a Changelog.
-Current build: **1.2.0-beta.6** (local beta, 2026-11-06) — API 560 caps corrected, 1176 knobs kept at the 1.1.2 look, silver limiter faders.
+Current build: **1.2.0-beta.7** (local beta, 2026-11-07) — final-stage 2x oversampling, UA operating references, API 560 caps corrected, 1176 knobs kept at the 1.1.2 look, silver limiter faders.
 
 Enhance GUI refresh: a thin stereo GR indicator (two rows of ten LEDs, one scale row) beneath the top switches spanning the THRESHOLD/CEILING caption block, top-left Auto Gain matched to bypass size, ivory illuminated switches and twin-column OUT LEDs that rise to the GR meter's top edge, with a dB readout.
 

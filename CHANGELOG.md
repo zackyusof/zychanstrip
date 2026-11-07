@@ -8,9 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Version numbers, tags and releases are the maintainer's decision; this file records what changed, not what
 has been published.
 
-## [Unreleased]
+## [1.2.0-beta.7] — 2026-11-07
 
-### Added — 1.2.0-beta.7 final-stage 2x oversampling antialiasing
+### Added — final-stage 2x oversampling antialiasing
 
 - New host-automatable **Final 2x Oversampling** switch appended at the end of the parameter layout (existing host indices unchanged).
 - Wraps the completed post-master/post-mix/post-UNITY output in a `juce::dsp::Oversampling` (2×, FIR equiripple, maximum quality, integer latency) before the read-only meter tap. Upsamples, then downsample-filters to remove content above Nyquist produced by ALGO saturation, NAM nonlinear residual and limiter drive.

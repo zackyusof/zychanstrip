@@ -1,0 +1,80 @@
+name: Build and verify ZychanStrip AU and VST3
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact Gitea commit SHA already mirrored to this repository
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+    steps:
+      - name: Check out requested source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Validate source and runner
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          [[ "$(uname -m)" == "arm64" ]]
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install CMake and Ninja
+        run: |
+          python3 -m pip install --user cmake ninja
+          echo "$(python3 -m site --user-base)/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare local evaluation profiles
+        run: python3 tools/nam/prepare_profiles.py build/nam-assets
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build --target zychanstrip_AU zychanstrip_VST3 --parallel 2
+
+      - name: Run project checks
+        run: python3 tools/build_snapshot.py
+
+      - name: Verify AU and VST3 bundles
+        env:
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: |
+          AU_BUNDLE="$PWD/build/zychanstrip_artefacts/Release/AU/zychanstrip.component"
+          VST3_BUNDLE="$PWD/build/zychanstrip_artefacts/Release/VST3/zychanstrip.vst3"
+          AU_BINARY="$AU_BUNDLE/Contents/MacOS/zychanstrip"
+          VST3_BINARY="$VST3_BUNDLE/Contents/MacOS/zychanstrip"
+          test -d "$AU_BUNDLE"
+          test -d "$VST3_BUNDLE"
+          test -f "$VST3_BUNDLE/Contents/Resources/THIRD_PARTY_NOTICES.md"
+          codesign --force --sign - "$AU_BUNDLE"
+          codesign --force --sign - "$VST3_BUNDLE"
+          codesign --verify --deep --strict "$AU_BUNDLE"
+          codesign --verify --deep --strict "$VST3_BUNDLE"
+          lipo -verify_arch arm64 "$AU_BINARY"
+          lipo -verify_arch arm64 "$VST3_BINARY"
+          plutil -lint "$AU_BUNDLE/Contents/Info.plist" "$VST3_BUNDLE/Contents/Info.plist"
+          AU_VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$AU_BUNDLE/Contents/Info.plist")
+          VST3_VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$VST3_BUNDLE/Contents/Info.plist")
+          test "$AU_VERSION" = "$VST3_VERSION"
+          TMPDIR="$RUNNER_TEMP" tools/check_au_bundle.sh "$AU_BINARY"
+          echo "AU and VST3 v${AU_VERSION} bundles built and validated for arm64. No binaries or model weights are uploaded." >> "$GITHUB_STEP_SUMMARY"

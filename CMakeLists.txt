@@ -26,9 +26,9 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/nam-assets/EmbeddedNam.h")
     message(FATAL_ERROR "Run: python3 tools/nam/prepare_profiles.py ${CMAKE_BINARY_DIR}/nam-assets (local evaluation profiles)")
 endif()
 
-# AU is only built on macOS
+# AU and VST3 are only built on macOS
 if(APPLE)
-    set(PLUGIN_FORMATS AU)
+    set(PLUGIN_FORMATS AU VST3)
 else()
     set(PLUGIN_FORMATS "")
 endif()
@@ -52,6 +52,18 @@ juce_add_plugin(zychanstrip
     COPY_PLUGIN_AFTER_BUILD FALSE
     AU_MAIN_TYPE kAudioUnitType_Effect
     VST3_CATEGORIES Fx Dynamics EQ)
+
+if(APPLE AND TARGET zychanstrip_VST3)
+    add_custom_command(TARGET zychanstrip_VST3 POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "$<TARGET_FILE_DIR:zychanstrip_VST3>/../Resources"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
+            "$<TARGET_FILE_DIR:zychanstrip_VST3>/../Resources/THIRD_PARTY_NOTICES.md"
+        COMMAND /usr/bin/codesign --force --sign -
+            "$<TARGET_FILE_DIR:zychanstrip_VST3>/../.."
+        VERBATIM)
+endif()
 
 # All GUI bitmap assets in one BinaryData target: the four approved wood strips plus the
 # photographic material tiles and hardware sprites rendered with one key light. Loaded

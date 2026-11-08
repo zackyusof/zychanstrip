@@ -70,8 +70,8 @@ jobs:
           codesign --force --sign - "$VST3_BUNDLE"
           codesign --verify --deep --strict "$AU_BUNDLE"
           codesign --verify --deep --strict "$VST3_BUNDLE"
-          lipo -verify_arch arm64 "$AU_BINARY"
-          lipo -verify_arch arm64 "$VST3_BINARY"
+          test "$(lipo -archs "$AU_BINARY")" = arm64
+          test "$(lipo -archs "$VST3_BINARY")" = arm64
           plutil -lint "$AU_BUNDLE/Contents/Info.plist" "$VST3_BUNDLE/Contents/Info.plist"
           AU_VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$AU_BUNDLE/Contents/Info.plist")
           VST3_VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$VST3_BUNDLE/Contents/Info.plist")

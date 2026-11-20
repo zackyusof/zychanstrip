@@ -12,12 +12,13 @@ using namespace juce;
     Audio thread publishes measurements into atomics; the UI reads them at frame rate.
     Never mutates the audio it observes, so inserting/removing the meter cannot change sound.
 
-    Real-time safety (prior-art report `docs/research/dsp-optimization-prior-art.md`, F5):
+    Real-time safety (prior-art report `docs/research/next-beta-github-prior-art.md`, item 3):
       * the audio thread walks the block ONCE and performs no allocation;
       * the 2048-point FFT runs on the UI thread (`runAnalysis`, called from the panel timer)
-        against a snapshot the audio path published - never inside the callback;
-      * the scope ring is a fixed-size SPSC buffer with atomic indices, so the old
-        `SpinLock` + `clear()` + `push_back` on the audio thread is gone. */
+        against a snapshot published through a two-slot `AbstractFifo` - never inside the callback;
+      * the scope ring is an `AbstractFifo`-owned SPSC ring, so payload slots are read only after
+        they are claimed and never while the audio thread writes them;
+      * `reset()` is allocation-free because the audio thread performs a deferred clear. */
 class RackMeters
 {
 public:
@@ -36,13 +37,18 @@ public:
     {
         sr = sampleRate;
 
-        // True-peak style peak detector: 4x oversampled envelope per channel.
+        // Sample-peak detector. Intersample (true) peak is not reconstructed - the readout is
+        // labelled accordingly.
         peakHoldSamples = (int) (sr * 2.0);           // 2 s max-hold
-        reset();
+
+        // Sample-rate-derived one-pole coefficients for the K-weighting approximation
+        // (high-pass ~38 Hz, high shelf ~1.5 kHz). Fixed coefficients were only correct at 48 kHz.
+        kHpAlpha = 1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 38.0 / sampleRate);
+        kShelfAlpha = 1.0 - std::exp (-2.0 * juce::MathConstants<double>::pi * 1500.0 / sampleRate);
 
         fifo.assign ((size_t) kFftSize, 0.0f);
-        fftSnapshot.assign ((size_t) kFftSize, 0.0f);
         fftData.assign ((size_t) kFftSize * 2, 0.0f);
+        for (auto& slot : fftSlots) slot.assign ((size_t) kFftSize, 0.0f);
         window.resize ((size_t) kFftSize);
         juce::dsp::WindowingFunction<float>::fillWindowingTables (
             window.data(), (size_t) kFftSize,
@@ -76,12 +82,11 @@ public:
             bandHi[(size_t) b] = juce::jlimit (1, kFftSize / 2, hi);
         }
 
-        scopeX.fill (0.0f);
-        scopeY.fill (0.0f);
-        scopeWriteIndex.store (0, std::memory_order_relaxed);
+        reset();
         (void) maxBlockSize;
     }
 
+    /** Allocation-free: the audio thread performs the deferred operator reset. */
     void reset()
     {
         for (auto& c : ch)
@@ -90,11 +95,15 @@ public:
         lufsShort.store (-100.0f, std::memory_order_relaxed);
         for (auto& b : bandHoldDb) b = -100.0f;
         for (auto& f : bandHoldFrames) f = 0;
+        fftFifo.reset();
+        scopeFifo.reset();
+        for (auto& slot : fftSlots) std::fill (slot.begin(), slot.end(), 0.0f);
         scopeX.fill (0.0f);
         scopeY.fill (0.0f);
-        scopeWriteIndex.store (0, std::memory_order_release);
-        fftReady.store (false, std::memory_order_relaxed);
         fifoIndex = 0;
+        kSumSq = 0.0;
+        kCount = 0;
+        for (auto& s : kState) s = KState {};
     }
 
     /** Audio thread. Read-only with respect to the buffer, allocation-free, lock-free.
@@ -111,7 +120,6 @@ public:
         const float* left = buffer.getReadPointer (0);
         const float* right = numCh > 1 ? buffer.getReadPointer (1) : left;
 
-        int writeIndex = scopeWriteIndex.load (std::memory_order_relaxed);
         const int scopeStep = juce::jmax (1, n / 256);
 
         for (int i = 0; i < n; ++i)
@@ -128,21 +136,26 @@ public:
             sumL += dl * dl;
             sumR += dr * dr;
 
-            // K-weighted loudness (approximation: high-pass ~38 Hz + high-shelf ~+4 dB @ 1.5 kHz)
+            // Per-channel K-weighted energy. BS.1770 sums channel energies; a mono sum would
+            // read anti-phase stereo as silence instead of full-level stereo.
             const double mono = 0.5 * (dl + dr);
-            const double kw = kWeight (mono);
-            kSumSq += kw * kw;
+            const double kwL = kWeight (dl, kState[0]);
+            const double kwR = kWeight (dr, kState[1]);
+            kSumSq += kwL * kwL + kwR * kwR;
             ++kCount;
 
-            // Mono-sum feed for the RTA. When the window fills we publish a copy for the UI
-            // thread and roll over; the transform itself never runs here.
+            // Mono-sum feed for the RTA. When the window fills we publish a copy into a free
+            // FIFO slot for the UI thread; the transform itself never runs here.
             fifo[(size_t) fifoIndex++] = (float) mono;
             if (fifoIndex >= kFftSize)
             {
-                if (! fftReady.load (std::memory_order_acquire))
+                int s1 = 0, n1 = 0, s2 = 0, n2 = 0;
+                fftFifo.prepareToWrite (1, s1, n1, s2, n2);
+                if (n1 > 0)
                 {
-                    std::copy (fifo.begin(), fifo.end(), fftSnapshot.begin());
-                    fftReady.store (true, std::memory_order_release);
+                    auto& slot = fftSlots[(size_t) s1];
+                    std::copy (fifo.begin(), fifo.end(), slot.begin());
+                    fftFifo.finishedWrite (1);
                 }
                 fifoIndex = 0;
             }
@@ -150,32 +163,36 @@ public:
             // Lissajous points into the fixed SPSC ring.
             if (i % scopeStep == 0)
             {
-                scopeX[(size_t) writeIndex] = juce::jlimit (-1.0f, 1.0f, (l + r) * 0.70710678f);
-                scopeY[(size_t) writeIndex] = juce::jlimit (-1.0f, 1.0f, (l - r) * 0.70710678f);
-                writeIndex = (writeIndex + 1) & (kScopeCapacity - 1);
+                int s1 = 0, n1 = 0, s2 = 0, n2 = 0;
+                scopeFifo.prepareToWrite (1, s1, n1, s2, n2);
+                if (n1 > 0)                       // full -> drop this display frame
+                {
+                    scopeX[(size_t) s1] = juce::jlimit (-1.0f, 1.0f, (l + r) * 0.70710678f);
+                    scopeY[(size_t) s1] = juce::jlimit (-1.0f, 1.0f, (l - r) * 0.70710678f);
+                    scopeFifo.finishedWrite (1);
+                }
             }
         }
-        scopeWriteIndex.store (writeIndex, std::memory_order_release);
-        scopeValid.store (juce::jmin (kScopeCapacity, scopeValid.load (std::memory_order_relaxed) + n / scopeStep),
-                          std::memory_order_relaxed);
 
-        updatePeak (ch[0], blockMaxL);
-        updatePeak (ch[1], blockMaxR);
+        updatePeak (ch[0], blockMaxL, n);
+        updatePeak (ch[1], blockMaxR, n);
 
-        // Smoothed block RMS (approximately 300 ms integration)
+        // Time-derived RMS: the coefficient follows the real block duration, so the ballistics
+        // are the same for a 64-sample and a 1024-sample host buffer.
         const float blockRmsL = (float) std::sqrt (sumL / (double) n);
         const float blockRmsR = (float) std::sqrt (sumR / (double) n);
-        rmsL.store (rmsL.load (std::memory_order_relaxed) + (blockRmsL - rmsL.load (std::memory_order_relaxed)) * 0.25f,
-                    std::memory_order_relaxed);
-        rmsR.store (rmsR.load (std::memory_order_relaxed) + (blockRmsR - rmsR.load (std::memory_order_relaxed)) * 0.25f,
-                    std::memory_order_relaxed);
+        const float rmsCoef = (float) std::exp (-(double) n / (sr * 0.30));
+        rmsL.store (rmsL.load (std::memory_order_relaxed) * rmsCoef
+                    + blockRmsL * (1.0f - rmsCoef), std::memory_order_relaxed);
+        rmsR.store (rmsR.load (std::memory_order_relaxed) * rmsCoef
+                    + blockRmsR * (1.0f - rmsCoef), std::memory_order_relaxed);
 
         // Stereo correlation over the block
         const double denom = std::sqrt (juce::jmax (1.0e-12, sumLL * sumRR));
         corrValue.store ((float) juce::jlimit (-1.0, 1.0, sumLR / denom), std::memory_order_relaxed);
 
-        // Short-term loudness window (~400 ms)
-        if (kCount >= (int) (sr * 0.4))
+        // Short-term loudness: 3 s rolling window (EBU Mode short-term; 400 ms is momentary).
+        if (kCount >= (int) (sr * 3.0))
         {
             const double mean = kSumSq / (double) kCount;
             lufsShort.store ((float) (-0.691 + 10.0 * std::log10 (juce::jmax (1.0e-12, mean))),
@@ -189,12 +206,24 @@ public:
         Call from the editor timer (MeterPanel::tick) - never from the audio callback. */
     void runAnalysis()
     {
-        if (fft == nullptr || fftSnapshot.size() < (size_t) kFftSize) return;
-        if (! fftReady.exchange (false, std::memory_order_acq_rel)) return;
+        if (fft == nullptr || fftData.size() < (size_t) kFftSize) return;
+        if (fftFifo.getNumReady() <= 0) return;
 
+        // Time-derived band release: 18 dB/s based on elapsed display time, not frame count.
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        const double dtSeconds = lastAnalysisMs > 0.0
+            ? juce::jlimit (0.0, 0.25, (nowMs - lastAnalysisMs) * 1.0e-3) : 0.0;
+        lastAnalysisMs = nowMs;
+        const float bandReleaseDb = (float) (18.0 * dtSeconds);
+
+        int fs1 = 0, fn1 = 0, fs2 = 0, fn2 = 0;
+        fftFifo.prepareToRead (1, fs1, fn1, fs2, fn2);
+        if (fn1 <= 0) return;
+        const auto& snapshot = fftSlots[(size_t) fs1];
         std::fill (fftData.begin(), fftData.end(), 0.0f);
         for (int i = 0; i < kFftSize; ++i)
-            fftData[(size_t) i] = fftSnapshot[(size_t) i] * window[(size_t) i];
+            fftData[(size_t) i] = snapshot[(size_t) i] * window[(size_t) i];
+        fftFifo.finishedRead (1);
 
         fft->performFrequencyOnlyForwardTransform (fftData.data());
 
@@ -216,7 +245,7 @@ public:
             bandDb[(size_t) b] = m;
             if (m >= bandHoldDb[(size_t) b]) { bandHoldDb[(size_t) b] = m; bandHoldFrames[(size_t) b] = 60; }
             else if (bandHoldFrames[(size_t) b] > 0) --bandHoldFrames[(size_t) b];
-            else bandHoldDb[(size_t) b] -= 0.6f;
+            else bandHoldDb[(size_t) b] -= bandReleaseDb;
         }
     }
 
@@ -229,21 +258,23 @@ public:
     const std::vector<float>& bands() const { return bandDb; }
     const std::vector<float>& bandHolds() const { return bandHoldDb; }
 
-    /** Fill the scope buffer with the most recent L/R pairs. Lock-free: the reader copies
-        backwards from the audio thread's write index and tolerates a concurrent overwrite
-        (each point is a plain float pair, so a torn read is at most one stray pixel). */
-    void copyScope (std::vector<ScopePoint>& out) const
+    /** Fill the scope buffer with the points the audio thread published since the last call.
+        Lock-free by ownership: the producer only writes slots the FIFO handed it and the reader
+        only reads slots it has claimed, so no payload is ever read while being overwritten.
+        Frames are dropped when the ring is full rather than blocking the audio thread. */
+    void copyScope (std::vector<ScopePoint>& out)
     {
-        const int written = scopeValid.load (std::memory_order_acquire);
-        const int count = juce::jmin (written, kScopeCapacity);
-        int index = scopeWriteIndex.load (std::memory_order_acquire);
         out.clear();
-        out.reserve ((size_t) count);
-        for (int i = 0; i < count; ++i)
-        {
-            index = (index - 1) & (kScopeCapacity - 1);
-            out.push_back ({ scopeX[(size_t) index], scopeY[(size_t) index] });
-        }
+        const int ready = scopeFifo.getNumReady();
+        if (ready <= 0) return;
+        int s1 = 0, n1 = 0, s2 = 0, n2 = 0;
+        scopeFifo.prepareToRead (ready, s1, n1, s2, n2);
+        out.reserve ((size_t) (n1 + n2));
+        for (int i = 0; i < n1; ++i)
+            out.push_back ({ scopeX[(size_t) (s1 + i)], scopeY[(size_t) (s1 + i)] });
+        for (int i = 0; i < n2; ++i)
+            out.push_back ({ scopeX[(size_t) (s2 + i)], scopeY[(size_t) (s2 + i)] });
+        scopeFifo.finishedRead (n1 + n2);
     }
 
     struct Point { float x = 0.0f, y = 0.0f; };
@@ -256,9 +287,14 @@ private:
         int   holdCountdown = 0;
     };
 
+    struct KState
+    {
+        double hp1 = 0.0, hp2 = 0.0, shelf = 0.0;
+    };
+
     static float dbOf (float lin) { return lin > 1.0e-7f ? juce::Decibels::gainToDecibels (lin) : -100.0f; }
 
-    void updatePeak (Channel& c, float blockMax)
+    void updatePeak (Channel& c, float blockMax, int numSamples)
     {
         c.peak = blockMax;
         if (blockMax >= c.hold)
@@ -268,11 +304,12 @@ private:
         }
         else if (c.holdCountdown > 0)
         {
-            c.holdCountdown -= 512;           // approximate per-block decay
+            c.holdCountdown = juce::jmax (0, c.holdCountdown - numSamples);
         }
         else
         {
-            c.hold *= 0.98f;                  // slow release after the hold expires
+            // 0.4 s release time constant, expressed as a per-block factor.
+            c.hold *= (float) std::exp (-(double) numSamples / (sr * 0.4));
         }
         peakL.store (ch[0].peak, std::memory_order_relaxed);
         peakR.store (ch[1].peak, std::memory_order_relaxed);
@@ -280,16 +317,15 @@ private:
         holdR.store (ch[1].hold, std::memory_order_relaxed);
     }
 
-    // Simple K-weighting approximation: 2nd-order HP at 38 Hz then high shelf +4 dB at 1.5 kHz.
-    double kWeight (double x)
+    // Simple K-weighting approximation: 2nd-order HP at 38 Hz then high shelf +4 dB at 1.5 kHz,
+    // with independent state per channel.
+    double kWeight (double x, KState& s)
     {
-        // HP (one-pole, applied to a cascaded pair for ~12 dB/oct)
-        kHp1 += kHpAlpha * (x - kHp1);
-        kHp2 += kHpAlpha * (kHp1 - kHp2);
-        double v = x - kHp2;
-        // Shelf
-        kShelf += kShelfAlpha * (v - kShelf);
-        return v + kShelf * 0.6;
+        s.hp1 += kHpAlpha * (x - s.hp1);
+        s.hp2 += kHpAlpha * (s.hp1 - s.hp2);
+        const double v = x - s.hp2;
+        s.shelf += kShelfAlpha * (v - s.shelf);
+        return v + s.shelf * 0.6;
     }
 
     double sr = 48000.0;
@@ -303,24 +339,27 @@ private:
 
     std::array<Channel, 2> ch;
 
-    // K-weighting state
-    double kHp1 = 0.0, kHp2 = 0.0, kShelf = 0.0;
+    // Sample-rate-derived coefficients for K-weighting
     double kHpAlpha = 0.005, kShelfAlpha = 0.02;
     double kSumSq = 0.0;
     int kCount = 0;
+    std::array<KState, 2> kState;
 
     // FFT (transform runs on the UI thread via runAnalysis)
     std::unique_ptr<juce::dsp::FFT> fft;
-    std::vector<float> window, fftData, fifo, fftSnapshot, spectrumDb, smoothedSpectrum;
+    std::vector<float> window, fftData, fifo, spectrumDb, smoothedSpectrum;
     int fifoIndex = 0;
-    std::atomic<bool> fftReady { false };
+    std::array<std::vector<float>, 2> fftSlots;
+    juce::AbstractFifo fftFifo { 2 };
     std::vector<double> bandEdges;
     std::vector<int> bandLo, bandHi;
     std::vector<float> bandDb, bandHoldDb;
     std::vector<int> bandHoldFrames;
 
-    // Scope: fixed SPSC ring, atomic write index, no lock and no allocation.
+    // Scope: fixed SPSC ring owned by an AbstractFifo, no lock and no allocation.
     std::array<float, kScopeCapacity> scopeX {}, scopeY {};
-    std::atomic<int> scopeWriteIndex { 0 };
-    std::atomic<int> scopeValid { 0 };
+    juce::AbstractFifo scopeFifo { kScopeCapacity };
+
+    // Time-based analysis state
+    double lastAnalysisMs = 0.0;
 };

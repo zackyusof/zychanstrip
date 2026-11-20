@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(zychanstrip VERSION 1.2.0)
+project(zychanstrip VERSION 1.2.1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ endif()
 include(FetchContent)
 FetchContent_Declare(JUCE
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 9.0.4
+    GIT_TAG 9.0.6
     GIT_SHALLOW ON)
 FetchContent_MakeAvailable(JUCE)
 

@@ -2385,7 +2385,7 @@ public:
         { return String ((double) proc.apvts.getRawParameterValue ("lim_ceiling")->load() - value, 1) + " dB"; };
         gain.valueFromTextFunction = [this] (const String& text)
         { return (double) proc.apvts.getRawParameterValue ("lim_ceiling")->load() - text.getDoubleValue(); };
-        gain.setTooltip ("Lower the threshold to increase drive and gain reduction. Auto Gain matches the rack level when headroom allows.");
+        gain.setTooltip ("Lower the threshold to increase drive and gain reduction. Auto Gain matches this module's own level when headroom allows.");
         setupFader (ceiling, "ceiling");
         setupFader (release, "release");
         setupFader (fader,   "enhance");
@@ -2394,7 +2394,7 @@ public:
         autoGain.setLookAndFeel (&switchLook);
         autoGain.setName ("Auto Gain");
         autoGain.setButtonText ("AUTO GAIN");
-        autoGain.setTooltip ("Match the complete rack to its input before master level and mix. The ceiling takes priority when matching is impossible.");
+        autoGain.setTooltip ("Match the Enhance module's input to its output. Other modules' gain changes pass through; use header UNITY to match the whole rack. The ceiling takes priority when matching is impossible.");
         autoGain.setColour (ToggleButton::tickColourId, Colour (0xffffb000));
         autoGain.setColour (ToggleButton::textColourId, labelColour);
         autoGainAtt = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "lim_auto_gain", autoGain);

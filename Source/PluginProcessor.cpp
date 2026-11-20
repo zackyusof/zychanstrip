@@ -98,7 +98,6 @@ ZychanStripProcessor::ZychanStripProcessor()
     modules[Opto]    = std::make_unique<rack::OptoModule>    (apvts, "opto_");
     modules[Fet]     = std::make_unique<rack::FetModule>     (apvts, "fet_");
     modules[Limiter] = std::make_unique<rack::LimiterModule> (apvts, "lim_");
-    modules[Limiter]->setRackAutoGainManaged (true);
     masterLevel = apvts.getRawParameterValue ("master_level");
     mixAmount   = apvts.getRawParameterValue ("master_mix");
     unityEnabled = apvts.getRawParameterValue ("unity");
@@ -114,6 +113,9 @@ bool ZychanStripProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 
 void ZychanStripProcessor::prepareToPlay (double sr, int block)
 {
+    // Build the tanh lookup table here, not on first use inside the callback (~2 MiB).
+    rack::detail::prepareTanhTable();
+    preparedBlockSize = juce::jmax (1, block);
     int moduleLatency = 0;
     for (auto& m : modules)
     {
@@ -122,16 +124,20 @@ void ZychanStripProcessor::prepareToPlay (double sr, int block)
     }
     // Final-stage oversampling adds fixed latency; include it in the reported plugin
     // latency so host PDC stays constant whether the oversampler is on or off.
-    finalOversampler.initProcessing (block);
+    finalOversampler.initProcessing (preparedBlockSize);
     finalOversamplingLatency = (int) finalOversampler.getLatencyInSamples();
     setLatencySamples (moduleLatency + finalOversamplingLatency);
-    dryBuffer.setSize (2, juce::jmax (1, block), false, false, true);
+    finalLatencyDelayLen = juce::jmax (0, finalOversamplingLatency);   // exactly F samples
+    for (auto& d : finalLatencyDelay)
+        d.assign ((size_t) juce::jmax (1, finalLatencyDelayLen), 0.0f);
+    finalLatencyWp = 0;
+    finalOsWasOn = false;
+    dryBuffer.setSize (2, preparedBlockSize, false, false, true);
     // Dry-path delay matches module latency only; oversampling sits after the mix so
     // it applies equally to the summed wet+dry output (no dry/wet misalignment).
     dryDelayLen = moduleLatency > 0 ? (int) moduleLatency + 1 : 0;
     for (auto& d : dryDelay) d.assign ((size_t) juce::jmax (1, dryDelayLen), 0.0f);
     dryWp = 0;
-    chainInputRef.assign ((size_t) juce::jmax (1, block), 0.0f);
     mixGain.reset (sr, 0.02);
     mixGain.setCurrentAndTargetValue (mixAmount->load() * 0.01f);
     masterGain.reset (sr, 0.02);
@@ -141,13 +147,32 @@ void ZychanStripProcessor::prepareToPlay (double sr, int block)
     unityInputEnergy = unityOutputEnergy = 0.0;
     unityEnergyCoef = std::exp (-1.0 / (0.25 * sr));
     unityGainDb.store (0.0f, std::memory_order_relaxed);
-    meters.prepare (sr, block);
+    meters.prepare (sr, preparedBlockSize);
 }
 
 void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
-    const int numSamples = buffer.getNumSamples();
+    const int total = buffer.getNumSamples();
+    const int chunkSize = juce::jmax (1, preparedBlockSize);
+
+    // Host blocks larger than the prepared capacity are processed in capacity-sized views so
+    // the final oversampler never sees more samples than it was prepared for and the callback
+    // never allocates. Delay rings, smoothers and meter state stay continuous across chunks.
+    for (int offset = 0; offset < total; offset += chunkSize)
+    {
+        const int n = juce::jmin (chunkSize, total - offset);
+        juce::AudioBuffer<float> view (buffer.getArrayOfWritePointers(),
+                                       buffer.getNumChannels(), offset, n);
+        processChunk (view, n);
+    }
+}
+
+void ZychanStripProcessor::processChunk (juce::AudioBuffer<float>& buffer, int numSamples)
+{
+    // A meter clear requested from the message thread happens here, on the audio thread.
+    if (meterResetRequested.exchange (false))
+        meters.reset();
 
     // Operator RESET: clear every module's internal state on the audio thread, then snap the
     // master smoother instead of gliding to the restored default.
@@ -156,6 +181,8 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (auto& m : modules) m->reset();
         finalOversampler.reset();
         for (auto& delay : dryDelay) std::fill (delay.begin(), delay.end(), 0.f);
+        for (auto& delay : finalLatencyDelay) std::fill (delay.begin(), delay.end(), 0.f);
+        finalLatencyWp = 0;
         dryWp = 0;
         mixGain.setCurrentAndTargetValue (mixAmount->load() * 0.01f);
         masterGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
@@ -166,11 +193,10 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
         buffer.clear (c, 0, numSamples);
 
-    // Keep the untouched input for the parallel (dry/wet) blend and for UNITY. Prepared in
-    // prepareToPlay; grown here only if the host sends a larger block than it declared.
-    if (dryBuffer.getNumChannels() < buffer.getNumChannels() || dryBuffer.getNumSamples() < numSamples)
-        dryBuffer.setSize (juce::jmax (buffer.getNumChannels(), dryBuffer.getNumChannels()),
-                           juce::jmax (numSamples, dryBuffer.getNumSamples()), false, false, true);
+    // Keep the untouched input for the parallel (dry/wet) blend and for UNITY. Sized in
+    // prepareToPlay; the chunk split guarantees the callback never overruns it.
+    jassert (dryBuffer.getNumChannels() >= buffer.getNumChannels()
+             && dryBuffer.getNumSamples() >= numSamples);
 
     const float requestedWet = juce::jlimit (0.0f, 1.0f, mixAmount->load() * 0.01f);
     const bool matchUnity = unityEnabled != nullptr && unityEnabled->load (std::memory_order_relaxed) > 0.5f;
@@ -191,17 +217,12 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             }
             dryWp = read;
         }
-    // Both energy references now describe the same delayed input time interval.
-    feedChainReference (dryBuffer, numSamples);
-
     for (int id : getOrder())
         modules[(size_t) id]->run (buffer);
 
-    // Match the complete rack against its untouched input, before master/mix.
-    // The rack output is still uncorrected here: no previous-block feedback and
-    // no gain applied ahead of downstream nonlinear modules when order changes.
-    modules[Limiter]->applyRackAutoGain (buffer, chainInputRef.data(), numSamples);
-
+    // Enhance Auto Gain is applied inside the Limiter module against that module's own
+    // input, so Console/FET/Opto gain changes pass through. UNITY below is the only
+    // whole-rack input-to-output matcher.
     // The master always follows the complete rack, independently of module order.
     masterGain.setTargetValue (juce::Decibels::decibelsToGain (masterLevel->load()));
     masterGain.applyGain (buffer, numSamples);
@@ -278,44 +299,43 @@ void ZychanStripProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     else if (matchUnity)
         unityGainDb.store (0.0f, std::memory_order_relaxed);
 
-    // Final-stage 2x oversampling antialiasing filter. Runs on the completed post-mix
-    // output so it antialiases the summed signal without disturbing the dry/wet blend.
-    // When off, output is early by finalOversamplingLatency relative to reported PDC;
-    // internal dry/wet alignment is unaffected because the oversampler is after the mix.
-    if (finalOversampling != nullptr && finalOversampling->load (std::memory_order_relaxed) > 0.5f)
+    // Final-stage 2x filtering. The reported latency always includes this FIR, so the OFF path
+    // is delayed by exactly the same number of samples - otherwise host PDC would place the
+    // plugin early the moment the stage is switched off. This pair is a sample-rate conversion
+    // filter, not a nonlinear antialiasing stage: it cannot undo aliasing that earlier stages
+    // already folded into baseband.
+    const bool finalOsOn = finalOversampling != nullptr
+                           && finalOversampling->load (std::memory_order_relaxed) > 0.5f;
+    if (finalOsOn)
     {
+        if (! finalOsWasOn)
+            finalOversampler.reset();   // do not replay stale histories after a long OFF period
         juce::dsp::AudioBlock<float> block (buffer);
         finalOversampler.processSamplesUp (block);
         finalOversampler.processSamplesDown (block);
     }
+    else if (finalLatencyDelayLen > 0)
+    {
+        // Read-before-write over a ring of exactly finalLatencyDelayLen samples, so the OFF
+        // output is delayed by precisely the latency we report (no off-by-one).
+        const int delayChannels = juce::jmin (2, buffer.getNumChannels());
+        for (int i = 0; i < numSamples; ++i)
+        {
+            for (int c = 0; c < delayChannels; ++c)
+            {
+                auto& delay = finalLatencyDelay[(size_t) c];
+                const float delayed = delay[(size_t) finalLatencyWp];
+                delay[(size_t) finalLatencyWp] = buffer.getSample (c, i);
+                buffer.setSample (c, i, delayed);
+            }
+            finalLatencyWp = (finalLatencyWp + 1) % finalLatencyDelayLen;
+        }
+    }
+    finalOsWasOn = finalOsOn;
 
     // Metering tap sits after UNITY as well, so the meters show what actually leaves.
     meters.process (buffer);
 
-}
-
-//==============================================================================
-void ZychanStripProcessor::feedChainReference (const juce::AudioBuffer<float>& in, int numSamples)
-{
-    measureEnergy (chainInputRef, in, numSamples);
-}
-
-void ZychanStripProcessor::measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples)
-{
-    if ((int) dest.size() < numSamples)
-        dest.assign ((size_t) juce::jmax (numSamples, (int) dest.size()), 0.0f);
-
-    const int nch = juce::jmin (2, in.getNumChannels());
-    for (int i = 0; i < numSamples; ++i)
-    {
-        float e = 0.0f;
-        for (int c = 0; c < nch; ++c)
-        {
-            const float x = in.getSample (c, i);
-            e += x * x;
-        }
-        dest[(size_t) i] = nch > 0 ? e / (float) nch : 0.0f;
-    }
 }
 
 //==============================================================================
@@ -386,12 +406,13 @@ void ZychanStripProcessor::resetToDefaults()
     }
 
     setOrder (getDefaultOrder());
-    meters.reset();
     unityGainDb.store (0.0f, std::memory_order_relaxed);
 
-    // Module/UNITY state (envelopes, filters, delay/energy followers) clears by the next audio
-    // block, so this call never touches DSP state from the message thread.
+    // Module/UNITY/meter state (envelopes, filters, delay/energy followers, meter rings) clears
+    // on the next audio block, so this call never touches audio-owned state from the message
+    // thread: the callback performs the meter clear itself.
     resetRequested.store (true);
+    meterResetRequested.store (true);
 }
 
 //==============================================================================

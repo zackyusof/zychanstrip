@@ -8,7 +8,87 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Version numbers, tags and releases are the maintainer's decision; this file records what changed, not what
 has been published.
 
+## [1.2.1] — 2026-11-20
+
+Stable release promoting `1.2.0-beta.9`. Restores the specified Auto Gain scope and moves to the
+latest stable JUCE patch. No source change after the beta.
+
+### Changed — Enhance Auto Gain is module-scoped
+
+- AUTO GAIN now matches the **Enhance module's own** latency-aligned input to its own
+  post-gain/limiting output; Console, FET and Opto gain changes pass through instead of being
+  cancelled by a switch that lives on another module.
+- Removed the processor's post-rack delegation: `setRackAutoGainManaged`,
+  `applyRackAutoGain`, the chain-input energy reference and its `measureEnergy` plumbing.
+- The header **UNITY** control remains the only whole-rack input-to-output matcher, unchanged.
+
+### Build
+
+- JUCE pin 9.0.5 → **9.0.6** (latest stable release, 2026-11-19).
+
+### Notes
+
+- No parameter ID, range, default, migration or reported-latency change. Existing sessions
+  recall unchanged.
+- Documentation (`README`, DSP pages, signal-flow page) now states the module scope.
+- Headless harness: **RESULT 606/606 passed** (includes three new module-scope checks).
+- AU validation remains the maintainer's job: no `auval`, `pluginval` or DAW load was run.
+  `validation: user`.
+
+## [1.2.0-beta.8] — 2026-11-11
+
+Corrective beta implementing the ranked findings of the internal next-beta research plan
+(items 1–7). No parameter ID, range or default changed; no rack-order or state-format change;
+the settled sound is unchanged.
+
+### Fixed — real-time safety
+
+- The ~2 MiB tanh lookup table is built in `prepareToPlay` instead of on first use inside the
+  audio callback, so the first render of a fresh instance no longer constructs it.
+- Host callbacks larger than the prepared block are processed in prepared-capacity views, so the
+  final oversampler never exceeds its prepared capacity and the callback never grows `dryBuffer`
+  or the energy-reference vector. No allocation remains on the audio path.
+
+### Fixed — final-stage timing
+
+- The final 2x stage reported a fixed latency but only delayed the output when enabled, so the
+  OFF path was 49 samples early against host PDC. The OFF path now runs an equivalent 49-sample
+  delay ring; measured impulse arrival equals `getLatencySamples()` (296) at both 0% and 100% mix.
+  Reported latency is still fixed in `prepareToPlay` and unchanged by the toggle.
+- Corrected the prose claim: the up/down pair is a sample-rate conversion filter, not a nonlinear
+  antialiasing stage — it cannot undo aliasing already folded into baseband.
+
+### Fixed — metering
+
+- FFT snapshots and scope payloads now hand off through `juce::AbstractFifo` slots, so the UI
+  never reads a payload while the audio thread writes it; display frames are dropped when full.
+- The operator RESET no longer calls `meters.reset()` from the message thread: it requests the
+  clear and the audio thread performs it (allocation-free).
+- Short-term loudness now sums per-channel K-weighted energy over a 3 s window instead of a
+  mono-sum over ~400 ms (anti-phase stereo no longer reads as silence), with sample-rate-derived
+  weighting coefficients.
+- Meter ballistics follow real sample counts and elapsed display time (RMS, peak hold/release,
+  RTA band release), so behaviour is independent of the host buffer size and UPDATE rate.
+- The peak readout is labelled **PEAK (SAMPLE)**: the detector measures sample maxima and does
+  not reconstruct intersample peaks.
+
+### Fixed — CI
+
+- The workflow now executes the headless harness (`tools/build_snapshot.py --run-dir`) and gates
+  the job on its exit status and on the emitted `RESULT n/n passed` line, instead of only building it.
+
+### Verification
+
+- Headless harness: `RESULT 603/603 passed` (the same tree before this beta reported 599/603,
+  the four failures being the OFF-path latency tests this beta fixes).
+- macOS arm64 AU built and installed globally; `validation: user` (no `auval`/`pluginval` run).
+
 ## [1.2.0] — 2026-11-07
+
+### JUCE rebuild — 2026-11-10
+
+- Update JUCE from 9.0.4 to 9.0.5 and rebuild the existing Gitea release assets.
+- Keep the released product version and plug-in identities. Build/install only; test suites and host validation were not run.
 
 First stable release of the 1.2.0 line, promoted from `1.2.0-beta.7`. The audio engine, parameter
 set, rack ordering, latency and state format are unchanged from that beta.
@@ -188,9 +268,8 @@ set, rack ordering, latency and state format are unchanged from the last beta.
 
 ### Added
 
-- `docs/dsp/module-console.md`, `module-opto.md`, `module-fet.md` and `interaction.md` — the four pages
-  the DSP reference index linked to but which did not exist. Written from source with `file:line`
-  citations; derived claims are marked *(inference)*.
+- Expanded the internal DSP reference for the console, opto, FET and interaction pages, written
+  from source with `file:line` evidence.
 
 ## [1.1.1-beta.1] — 2026-11-03
 
@@ -289,8 +368,7 @@ source-compatible for hosts.
   look-ahead latency, all 24 permutations enumerated, Auto Gain order-independence (0.000 dB), Auto Gain
   correction independent of master level, and the Limiter 2×2 grid geometry with equal row heights at
   864×608, 1080×760 and 1620×1140.
-- Specs: `docs/specs/juce-9-upgrade.md` and `docs/specs/zychanstrip-five-fixes.md` (all six lifecycle phases,
-  including the release-diff-first classification of every reported symptom).
+- Full specifications and lifecycle records are maintained in the private development repository.
 
 ### Documentation
 

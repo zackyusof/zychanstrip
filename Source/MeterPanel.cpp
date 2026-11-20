@@ -384,7 +384,7 @@ void MeterPanel::paintHeader (Graphics& g)
 void MeterPanel::paintMeters (Graphics& g)
 {
     auto area = meterArea;
-    sectionRule (g, area.removeFromTop (16), "TRUE PEAK / RMS");
+    sectionRule (g, area.removeFromTop (16), "PEAK (SAMPLE) / RMS");
 
     const int chW = jmax(48, area.getWidth()/4-16);
     constexpr int stereoGap = 8;

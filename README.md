@@ -7,7 +7,7 @@
 <p align="center"><strong>Four pieces of classic analog outboard. One rack. No menu diving.</strong></p>
 
 <p align="center">
-  <a href="#the-rack"><img src="https://img.shields.io/badge/Version-1.2.0-green" alt="Version 1.2.0"></a>
+  <a href="#the-rack"><img src="https://img.shields.io/badge/Version-1.2.1-green" alt="Version 1.2.1"></a>
   <a href="#compatibility"><img src="https://img.shields.io/badge/Format-AUv2-2f6feb" alt="Audio Unit"></a>
   <a href="#compatibility"><img src="https://img.shields.io/badge/macOS-Apple%20Silicon-111111" alt="Apple Silicon"></a>
   <a href="#the-meter-page"><img src="https://img.shields.io/badge/Metering-True%20Peak%20%C2%B7%20LUFS%20%C2%B7%20RTA-8b5cf6" alt="Metering"></a>
@@ -125,7 +125,7 @@ It is a pure observer: it never touches the audio, and it only runs while you ar
 
 ## Install
 
-1. Download **`zychanstrip-1.2.0-arm64.zip`** from the [latest release](../../releases/latest).
+1. Download **`zychanstrip-1.2.1-arm64.zip`** from the [latest release](../../releases/latest).
 2. Unzip and copy `zychanstrip.component` to `~/Library/Audio/Plug-Ins/Components/` — or to
    `/Library/Audio/Plug-Ins/Components/` to make it available to every user on the machine.
 3. Restart your host (or rescan plugins) and insert **zychanstrip** on a stereo track.
@@ -134,13 +134,13 @@ The release includes a SHA-256 checksum next to the download.
 
 ---
 
-## What's new in 1.2.0
+## What's new in 1.2.1
 
-- Final-stage 2× oversampling across the rack
-- Photo-real bitmap faceplates with fixed lighting, softer contact shadows and refined fader caps
-- Smoothed fader transitions and corrected knob scales
-- RESET re-tuned to the documented hardware operating references
-- Latency reported once to the host: 247 samples (5.15 ms at 48 kHz)
+- **Enhance Auto Gain is module-scoped.** It now matches the Enhance module's own input and
+  output, so gain changes made in the EQ, FET or opto modules pass through. Use **UNITY** in the
+  header when you want whole-rack input-to-output matching.
+- Built with JUCE 9.0.6 (latest stable patch).
+- No parameter, session-format or reported-latency change: 247 samples (5.15 ms at 48 kHz).
 
 ---
 
@@ -158,14 +158,9 @@ Hardware captures and profiles contributed by third parties are credited in
 <details>
 <summary><strong>Build from source</strong></summary>
 
-Requires macOS, Xcode Command Line Tools, CMake 3.22+ and Ninja.
-
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-ninja -C build
-```
-
-The built component appears in `build/zychanstrip_artefacts/Release/AU/`.
+Requires macOS, Xcode Command Line Tools, CMake 3.22+ and Ninja. Reproducible source bundles
+including the pinned JUCE and NAM sources are attached to the release; see `REBUILD.txt` in the
+bundle for the exact commands.
 
 </details>
 

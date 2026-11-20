@@ -72,6 +72,10 @@ inline const float* tanhTable()
     }();
     return table;
 }
+
+/** Build the lookup table now so the first audio callback never has to.
+    Called from the processor's prepareToPlay; the audio path then only reads it. */
+inline void prepareTanhTable() { (void) tanhTable(); }
 } // namespace detail
 
 //==============================================================================
@@ -79,7 +83,7 @@ inline const float* tanhTable()
 // `analogMasterSaturation` are PURE FUNCTIONS of one input sample - no state at all - so their
 // `tanh` is evaluated through a lookup table instead of a per-sample libm call
 // (`docs/research/dsp-optimization-prior-art.md`, F1). The table is built once per process
-// (32 KiB) and linearly interpolated, giving < 1e-6 absolute error, far below the 24-bit floor.
+// (about 2 MiB) and linearly interpolated, giving < 1e-6 absolute error, far below the 24-bit floor.
 // A closed-form rational replacement was measured and rejected: its 1.2e-2 error showed up as
 // -32 dBFS in the null test.
 /** tanh through a lookup table with linear interpolation.
@@ -260,11 +264,6 @@ public:
         }
         else process (buf);
     }
-
-    // The processor manages level matching after the complete reorderable rack.
-    // Standalone module users retain the local input/output matcher.
-    virtual void setRackAutoGainManaged (bool) {}
-    virtual void applyRackAutoGain (juce::AudioBuffer<float>&, const float*, int) {}
 
     std::atomic<float> grDb { 0.0f };   // gain reduction for the UI meter
     std::atomic<float> gainCompDb { 0.0f }; // Actual applied Enhance Auto Gain correction
@@ -672,13 +671,12 @@ public:
         dryEnergy = wetEnergy = 0.0; compensationDb = 0.0f;
         energyCoef = std::exp (-1.0 / (0.2 * sampleRate));
         compensationCoef = timeCoef (100.0f, sampleRate);
-        for (auto* smoother : { &inputGain, &colourDrive, &enhanceAmount, &ceilingGain, &releaseCoef, &autoGainCeiling })
+        for (auto* smoother : { &inputGain, &colourDrive, &enhanceAmount, &ceilingGain, &releaseCoef })
             smoother->reset (sampleRate, 0.02);
         inputGain.setCurrentAndTargetValue (dbToGain (read (gainParam)));
         enhanceAmount.setCurrentAndTargetValue (read (enhanceParam) * 0.01f);
         colourDrive.setCurrentAndTargetValue (dbToGain (read (enhanceParam) * 0.12f));
         ceilingGain.setCurrentAndTargetValue (dbToGain (read (ceilingParam)));
-        autoGainCeiling.setCurrentAndTargetValue (dbToGain (read (ceilingParam)));
         releaseCoef.setCurrentAndTargetValue (timeCoef (read (releaseParam), sampleRate));
         const int referenceSize = colour.latency() + 1;
         for (auto& d : colourDryDelay)
@@ -692,46 +690,6 @@ public:
     }
 
     int getLatencySamples() const override { return la - 1 + colour.latency(); }
-
-    void setRackAutoGainManaged (bool managed) override { rackAutoGainManaged = managed; }
-
-    void applyRackAutoGain (juce::AudioBuffer<float>& buffer, const float* inputEnergy, int count) override
-    {
-        if (! rackAutoGainManaged) return;
-        const bool active = read (parameterBypass) < 0.5f;
-        const bool enabled = active && autoGainParameter->load() > 0.5f;
-        const float requestedCeiling = dbToGain (read (ceilingParam));
-        autoGainCeiling.setTargetValue (requestedCeiling);
-        const int channels = std::min (2, buffer.getNumChannels());
-        double rawEnergy = 0, correctedEnergy = 0;
-        float peak = 0;
-        bool limited = false;
-        for (int i = 0; i < buffer.getNumSamples(); ++i)
-        {
-            float wet[2] {};
-            double power = 0;
-            for (int c = 0; c < channels; ++c)
-            {
-                wet[c] = buffer.getSample (c, i);
-                power += (double) wet[c] * wet[c];
-            }
-            power /= std::max (1, channels);
-            const double reference = inputEnergy != nullptr && i < count ? inputEnergy[i] : power;
-            const float ceiling = std::min (requestedCeiling, autoGainCeiling.getNextValue());
-            applyCompensation (wet, channels, reference, power, active, enabled, ceiling, limited);
-            rawEnergy += power;
-            for (int c = 0; c < channels; ++c)
-            {
-                buffer.setSample (c, i, wet[c]);
-                correctedEnergy += (double) wet[c] * wet[c] / std::max (1, channels);
-                peak = std::max (peak, std::abs (wet[c]));
-            }
-        }
-        gainCompDb.store (active && rawEnergy > 1.e-16 && correctedEnergy > 1.e-16
-            ? (float) (10 * std::log10 (correctedEnergy / rawEnergy)) : 0.f);
-        autoGainLimited.store (limited);
-        if (enabled || std::abs (compensationDb) > 1.e-5f) outPeak.store (peak);
-    }
 
 protected:
     void process (juce::AudioBuffer<float>& buf) override         { runLimiter (buf, true); }
@@ -833,8 +791,8 @@ private:
                 dryPower += (double) delayedDry * delayedDry;
                 wetPower += (double) wet[ch] * wet[ch];
             }
-            // The module's own ceiling remains a hard bound even when rack
-            // Auto Gain is off or delegated to the processor's final rack tap.
+            // The module's own ceiling is a hard bound before Auto Gain correction;
+            // applyCompensation re-checks it after the correction as well.
             float corePeak = 0;
             for (int ch = 0; ch < nch; ++ch) corePeak = std::max (corePeak, std::abs (wet[ch]));
             const float coreCeiling = std::min (safetyCeiling, ceil);
@@ -845,9 +803,10 @@ private:
                 wet[ch] *= coreSafety;
                 wetPower += (double) wet[ch] * wet[ch];
             }
-            if (! rackAutoGainManaged)
-                applyCompensation (wet, nch, dryPower / std::max (1, nch), wetPower / std::max (1, nch),
-                                   active, autoGain, std::min (safetyCeiling, ceil), limited);
+            // Module-scoped level match: the reference is this module's own latency-aligned
+            // input, so gain changes made in Console/FET/Opto pass through untouched.
+            applyCompensation (wet, nch, dryPower / std::max (1, nch), wetPower / std::max (1, nch),
+                               active, autoGain, std::min (safetyCeiling, ceil), limited);
             blockRawEnergy += wetPower;
             for (int ch = 0; ch < nch; ++ch)
             {
@@ -858,12 +817,9 @@ private:
             wp = (wp + 1) % la;
         }
         grDb.store (active ? -gainToDb (minG) : 0.0f);
-        if (! rackAutoGainManaged)
-        {
-            gainCompDb.store (active && blockRawEnergy > 1.e-16 && blockCorrectedEnergy > 1.e-16
-                ? (float) (10 * std::log10 (blockCorrectedEnergy / blockRawEnergy)) : 0.f);
-            autoGainLimited.store (limited);
-        }
+        gainCompDb.store (active && blockRawEnergy > 1.e-16 && blockCorrectedEnergy > 1.e-16
+            ? (float) (10 * std::log10 (blockCorrectedEnergy / blockRawEnergy)) : 0.f);
+        autoGainLimited.store (limited);
         outPeak.store (active ? blockOutPeak : 0.0f);
     }
 
@@ -872,12 +828,11 @@ private:
     std::atomic<float>* gainParam = nullptr;
     std::atomic<float>* ceilingParam = nullptr;
     std::atomic<float>* releaseParam = nullptr;
-    bool rackAutoGainManaged = false;
     std::atomic<float>* parameterBypass = nullptr;
     std::vector<float> delay[2], dryDelay[2], reqRing, avgRing;
     std::vector<float> colourDryDelay[2];
     int colourDryWp = 0;
-    juce::SmoothedValue<float> inputGain, colourDrive, enhanceAmount, ceilingGain, releaseCoef, autoGainCeiling;
+    juce::SmoothedValue<float> inputGain, colourDrive, enhanceAmount, ceilingGain, releaseCoef;
     SlidingMinimum slidingMin;
     int la = 64, wp = 0;
     double sum = 64.0;

@@ -66,8 +66,14 @@ private:
     // ModuleId is Console=0, Opto=1, Fet=2, Limiter=3, so the slots are [0,2,1,3].
     std::atomic<uint32_t> packedOrder { 0x03010200u };
     std::atomic<bool> resetRequested { false };
+    // The message thread only requests a meter clear; the audio thread performs it so no
+    // audio-owned meter storage is mutated from the message thread.
+    std::atomic<bool> meterResetRequested { false };
     std::atomic<float> unityGainDb { 0.0f };
     RackMeters meters;
+    // Host callbacks are processed in preparedBlockSize views, so every scratch buffer below is
+    // sized in prepareToPlay and the audio thread never grows anything.
+    int preparedBlockSize = 1;
     juce::AudioBuffer<float> dryBuffer;   // untouched input, delayed to the fixed rack latency
     // Latency compensation for the dry path: the wet signal is delayed by the rack's reported
     // latency, so summing a raw dry copy against it combs (or cancels) partial mixes. This ring
@@ -75,10 +81,8 @@ private:
     std::array<std::vector<float>, 2> dryDelay;
     int dryDelayLen = 0;
     int dryWp = 0;
-    // Auto-gain reference: chain input energy, captured before any module runs.
-    std::vector<float> chainInputRef;   // untouched current input energy for the final rack matcher
-    static void measureEnergy (std::vector<float>& dest, const juce::AudioBuffer<float>& in, int numSamples);
-    void feedChainReference (const juce::AudioBuffer<float>& in, int numSamples);
+    /** One capacity-sized view of the host block: the whole DSP pipeline for those samples. */
+    void processChunk (juce::AudioBuffer<float>& buffer, int numSamples);
     std::atomic<float>* mixAmount = nullptr;
     std::atomic<float>* masterLevel = nullptr;
     std::atomic<float>* unityEnabled = nullptr;
@@ -87,6 +91,12 @@ private:
         juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
         true, true };
     int finalOversamplingLatency = 0;
+    // Integer delay used when the final oversampling stage is OFF so the output timing matches
+    // the latency we report to the host.
+    std::array<std::vector<float>, 2> finalLatencyDelay;
+    int finalLatencyDelayLen = 0;
+    int finalLatencyWp = 0;
+    bool finalOsWasOn = false;
     juce::SmoothedValue<float> masterGain { 1.0f };
     juce::SmoothedValue<float> mixGain { 1.0f };
     juce::SmoothedValue<float> unityGain { 1.0f };
